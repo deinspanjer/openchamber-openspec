@@ -13,13 +13,13 @@
 
 ## 2. OpenSpec 2.x task descriptions
 
-- [ ] 2.1 At the service seam, change `test/service.test.mjs:120` and `:184` to assert that
+- [x] 2.1 At the service seam, change `test/service.test.mjs:120` and `:184` to assert that
       descriptions start with their first line, keeping the containment and CLI-authority checks
       exact. At the integration seam, replace the continuation count in
       `test/integration.test.mjs:176` with a check that the task row renders. Verify that both files
       pass with OpenSpec 2.1.0 on PATH and with 1.13.1 (`npm i -g` is not required:
       `npx -y @fission-ai/openspec@1.13.1` in a scratch prefix put first on PATH).
-- [ ] 2.2 Update the README's tested versions to 1.13.1 and 2.1.0. Verify with
+- [x] 2.2 Update the README's tested versions to 1.13.1 and 2.1.0. Verify with
       `npm run format:check`.
 
 ## 3. Developer tooling and docs

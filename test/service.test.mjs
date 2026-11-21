@@ -120,9 +120,9 @@ apply:
           headers: { authorization: "Bearer test-token" },
           body,
         });
-        assert.deepEqual((await safe.json()).tasks, [
-          { id: "1", description: "First line only", done: false },
-        ]);
+        const [{ description, ...task }, ...rest] = (await safe.json()).tasks;
+        assert.deepEqual([task, ...rest], [{ id: "1", done: false }]);
+        assert.match(description, /^First line only/);
         calls.length = 0;
         await rm(join(target, "custom-checklist.md"));
         await symlink(join(main, "outside.md"), join(target, "custom-checklist.md"));
@@ -184,10 +184,17 @@ test("shared planning reads preserve lexical selectors, goal, multiple specs and
         assert.equal(typeof content.content, "string");
         assert.ok(content.content.length);
       }
-      assert.deepEqual((await post("/tasks", { ...scope, change: "shared-documents" })).tasks, [
-        { id: "1", description: "First task", done: true },
-        { id: "2", description: "Second task", done: false },
-      ]);
+      const [first, { description, ...second }, ...rest] = (
+        await post("/tasks", { ...scope, change: "shared-documents" })
+      ).tasks;
+      assert.deepEqual(
+        [first, second, ...rest],
+        [
+          { id: "1", description: "First task", done: true },
+          { id: "2", done: false },
+        ],
+      );
+      assert.match(description, /^Second task/);
     });
   });
 });
