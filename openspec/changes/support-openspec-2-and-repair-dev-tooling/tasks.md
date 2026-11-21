@@ -27,6 +27,13 @@
       `5bc37de`). Add no shared helper and change no assertions. Verify with the full panel suite
       passing three consecutive runs after `npm run build`.
 
+- [x] 1.4 Fix the "CLI bounds stdout and stderr and force-kills a process ignoring termination"
+      flake (`test/service.test.mjs:1068-1078`). Under full-suite load, Node can take longer than
+      the 250 ms timeout to start, so the fake CLI is killed before it writes `child.pid`
+      (`ENOENT`). Raise that call's timeout so startup fits, and scale the elapsed-time bound to
+      match. Keep the `CLI_TIMEOUT` and `ESRCH` assertions. Verify with the focused test passing 10
+      runs in a row while `node --test test/panel.test.mjs` runs at the same time.
+
 ## 2. OpenSpec 2.x task descriptions
 
 - [x] 2.1 At the service seam, change `test/service.test.mjs:120` and `:184` to assert that

@@ -1069,11 +1069,12 @@ test("CLI bounds stdout and stderr and force-kills a process ignoring terminatio
       script,
       `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(join(root, "child.pid"))}, String(process.pid));\nprocess.on('SIGTERM', () => {});\nsetInterval(() => {}, 1000);\n`,
     );
+    const timeoutMs = 1_000;
     const started = Date.now();
-    const result = await runOpenSpec(root, [], 250, { binary: script, graceMs: 30 });
+    const result = await runOpenSpec(root, [], timeoutMs, { binary: script, graceMs: 30 });
     assert.equal(result.ok, false);
     assert.equal(result.error.code, "CLI_TIMEOUT");
-    assert.ok(Date.now() - started < 1200);
+    assert.ok(Date.now() - started < 2_000);
     const pid = Number(await readFile(join(root, "child.pid"), "utf8"));
     assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
     await writeFile(
