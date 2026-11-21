@@ -20,6 +20,13 @@
       before the second click, at `:2580` and `:3347`. Keep the exactly-one-request assertions.
       Verify each focused test passes 10 runs in a row after `npm run build`.
 
+- [x] 1.3 Close the remaining fake-host races in `test/panel.test.mjs`: archive-all and Refresh
+      spinner (both already flaky on `95aab6f`), plus 13 sites found by delaying every fake-host
+      message except `hello` by 150 ms. Apply the reviewed inline waits from
+      `/var/folders/h2/v24t58z935jbjh4phhvkhc3r0000gp/T/panel-race-fixes.diff` (it applies to
+      `5bc37de`). Add no shared helper and change no assertions. Verify with the full panel suite
+      passing three consecutive runs after `npm run build`.
+
 ## 2. OpenSpec 2.x task descriptions
 
 - [x] 2.1 At the service seam, change `test/service.test.mjs:120` and `:184` to assert that
