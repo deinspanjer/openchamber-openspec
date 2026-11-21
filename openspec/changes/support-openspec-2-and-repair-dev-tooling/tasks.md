@@ -2,7 +2,7 @@
 
 ## 1. Test environment
 
-- [ ] 1.1 Determine whether a project reached through a symlinked directory reproduces
+- [x] 1.1 Determine whether a project reached through a symlinked directory reproduces
       `ROOT_CHANGED` through the service, using a symlinked fixture at the service seam
       (`test/service.test.mjs`). If it does, add that failing test and fix the comparison in
       `src/service/openspec.ts`. If it does not, canonicalise fixture directories with `realpath`
