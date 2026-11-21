@@ -1,5 +1,10 @@
 # OpenSpec for OpenChamber
 
+This is a fork of
+[openchamber-openspec](https://github.com/jaythomasonprojects/openchamber-openspec) by Jay Thomason.
+We're maintaining it as `openchamber-openspec-v2` while it's unclear whether the original project
+will continue, and we'll offer improvements upstream.
+
 A kanban board for the OpenSpec changes in your OpenChamber project or worktree. See each change's
 stage, artefacts and task progress in one place, create or delete changes, and kick start the next
 workflow step.
@@ -21,10 +26,13 @@ features are welcome.
    delivery.
 3. In your project, run `openspec init --tools opencode`.
 4. In OpenChamber, open **Settings > Extensions** and add
-   `https://github.com/jaythomasonprojects/openchamber-openspec.git`. Its service runs `openspec`
-   with your user access, and the `sessions` permission lets it start sessions for worktree Apply
-   and bulk archiving. If you trust that, choose **Allow and enable**.
+   `https://github.com/deinspanjer/openchamber-openspec-v2.git`. Its service runs `openspec` with
+   your user access, and the `sessions` permission lets it start sessions for worktree Apply and
+   bulk archiving. If you trust that, choose **Allow and enable**.
 5. Open the **OpenSpec** rail panel, or find it under **Extension pages**.
+
+The fork installs as the same extension (`openspec-board`) and replaces the original if it's
+installed.
 
 The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
 `openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
