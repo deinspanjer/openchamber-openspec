@@ -24,12 +24,12 @@
 
 ## 3. Developer tooling and docs
 
-- [ ] 3.1 Remove `openspec` from `SHARED_PATHS` in `scripts/setup_worktree.py` and correct its
+- [x] 3.1 Remove `openspec` from `SHARED_PATHS` in `scripts/setup_worktree.py` and correct its
       docstring. Verify in a scratch `git worktree add` of this repo: the script links
       `node_modules` and exits 0. Remove the scratch worktree afterwards.
-- [ ] 3.2 Rewrite the worktree bullet in `AGENTS.md` to match `design.md`. Verify that no
+- [x] 3.2 Rewrite the worktree bullet in `AGENTS.md` to match `design.md`. Verify that no
       remaining line in AGENTS.md calls `openspec/` untracked.
-- [ ] 3.3 Replace the `tdd` and `simple` skill references in `openspec/config.yaml` with inline
+- [x] 3.3 Replace the `tdd` and `simple` skill references in `openspec/config.yaml` with inline
       intent. Verify that `openspec instructions proposal --change
       support-openspec-2-and-repair-dev-tooling --json` still parses and shows the new context.
 
