@@ -11,6 +11,15 @@
       test/service.test.mjs test/integration.test.mjs` without setting `TMPDIR` on macOS: only the
       task-description failures from 2.1 remain.
 
+- [x] 1.2 Fix three test races in `test/panel.test.mjs` that already fail on `95aab6f`. In
+      "whole batch failures retain stale cards and retry; changed roots reload", record the
+      `/summaries` request count before Retry and wait for it to increase, replacing the wait on
+      the always-present refresh button at `:1084`. In "create dialogue keeps concise actions and a
+      width-stable busy button" and "delete confirmation stays visible and width-stable while the
+      request is pending", wait for the `/create` or `/delete` request to reach the fake host
+      before the second click, at `:2580` and `:3347`. Keep the exactly-one-request assertions.
+      Verify each focused test passes 10 runs in a row after `npm run build`.
+
 ## 2. OpenSpec 2.x task descriptions
 
 - [x] 2.1 At the service seam, change `test/service.test.mjs:120` and `:184` to assert that

@@ -1079,9 +1079,15 @@ test("whole batch failures retain stale cards and retry; changed roots reload", 
       await panel.getByRole("button", { name: "refresh", exact: true }).click();
       await panel.getByText(text, { exact: true }).waitFor();
       assert.equal(await panel.locator(".change-card").count(), 2);
+      const summariesBeforeRetry = await page.evaluate(
+        () => __requests.filter((item) => item.path === "/summaries").length,
+      );
       await panel.getByRole("button", { name: "Retry", exact: true }).click();
       await panel.getByText(text, { exact: true }).waitFor({ state: "hidden" });
-      await panel.getByRole("button", { name: "refresh", exact: true }).waitFor();
+      await page.waitForFunction(
+        (before) => __requests.filter((item) => item.path === "/summaries").length > before,
+        summariesBeforeRetry,
+      );
     }
     const before = await page.evaluate(
       () => __requests.filter((item) => item.path === "/changes").length,
@@ -2577,6 +2583,7 @@ test("create dialogue keeps concise actions and a width-stable busy button", asy
       assert.equal(await create.getAttribute("aria-busy"), "true");
       assert.equal(await create.isDisabled(), true);
       assert.ok(Math.abs((await create.boundingBox()).width - before.width) < 1);
+      await page.waitForFunction(() => __requests.some((item) => item.path === "/create"));
       await create.evaluate((button) => button.click());
       assert.equal(
         await page.evaluate(
@@ -3344,6 +3351,7 @@ test("delete confirmation stays visible and width-stable while the request is pe
       assert.equal(await confirm.getAttribute("aria-busy"), "true");
       assert.equal(await confirm.locator("svg:visible").count(), 0);
       assert.ok(Math.abs((await confirm.boundingBox()).width - before.width) < 1);
+      await page.waitForFunction(() => __requests.some((item) => item.path === "/delete"));
       await confirm.evaluate((button) => button.click());
       await page.keyboard.press("Escape");
       assert.equal(await dialog.isVisible(), true);
