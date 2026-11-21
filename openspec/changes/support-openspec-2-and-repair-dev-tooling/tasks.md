@@ -58,7 +58,7 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run `npm run check` on macOS without `TMPDIR` overrides, with OpenSpec 2.1.0 on PATH, and
+- [x] 4.1 Run `npm run check` on macOS without `TMPDIR` overrides, with OpenSpec 2.1.0 on PATH, and
       report results, including any recurrence of the "CLI bounds stdout and stderr" flake.
 
 ## Workflow follow-up
