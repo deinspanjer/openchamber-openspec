@@ -1176,6 +1176,50 @@ test("phone create dialogue keeps its field and buttons above a reported keyboar
   });
 });
 
+for (const pointer of ["coarse", "fine"]) {
+  test(`phone detail close and delete restore ${pointer}-pointer focus`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+      await page.goto(`${url}?pointer=${pointer}`);
+      const frame = page.frameLocator("iframe");
+      const card = frame.getByRole("button", { name: "first-change", exact: true });
+      const back = frame.getByRole("button", { name: "Back to changes", exact: true });
+      await card.click();
+      await back.click();
+      assert.equal(await card.evaluate((node) => node === document.activeElement), true);
+
+      await card.click();
+      await page.evaluate(() => __remove("first-change"));
+      await frame.locator(".detail").getByRole("button", { name: "refresh", exact: true }).click();
+      await frame.getByText("This change is no longer available", { exact: false }).waitFor();
+      await back.click();
+      const fallback =
+        pointer === "coarse"
+          ? frame.getByRole("button", { name: "new change", exact: true })
+          : frame.getByRole("searchbox", { name: "Search changes" });
+      assert.equal(
+        await fallback.evaluate((node) => node === document.activeElement),
+        true,
+        "Close without a card should restore focus to the pointer-specific fallback",
+      );
+
+      await frame.getByRole("button", { name: "second-change", exact: true }).click();
+      await frame.getByRole("button", { name: "Delete change", exact: true }).click();
+      const dialog = frame.getByRole("dialog", { name: /Delete second-change/ });
+      await dialog.getByRole("button", { name: "delete", exact: true }).click();
+      await page.waitForFunction(() => __completed.includes("/delete"));
+      await dialog.waitFor({ state: "hidden" });
+      await fallback.waitFor();
+      assert.equal(
+        await fallback.evaluate((node) => node === document.activeElement),
+        true,
+        "Delete should restore focus to the pointer-specific fallback",
+      );
+      await page.close();
+    });
+  });
+}
+
 test("presentation modal backdrops dim every dialog without changing keyboard cancellation", async () => {
   await withPanel(async (browser, url) => {
     for (const width of [320, 1076]) {

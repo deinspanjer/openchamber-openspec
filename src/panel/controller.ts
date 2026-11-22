@@ -709,9 +709,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       resources.invalidateChange(attempt.scope, attempt.name);
       render();
       loadBoard(true, true);
-      queueMicrotask(() =>
-        appRoot.querySelector<HTMLInputElement>('input[aria-label="Search changes"]')?.focus(),
-      );
+      queueMicrotask(() => focusBoard());
     },
   });
   const detailView = mountDetailView(detailRoot, {
@@ -756,14 +754,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       selectedChange = null;
       render();
       requestAnimationFrame(() => window.scrollTo(0, boardScroll));
-      queueMicrotask(() => {
-        const opener = [...appRoot.querySelectorAll<HTMLButtonElement>(".card-main")].find(
-          (button) => button.textContent === name,
-        );
-        (
-          opener ?? appRoot.querySelector<HTMLInputElement>('input[aria-label="Search changes"]')
-        )?.focus();
-      });
+      queueMicrotask(() => focusBoard(name));
     },
     selectArtifact,
     selectTasks: () => {
@@ -780,6 +771,19 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       if (selectedChange) void preparePrompt(selectedChange, scope, epoch, intent);
     },
   });
+
+  function focusBoard(name?: string) {
+    const opener = name
+      ? [...appRoot.querySelectorAll<HTMLButtonElement>(".card-main")].find(
+          (button) => button.textContent === name,
+        )
+      : undefined;
+    const fallback =
+      document.documentElement.dataset.pointer === "coarse"
+        ? ".new-change-control button"
+        : 'input[aria-label="Search changes"]';
+    (opener ?? appRoot.querySelector<HTMLElement>(fallback))?.focus();
+  }
 
   function render() {
     const originatingSession = sessionId;

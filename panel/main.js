@@ -3216,6 +3216,7 @@ ${GUEST_UI_LOOK_CSS}`;
     const headingActions = document.createElement("div");
     headingActions.className = "heading-actions";
     const newChangeRoot = document.createElement("span");
+    newChangeRoot.className = "new-change-control";
     const newChange = mountButton(newChangeRoot, {
       label: "new change",
       variant: "default",
@@ -8580,9 +8581,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         resources.invalidateChange(attempt.scope, attempt.name);
         render();
         loadBoard(true, true);
-        queueMicrotask(
-          () => appRoot.querySelector('input[aria-label="Search changes"]')?.focus()
-        );
+        queueMicrotask(() => focusBoard());
       }
     });
     const detailView = mountDetailView(detailRoot, {
@@ -8624,12 +8623,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         selectedChange = null;
         render();
         requestAnimationFrame(() => window.scrollTo(0, boardScroll));
-        queueMicrotask(() => {
-          const opener = [...appRoot.querySelectorAll(".card-main")].find(
-            (button2) => button2.textContent === name
-          );
-          (opener ?? appRoot.querySelector('input[aria-label="Search changes"]'))?.focus();
-        });
+        queueMicrotask(() => focusBoard(name));
       },
       selectArtifact,
       selectTasks: () => {
@@ -8646,6 +8640,13 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         if (selectedChange) void preparePrompt(selectedChange, scope, epoch, intent);
       }
     });
+    function focusBoard(name) {
+      const opener = name ? [...appRoot.querySelectorAll(".card-main")].find(
+        (button2) => button2.textContent === name
+      ) : void 0;
+      const fallback = document.documentElement.dataset.pointer === "coarse" ? ".new-change-control button" : 'input[aria-label="Search changes"]';
+      (opener ?? appRoot.querySelector(fallback))?.focus();
+    }
     function render() {
       const originatingSession = sessionId;
       const detailChange = selectedChange;

@@ -71,7 +71,7 @@
 - [x] 5.2 At the same seam, add failing tests that a reported bottom inset pads the detail footer
       and a reported keyboard height keeps the create dialogue's field and buttons visible.
       Implement the CSS variables.
-- [ ] 5.3 At the same seam, add failing tests that closing detail and deleting a change on a coarse
+- [x] 5.3 At the same seam, add failing tests that closing detail and deleting a change on a coarse
       pointer focus a non-text control, and fine-pointer focus is unchanged. Implement in
       `controller.ts`.
 - [ ] 5.4 Set `panel.mobile: true` in the manifest and widen the scope in `openspec/config.yaml`

@@ -53,6 +53,7 @@ export function mountBoardView(
   const headingActions = document.createElement("div");
   headingActions.className = "heading-actions";
   const newChangeRoot = document.createElement("span");
+  newChangeRoot.className = "new-change-control";
   const newChange = mountButton(newChangeRoot, {
     label: "new change",
     variant: "default",
