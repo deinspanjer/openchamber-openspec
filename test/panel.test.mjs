@@ -1293,6 +1293,33 @@ for (const exists of [true, false]) {
   });
 }
 
+test("a hidden board does not claim a focus event but a new board still claims on mount", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item`);
+    const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+    const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+    const chip = section.getByRole("button", { name: "board", exact: true });
+    await chip.waitFor();
+    await page.evaluate(() => __mountBoard());
+    await page.waitForFunction(() => __focusClaims.length === 1);
+    const change = board.getByRole("button", { name: "first-change", exact: true });
+    await change.evaluate(() =>
+      Object.defineProperty(document, "visibilityState", { value: "hidden" }),
+    );
+    await chip.click();
+    await page.waitForFunction(() => __requests.some(({ path }) => path === "open-surface"));
+    await page.evaluate(() => __theme("light"));
+    await board.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal(await page.evaluate(() => __focusClaims.length), 1);
+    await page.evaluate(() => __mountBoard());
+    await board
+      .getByRole("heading", { name: "first-change", exact: true })
+      .waitFor({ timeout: 3000 });
+    assert.equal(await page.evaluate(() => __focusClaims.length), 2);
+  });
+});
+
 test("session section validation opens a flyout only when a validation chip is activated", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage({ hasTouch: true });

@@ -916,7 +916,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   }
 
   const offServiceEvent = host.onServiceEvent(({ topic }) => {
-    if (topic === "focus") claimFocus();
+    if (topic === "focus" && document.visibilityState === "visible") claimFocus();
   });
   const offReady = host.onReady((ready) => {
     const changed = directory !== ready.directory;

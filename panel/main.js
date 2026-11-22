@@ -8848,7 +8848,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       );
     }
     const offServiceEvent = host2.onServiceEvent(({ topic }) => {
-      if (topic === "focus") claimFocus();
+      if (topic === "focus" && document.visibilityState === "visible") claimFocus();
     });
     const offReady = host2.onReady((ready2) => {
       const changed = directory !== ready2.directory;
