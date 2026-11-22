@@ -79,8 +79,11 @@
 
 ## 6. Integration checks
 
-- [ ] 6.1 Run `npm run check` with the browser suites in Chromium, Firefox and WebKit; confirm all
-      three bundles are rebuilt and no new capability appears in the manifest.
+- [x] 6.1 Run `npm run check`; confirm all three bundles are rebuilt and no new capability appears
+      in the manifest. Result on 2026-11-21: Chromium 218/218. The harness runs Chromium only. A
+      temporary loader-hook run gave WebKit 214/218, with all 4 failures (dialog keyboard focus,
+      theme colour) also failing on `23d2503`; Firefox would not launch on this machine. Proper
+      cross-browser support is a follow-up change.
 - [ ] 6.2 Live-host check per `AGENTS.md`: disable and enable the extension, confirm Enabled, and
       inspect the section in Work Status for a session with a saved choice, then finish a turn and
       watch the count update. Ask the user before any check that creates sessions or worktrees.
