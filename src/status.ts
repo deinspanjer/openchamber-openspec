@@ -1,4 +1,4 @@
-import { connectHost, type GuestSessionsSnapshot } from "@openchamber/sdk";
+import { connectHost, HostRequestError, type GuestSessionsSnapshot } from "@openchamber/sdk";
 import {
   applyHostReady,
   mountBadge,
@@ -6,7 +6,7 @@ import {
   mountMenu,
   mountProgress,
 } from "@openchamber/sdk/ui";
-import type { Task } from "./contracts.js";
+import type { ListingEntry, Task } from "./contracts.js";
 import {
   deriveChange,
   requiredArtifactIds,
@@ -15,14 +15,15 @@ import {
 } from "./model.js";
 import { createClient, type Listing } from "./panel/client.js";
 import { findProject } from "./panel/project.js";
-import { readTrackedChange } from "./panel/tracked-change.js";
-import { stageLabel } from "./panel/workflow.js";
+import { actionPrompt } from "./panel/prompts.js";
+import { readTrackedChange, saveTrackedChange } from "./panel/tracked-change.js";
+import { stageLabel, workflowLabel } from "./panel/workflow.js";
 
 type View =
   | { kind: "empty" | "loading" }
   | { kind: "error"; message: string }
   | { kind: "picker"; listing: Listing; staleSaved: string | null }
-  | { kind: "tracked"; change: DerivedChange; tasks: Task[] };
+  | { kind: "tracked"; listing: Listing; change: DerivedChange; tasks: Task[] };
 
 const root = document.querySelector<HTMLElement>("#root");
 if (!root) throw new Error("Status section root is missing");
@@ -47,13 +48,43 @@ function render(view: View) {
   panelRoot.replaceChildren();
   if (view.kind === "empty") return;
   const controls = document.createElement("div");
+  controls.className = "section-controls";
   handles.push(mountButton(controls, { label: "Refresh", size: "sm", onClick: refresh }));
+  const capturedEpoch = epoch;
+  const current = () => !disposed && epoch === capturedEpoch;
+  handles.push(
+    mountButton(controls, {
+      label: "Open board",
+      size: "sm",
+      variant: "secondary",
+      onClick: () =>
+        void host
+          .openSurface("plugin:openspec-board")
+          .catch((caught: unknown) =>
+            showError(current, caught, "Could not open the OpenSpec board."),
+          ),
+    }),
+  );
   if (view.kind === "loading") {
     note("Loading OpenSpec change…", "status");
     return;
   }
   if (view.kind === "tracked") {
     renderTracked(view.change, view.tasks);
+    const change = view.change;
+    for (const action of change.stage === "complete"
+      ? (["primary", "verify"] as const)
+      : (["primary"] as const)) {
+      handles.push(
+        mountButton(controls, {
+          label: action === "primary" ? workflowLabel(change.stage) : "verify",
+          size: "sm",
+          variant: action === "primary" ? "default" : "secondary",
+          onClick: () => void preparePrompt(change, action, current),
+        }),
+      );
+    }
+    mountPicker(controls, view.listing, "Change…", current);
     panelRoot.append(controls);
     return;
   }
@@ -63,22 +94,79 @@ function render(view: View) {
     if (!view.listing.changes.length) {
       note("No active changes.");
     } else {
-      const picker = document.createElement("div");
-      panelRoot.append(picker);
-      handles.push(
-        mountMenu(picker, {
-          label: "Choose a change",
-          size: "sm",
-          items: view.listing.changes.map(({ id }) => ({ id, label: id, disabled: !sessionId })),
-          onSelect: () => {},
-        }),
-      );
+      mountPicker(controls, view.listing, "Choose a change", current);
     }
     panelRoot.append(controls);
     return;
   }
   if (view.kind === "error") note(view.message, "alert");
   panelRoot.append(controls);
+}
+
+function pickerPriority({ completedTasks, totalTasks }: ListingEntry) {
+  if (!totalTasks) return 2;
+  if (!completedTasks) return 1;
+  return completedTasks < totalTasks ? 0 : 3;
+}
+
+function mountPicker(
+  controls: HTMLElement,
+  listing: Listing,
+  label: string,
+  current: () => boolean,
+) {
+  const picker = document.createElement("div");
+  controls.append(picker);
+  handles.push(
+    mountMenu(picker, {
+      label,
+      size: "sm",
+      variant: "secondary",
+      items: [...listing.changes]
+        .sort((left, right) => pickerPriority(left) - pickerPriority(right))
+        .map(({ id }) => ({ id, label: id, disabled: !sessionId })),
+      onSelect: (id) => {
+        const session = sessionId;
+        if (!session || !current()) return;
+        void (async () => {
+          const saved = await saveTrackedChange(host, session, id, current);
+          if (!current()) return;
+          if (saved) read();
+          else await showError(current, null, "Could not save the tracked OpenSpec change.");
+        })();
+      },
+    }),
+  );
+}
+
+async function showError(current: () => boolean, caught: unknown, fallback: string) {
+  if (!current()) return;
+  await host
+    .toast({
+      kind: "error",
+      message: caught instanceof HostRequestError ? caught.message : fallback,
+    })
+    .catch((error: unknown) => console.warn("Could not show the OpenSpec error.", error));
+}
+
+async function preparePrompt(
+  change: DerivedChange,
+  intent: "primary" | "verify",
+  current: () => boolean,
+) {
+  if (!current()) return;
+  const session = sessionId;
+  try {
+    await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
+    if (!current()) return;
+    if (session) void saveTrackedChange(host, session, change.id, current);
+    await host.toast({
+      kind: "success",
+      message: "Workflow prompt prepared in the open composer.",
+    });
+  } catch (caught) {
+    await showError(current, caught, "The workflow prompt could not be prepared.");
+  }
 }
 
 function renderTracked(change: DerivedChange, tasks: Task[]) {
@@ -174,7 +262,7 @@ function read() {
         if (!current()) return;
         const tasks = await client.tasks(listing, entry.id);
         if (!current()) return;
-        render({ kind: "tracked", change: deriveChange({ ...summary, ...entry }), tasks });
+        render({ kind: "tracked", listing, change: deriveChange({ ...summary, ...entry }), tasks });
       }
     } catch (caught) {
       if (current())

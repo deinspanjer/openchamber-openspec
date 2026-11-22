@@ -204,6 +204,14 @@ function hostHtml(statusCase) {
       if (statusCase === "saved" || statusCase === "stale")
         storage.set("session-change:fixture-session", { change: statusCase === "saved" ? "second-change" : "old-change", savedAt: 1 });
       if (statusCase === "stale") sessions[0].items = [];
+      if (statusCase === "picker") {
+        sessions[0].items = [];
+        changes.unshift(
+          { id: "complete-change", goal: null, completedTasks: 2, totalTasks: 2 },
+          { id: "not-started-change", goal: null, completedTasks: 0, totalTasks: 2 },
+          { id: "z-progress-change", goal: null, completedTasks: 1, totalTasks: 3 },
+        );
+      }
       if (statusCase === "archive") changes.push({ id: "archive-all", goal: null, completedTasks: 0, totalTasks: 0 });
       if (["progress", "complete", "read-error"].includes(statusCase)) {
         changes[0].completedTasks = statusCase === "complete" ? 7 : 3;
@@ -380,7 +388,7 @@ function hostHtml(statusCase) {
         reply();
         return;
       }
-      if (["workspace-unsubscribe", "resize", "status-controls"].includes(message.type)) {
+      if (["workspace-unsubscribe", "resize", "status-controls", "open-surface"].includes(message.type)) {
         window.__requests.push({path:message.type,body:message.payload});
         reply();
         return;
@@ -639,6 +647,124 @@ test("session section shows no partial progress after a read failure and can ref
     assert.equal(await error.count(), 0);
     await page.waitForFunction(() => __requests.filter((r) => r.path === "/tasks").length === 2);
     assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/summaries")), false);
+    await page.close();
+  });
+});
+
+test("session section orders the picker by task counts and persists a choice", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=picker`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("button", { name: "Choose a change" }).click({ timeout: 3000 });
+    const choices = frame.getByRole("menuitem");
+    await choices.first().waitFor();
+    assert.deepEqual(
+      (await choices.allTextContents()).map((text) => text.trim()),
+      [
+        "z-progress-change",
+        "first-change",
+        "not-started-change",
+        "second-change",
+        "complete-change",
+      ],
+    );
+    await frame.getByRole("menuitem", { name: "first-change", exact: true }).click();
+    await frame
+      .getByRole("heading", { name: "first-change", exact: true })
+      .waitFor({ timeout: 3000 });
+    await page.waitForFunction(
+      () => __stored()["session-change:fixture-session"]?.change === "first-change",
+    );
+    await frame.getByRole("button", { name: "Change…", exact: true }).click();
+    await frame.getByRole("menuitem", { name: "second-change", exact: true }).click();
+    await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
+    await page.waitForFunction(
+      () => __stored()["session-change:fixture-session"]?.change === "second-change",
+    );
+    await page.waitForFunction(() =>
+      __requests.some((r) => r.path === "/tasks" && r.body.change === "second-change"),
+    );
+    assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/summaries")), false);
+    await page.close();
+  });
+});
+
+test("session section continue prepares the board's unsent prompt and saves the choice", async () => {
+  await withPanel(async (browser, url) => {
+    const boardPage = await browser.newPage();
+    await boardPage.goto(url);
+    const board = boardPage.frameLocator("iframe");
+    await board
+      .locator(".change-card")
+      .filter({ hasText: "first-change" })
+      .getByRole("button", { name: "apply", exact: true })
+      .click();
+    await board.getByRole("menuitem", { name: "Prepare in current chat", exact: true }).click();
+    await boardPage.waitForFunction(() => __requests.some((r) => r.path === "compose"));
+    const expected = await boardPage.evaluate(() => __draft());
+
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item`);
+    const section = page.frameLocator("iframe");
+    await section.getByRole("button", { name: "continue", exact: true }).click({ timeout: 3000 });
+    await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
+    await page.waitForFunction(
+      () => __stored()["session-change:fixture-session"]?.change === "first-change",
+    );
+    assert.equal(await page.evaluate(() => __draft()), expected);
+    assert.equal(
+      await page.evaluate(() =>
+        __requests.some((r) => ["prompt", "start-session", "/summaries"].includes(r.path)),
+      ),
+      false,
+    );
+    await boardPage.close();
+    await page.close();
+  });
+});
+
+test("session section discards late composition feedback and saving after a session switch", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item`);
+    const frame = page.frameLocator("iframe");
+    await page.evaluate(() => __holdCompose());
+    await frame.getByRole("button", { name: "continue", exact: true }).click({ timeout: 3000 });
+    await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
+    await page.evaluate(() => __session("replacement-session"));
+    await frame.getByRole("button", { name: "Choose a change" }).waitFor();
+    await page.evaluate(() => __releaseCompose());
+    await frame.getByRole("button", { name: "Open board", exact: true }).click();
+    await page.waitForFunction(() => __requests.some((r) => r.path === "open-surface"));
+    assert.deepEqual(await page.evaluate(() => __stored()), {});
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests
+          .filter((r) => ["compose", "toast", "prompt", "start-session"].includes(r.path))
+          .map((r) => r.path),
+      ),
+      ["compose"],
+    );
+    await page.close();
+  });
+});
+
+test("session section Open board opens the extension's plugin surface", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item`);
+    await page
+      .frameLocator("iframe")
+      .getByRole("button", { name: "Open board", exact: true })
+      .click({
+        timeout: 3000,
+      });
+    await page.waitForFunction(() => __requests.some((r) => r.path === "open-surface"));
+    assert.deepEqual(
+      await page.evaluate(() => __requests.find((r) => r.path === "open-surface").body),
+      { surfaceId: "plugin:openspec-board" },
+    );
     await page.close();
   });
 });

@@ -25,7 +25,7 @@ export async function saveTrackedChange(
       const choices: { key: string; savedAt: number }[] = [];
       // Instance storage uses one host request per key; bound the in-flight reads.
       for (let i = 0; i < keys.length; i += readBatchSize) {
-        if (!current()) return;
+        if (!current()) return false;
         const batch = keys.slice(i, i + readBatchSize);
         const values = await Promise.all(
           batch.map(async (key) => ({ key, value: await host.storage.get(key) })),
@@ -43,12 +43,15 @@ export async function saveTrackedChange(
       }
       choices.sort((left, right) => left.savedAt - right.savedAt);
       for (const { key } of choices.slice(0, 100)) {
-        if (!current()) return;
+        if (!current()) return false;
         await host.storage.delete(key);
       }
     }
-    if (current()) await host.storage.set(`${prefix}${sessionId}`, { change, savedAt: Date.now() });
+    if (!current()) return false;
+    await host.storage.set(`${prefix}${sessionId}`, { change, savedAt: Date.now() });
+    return true;
   } catch (caught) {
     console.warn("Could not save the tracked OpenSpec change.", caught);
+    return false;
   }
 }

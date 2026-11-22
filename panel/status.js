@@ -2847,11 +2847,67 @@ ${GUEST_UI_LOOK_CSS}`;
     return owners[0];
   }
 
+  // src/panel/prompts.ts
+  function actionPrompt(change, intent) {
+    const target = `OpenSpec change "${change.id}"`;
+    const goal = change.goal?.trim() ? `
+Goal: ${change.goal}` : "";
+    if (intent === "explore")
+      return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}
+
+Investigate the goal, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation. If no goal is recorded, inspect existing context and ask the user to clarify it if necessary; do not invent a goal.`;
+    if (change.stage === "planning")
+      return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}
+
+Inspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
+    if (change.stage === "ready" || change.stage === "progress") {
+      const progress = change.stage === "progress" ? `
+${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.` : "";
+      return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress}
+
+Complete all remaining tasks in ${target}, then verify the implementation against its change artefacts. Resolve any issues found and verify again until all tasks are complete and verification passes. If blocked, report the blocker rather than marking unfinished work complete.`;
+    }
+    if (intent === "verify")
+      return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
+    return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+  }
+
   // src/panel/tracked-change.ts
   var prefix = "session-change:";
+  var readBatchSize = 32;
   async function readTrackedChange(host2, sessionId2) {
     const value = await host2.storage.get(`${prefix}${sessionId2}`);
     return value && typeof value === "object" && "change" in value && typeof value.change === "string" ? value.change : null;
+  }
+  async function saveTrackedChange(host2, sessionId2, change, current) {
+    try {
+      const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));
+      if (keys.length >= 1900) {
+        const choices = [];
+        for (let i = 0; i < keys.length; i += readBatchSize) {
+          if (!current()) return false;
+          const batch = keys.slice(i, i + readBatchSize);
+          const values = await Promise.all(
+            batch.map(async (key) => ({ key, value: await host2.storage.get(key) }))
+          );
+          for (const { key, value } of values) {
+            if (value && typeof value === "object" && "savedAt" in value && typeof value.savedAt === "number" && Number.isFinite(value.savedAt))
+              choices.push({ key, savedAt: value.savedAt });
+          }
+        }
+        choices.sort((left, right) => left.savedAt - right.savedAt);
+        for (const { key } of choices.slice(0, 100)) {
+          if (!current()) return false;
+          await host2.storage.delete(key);
+        }
+      }
+      if (!current()) return false;
+      await host2.storage.set(`${prefix}${sessionId2}`, { change, savedAt: Date.now() });
+      return true;
+    } catch (caught) {
+      console.warn("Could not save the tracked OpenSpec change.", caught);
+      return false;
+    }
   }
 
   // src/panel/workflow.ts
@@ -2861,6 +2917,7 @@ ${GUEST_UI_LOOK_CSS}`;
     { id: "progress", label: "In Progress", action: "continue" },
     { id: "complete", label: "Complete", action: "archive" }
   ];
+  var workflowLabel = (stage) => stages.find((item) => item.id === stage).action;
   var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
 
   // src/status.ts
@@ -2885,13 +2942,38 @@ ${GUEST_UI_LOOK_CSS}`;
     panelRoot.replaceChildren();
     if (view.kind === "empty") return;
     const controls = document.createElement("div");
+    controls.className = "section-controls";
     handles.push(mountButton(controls, { label: "Refresh", size: "sm", onClick: refresh }));
+    const capturedEpoch = epoch;
+    const current = () => !disposed && epoch === capturedEpoch;
+    handles.push(
+      mountButton(controls, {
+        label: "Open board",
+        size: "sm",
+        variant: "secondary",
+        onClick: () => void host.openSurface("plugin:openspec-board").catch(
+          (caught) => showError(current, caught, "Could not open the OpenSpec board.")
+        )
+      })
+    );
     if (view.kind === "loading") {
       note("Loading OpenSpec change\u2026", "status");
       return;
     }
     if (view.kind === "tracked") {
       renderTracked(view.change, view.tasks);
+      const change = view.change;
+      for (const action of change.stage === "complete" ? ["primary", "verify"] : ["primary"]) {
+        handles.push(
+          mountButton(controls, {
+            label: action === "primary" ? workflowLabel(change.stage) : "verify",
+            size: "sm",
+            variant: action === "primary" ? "default" : "secondary",
+            onClick: () => void preparePrompt(change, action, current)
+          })
+        );
+      }
+      mountPicker(controls, view.listing, "Change\u2026", current);
       panelRoot.append(controls);
       return;
     }
@@ -2901,23 +2983,62 @@ ${GUEST_UI_LOOK_CSS}`;
       if (!view.listing.changes.length) {
         note("No active changes.");
       } else {
-        const picker = document.createElement("div");
-        panelRoot.append(picker);
-        handles.push(
-          mountMenu(picker, {
-            label: "Choose a change",
-            size: "sm",
-            items: view.listing.changes.map(({ id }) => ({ id, label: id, disabled: !sessionId })),
-            onSelect: () => {
-            }
-          })
-        );
+        mountPicker(controls, view.listing, "Choose a change", current);
       }
       panelRoot.append(controls);
       return;
     }
     if (view.kind === "error") note(view.message, "alert");
     panelRoot.append(controls);
+  }
+  function pickerPriority({ completedTasks, totalTasks }) {
+    if (!totalTasks) return 2;
+    if (!completedTasks) return 1;
+    return completedTasks < totalTasks ? 0 : 3;
+  }
+  function mountPicker(controls, listing, label, current) {
+    const picker = document.createElement("div");
+    controls.append(picker);
+    handles.push(
+      mountMenu(picker, {
+        label,
+        size: "sm",
+        variant: "secondary",
+        items: [...listing.changes].sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => ({ id, label: id, disabled: !sessionId })),
+        onSelect: (id) => {
+          const session = sessionId;
+          if (!session || !current()) return;
+          void (async () => {
+            const saved = await saveTrackedChange(host, session, id, current);
+            if (!current()) return;
+            if (saved) read();
+            else await showError(current, null, "Could not save the tracked OpenSpec change.");
+          })();
+        }
+      })
+    );
+  }
+  async function showError(current, caught, fallback) {
+    if (!current()) return;
+    await host.toast({
+      kind: "error",
+      message: caught instanceof HostRequestError ? caught.message : fallback
+    }).catch((error) => console.warn("Could not show the OpenSpec error.", error));
+  }
+  async function preparePrompt(change, intent, current) {
+    if (!current()) return;
+    const session = sessionId;
+    try {
+      await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
+      if (!current()) return;
+      if (session) void saveTrackedChange(host, session, change.id, current);
+      await host.toast({
+        kind: "success",
+        message: "Workflow prompt prepared in the open composer."
+      });
+    } catch (caught) {
+      await showError(current, caught, "The workflow prompt could not be prepared.");
+    }
   }
   function renderTracked(change, tasks) {
     const heading = document.createElement("div");
@@ -3006,7 +3127,7 @@ ${GUEST_UI_LOOK_CSS}`;
           if (!current()) return;
           const tasks = await client.tasks(listing, entry.id);
           if (!current()) return;
-          render({ kind: "tracked", change: deriveChange({ ...summary, ...entry }), tasks });
+          render({ kind: "tracked", listing, change: deriveChange({ ...summary, ...entry }), tasks });
         }
       } catch (caught) {
         if (current())

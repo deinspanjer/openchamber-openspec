@@ -7914,7 +7914,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       if (keys.length >= 1900) {
         const choices = [];
         for (let i = 0; i < keys.length; i += readBatchSize) {
-          if (!current()) return;
+          if (!current()) return false;
           const batch = keys.slice(i, i + readBatchSize);
           const values = await Promise.all(
             batch.map(async (key) => ({ key, value: await host2.storage.get(key) }))
@@ -7926,13 +7926,16 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         }
         choices.sort((left, right) => left.savedAt - right.savedAt);
         for (const { key } of choices.slice(0, 100)) {
-          if (!current()) return;
+          if (!current()) return false;
           await host2.storage.delete(key);
         }
       }
-      if (current()) await host2.storage.set(`${prefix}${sessionId}`, { change, savedAt: Date.now() });
+      if (!current()) return false;
+      await host2.storage.set(`${prefix}${sessionId}`, { change, savedAt: Date.now() });
+      return true;
     } catch (caught) {
       console.warn("Could not save the tracked OpenSpec change.", caught);
+      return false;
     }
   }
 
