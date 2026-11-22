@@ -39,7 +39,7 @@
 
 ## 4. Session section
 
-- [ ] 4.1 Add `panel/status.html`, `src/status.ts`, the `build:status` script (in `build` and
+- [x] 4.1 Add `panel/status.html`, `src/status.ts`, the `build:status` script (in `build` and
       `clean`) and the `statusSection` manifest entry. Extend the fake host to serve the status
       entry with `surface: "status"`, `listProjects`/`onSessions`, `setHeight` and
       `setStatusControls`. Add failing tests at the fake host seam for resolution display: saved

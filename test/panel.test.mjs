@@ -43,11 +43,13 @@ const artifacts = [
   { id: "specs", status: "done", outputPath: "specs/**/*.md", requires: ["proposal"] },
   { id: "tasks", status: "done", outputPath: "tasks.md", requires: ["specs"] },
 ];
-function hostHtml() {
+function hostHtml(statusCase) {
   const data = JSON.stringify({ directory, root, artifacts, theme: theme("dark") });
   const themes = JSON.stringify({ dark: theme("dark"), light: theme("light") });
   return `<!doctype html><script>
     const { directory, root, artifacts, theme } = ${data};
+    const statusCase = ${JSON.stringify(statusCase)};
+    const statusDirectory = statusCase === "worktree" ? "/tmp/fixture-worktree" : directory;
     let currentRoot = root;
     let currentPlanning = "fixture-planning";
     let projects = [{ id: "origin-project", name: "Origin", directory }];
@@ -186,8 +188,24 @@ function hostHtml() {
       type: "directory", payload: { directory: next } }, "*"); };
     window.__root = (next) => { currentRoot = next; };
     window.__planning = next => { currentPlanning = next; };
-    const ready = { directory, theme, locale: "en-AU", session: { id: "fixture-session" },
-      surface: "panel", connection: { connected: true, account: "" }, settings: {}, item: null };
+    const ready = { directory: statusDirectory, theme, locale: "en-AU",
+      session: statusCase === "new" ? null : { id: "fixture-session" },
+      surface: statusCase ? "status" : "panel", connection: { connected: true, account: "" }, settings: {}, item: null };
+    if (statusCase) {
+      const worktree = statusCase === "worktree"
+        ? { directory: statusDirectory, name: "second-change", branch: "second-change", status: "ready" } : null;
+      if (worktree) worktrees = [worktree];
+      const items = statusCase === "archive"
+        ? [{ id: "archive-all", data: { kind: "archive-all" } }]
+        : [{ id: "first-change", data: { kind: "change", change: "first-change" } }];
+      sessions = [{ id: "fixture-session", title: "Fixture", projectId: "origin-project",
+        directory: statusDirectory, parentId: null, createdAt: 1, updatedAt: 1, archivedAt: null,
+        worktree, activity: "idle", outcome: null, items: worktree ? [] : items }];
+      if (statusCase === "saved" || statusCase === "stale")
+        storage.set("session-change:fixture-session", { change: statusCase === "saved" ? "second-change" : "old-change", savedAt: 1 });
+      if (statusCase === "stale") sessions[0].items = [];
+      if (statusCase === "archive") changes.push({ id: "archive-all", goal: null, completedTasks: 0, totalTasks: 0 });
+    }
     addEventListener("message", (event) => {
       const message = event.data;
       if (!message || message.channel !== "openchamber.sdk" || message.v !== 1) return;
@@ -212,8 +230,9 @@ function hostHtml() {
         if (path === "/changes") {
            if (failNextListing) { failNextListing = false;
              send({ error: { code: "CLI_UNAVAILABLE", message: "Cannot check listing" } }, 503); return; }
-           const finish = () => send({ directory: body.directory, root: body.directory === directory ? currentRoot : body.directory + "/openspec",
-            changes: body.directory === directory ? changes.map(({ id, completedTasks, totalTasks }) => ({ id, completedTasks, totalTasks })) : [] });
+           const local = body.directory === statusDirectory;
+           const finish = () => send({ directory: body.directory, root: local ? currentRoot : body.directory + "/openspec",
+             changes: local ? changes.map(({ id, completedTasks, totalTasks }) => ({ id, completedTasks, totalTasks })) : [] });
           if (holdListing) pending.push(finish); else finish();
         }
         else if (path === "/summaries") {
@@ -336,6 +355,20 @@ function hostHtml() {
           {kind:"sessions",projectId:query.projectId,state:"ready",coverage:[],sessions});
         return;
       }
+      if (message.type === "workspace-subscribe") {
+        window.__requests.push({path:message.type,body:message.payload});
+        const { subscriptionId, query } = message.payload;
+        event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "workspace",
+          payload: { subscriptionId, snapshot: { kind: "sessions", projectId: query.projectId,
+            state: "ready", coverage: [], sessions } } }, "*");
+        reply();
+        return;
+      }
+      if (["workspace-unsubscribe", "resize", "status-controls"].includes(message.type)) {
+        window.__requests.push({path:message.type,body:message.payload});
+        reply();
+        return;
+      }
       if (message.type === "open-session") {
         window.__requests.push({path:message.type,body:message.payload}); reply(); return;
       }
@@ -402,7 +435,7 @@ function hostHtml() {
               { artifactId: "tasks", selector: "tasks.md", label: "tasks.md" }]),
           ] });
     }
-  </script><style>body{margin:0}iframe{display:block;width:100%;height:100vh;border:0}</style><iframe src="/panel/index.html" title="OpenSpec test panel"></iframe>`;
+  </script><style>body{margin:0}iframe{display:block;width:100%;height:100vh;border:0}</style><iframe src="/panel/${statusCase ? "status" : "index"}.html" title="OpenSpec test panel"></iframe>`;
 }
 
 async function withPanel(run) {
@@ -411,16 +444,30 @@ async function withPanel(run) {
     readFile(new URL("../panel/main.js", import.meta.url)),
   ]);
   const server = createServer((request, response) => {
-    const path = new URL(request.url, "http://127.0.0.1").pathname;
+    const { pathname: path, searchParams } = new URL(request.url, "http://127.0.0.1");
     if (path === "/") {
       response.setHeader("content-type", "text/html");
-      response.end(hostHtml());
+      response.end(hostHtml(searchParams.get("status")));
     } else if (path === "/panel/index.html") {
       response.setHeader("content-type", "text/html");
       response.end(html);
     } else if (path === "/panel/main.js") {
       response.setHeader("content-type", "text/javascript");
       response.end(js);
+    } else if (path === "/panel/status.html" || path === "/panel/status.js") {
+      void readFile(new URL(`..${path}`, import.meta.url)).then(
+        (content) => {
+          response.setHeader(
+            "content-type",
+            path.endsWith(".html") ? "text/html" : "text/javascript",
+          );
+          response.end(content);
+        },
+        () => {
+          response.statusCode = 404;
+          response.end();
+        },
+      );
     } else {
       response.statusCode = 404;
       response.end();
@@ -452,6 +499,53 @@ async function withPanel(run) {
     const failures = cleanup.filter((result) => result.status === "rejected");
     if (failures.length) throw new AggregateError(failures.map((result) => result.reason));
   }
+}
+
+for (const scenario of ["saved", "worktree", "archive", "stale", "new"]) {
+  test(`session section resolves ${scenario} context without reading the board`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=${scenario}`);
+      const frame = page.frameLocator("iframe");
+      if (scenario === "saved" || scenario === "worktree") {
+        await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor({
+          timeout: 3000,
+        });
+      } else {
+        await frame.getByRole("button", { name: "Choose a change" }).click({ timeout: 3000 });
+        const option = frame.getByRole("menuitem", { name: "first-change" });
+        await option.waitFor();
+        if (scenario === "new") {
+          assert.equal(await option.isDisabled(), true);
+          assert.equal(
+            await frame.getByText("Start a session to choose a change.").isVisible(),
+            true,
+          );
+        } else {
+          assert.equal(await option.isEnabled(), true);
+        }
+        if (scenario === "stale")
+          assert.equal(
+            await frame.getByText("Saved change old-change is no longer active.").isVisible(),
+            true,
+          );
+        if (scenario === "archive")
+          assert.equal(
+            await frame.getByRole("menuitem", { name: "archive-all" }).isVisible(),
+            true,
+          );
+      }
+      await page.waitForFunction(() => __requests.some((r) => r.path === "/changes"));
+      await page.waitForFunction(() =>
+        __requests.some((r) => r.path === "resize" && r.body.height > 0),
+      );
+      assert.equal(
+        await page.evaluate(() => __requests.some((r) => r.path === "/summaries")),
+        false,
+      );
+      await page.close();
+    });
+  });
 }
 
 test("presentation modal backdrops dim every dialog without changing keyboard cancellation", async () => {

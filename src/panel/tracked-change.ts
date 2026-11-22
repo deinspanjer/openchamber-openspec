@@ -3,6 +3,16 @@ import type { HostClient } from "@openchamber/sdk";
 const prefix = "session-change:";
 const readBatchSize = 32;
 
+export async function readTrackedChange(
+  host: HostClient,
+  sessionId: string,
+): Promise<string | null> {
+  const value = await host.storage.get(`${prefix}${sessionId}`);
+  return value && typeof value === "object" && "change" in value && typeof value.change === "string"
+    ? value.change
+    : null;
+}
+
 export async function saveTrackedChange(
   host: HostClient,
   sessionId: string,
