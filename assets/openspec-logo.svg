@@ -1,13 +1,9 @@
-<svg viewBox="0 0 346 346" xmlns="http://www.w3.org/2000/svg">
-  <g transform="matrix(2,0,0,2,-170.479484,-170.73667)" fill="white">
-    <g transform="matrix(1.022089,0,0,0.943441,-2.008532,7.651726)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-    <g transform="matrix(1.022089,0,0,2.830322,-26.008532,-176.781491)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-    <g transform="matrix(1.022089,0,0,2.830322,93.991468,-176.781491)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-    <g transform="matrix(2.044179,0,0,0.943441,-103.756806,-16.348274)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-    <g transform="matrix(1.022089,0,0,0.943441,69.991468,7.651726)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-    <g transform="matrix(1.022089,0,0,-0.943441,-2.008532,336.084944)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-    <g transform="matrix(2.044179,0,0,-0.943441,-103.756806,360.084944)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-    <g transform="matrix(1.022089,0,0,-0.943441,69.991468,336.084944)"><rect x="123.031" y="110.464" width="23.481" height="25.439" /></g>
-  </g>
-  <rect x="125" y="101" width="96" height="144" fill="white" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="crispEdges">
+  <path fill="white" d="
+    M219 124h74v37h-74z
+    M182 161h37v38h-38v-37h1z M293 161h37v1h1v37h-38z
+    M144 199h37v112h-37z M219 199h74v112h-74z M331 199h37v112h-37z
+    M181 311h38v38h-37v-1h-1z M293 311h38v37h-1v1h-37z
+    M219 349h74v37h-74z
+  "/>
 </svg>

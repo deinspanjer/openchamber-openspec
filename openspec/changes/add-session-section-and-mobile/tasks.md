@@ -141,7 +141,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       of an empty section. Keep them in memory across session switches, and in device storage
       (`features.deviceStorage`) across frame remounts. Replace them when the read lands, and mark
       them stale while it runs. A failed read keeps the cached cards with an error note.
-- [ ] 8.5 Redraw `assets/openspec-logo.svg` as a crisp integer-grid pixel glyph matching OpenSpec's
+- [x] 8.5 Redraw `assets/openspec-logo.svg` as a crisp integer-grid pixel glyph matching OpenSpec's
       official icon (`website/public/docs/icon-512.png` in Fission-AI/OpenSpec), using
       `shape-rendering="crispEdges"` and no fractional transforms. Verify by rendering it at 16, 24
       and 32 px.
