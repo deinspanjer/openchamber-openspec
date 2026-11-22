@@ -197,7 +197,7 @@ One commit per task.
       on both pointers, with no horizontal overflow. Assert that the board's coarse-pointer 44px
       tests still pass unchanged. Implement in `panel/status.html` and replace the section's
       44px assertions from 5.1 and 7.7.
-- [ ] 9.7 Icon crop. Set `viewBox="125 124 262 262"` in `assets/openspec-logo.svg`, keeping the
+- [x] 9.7 Icon crop. Set `viewBox="125 124 262 262"` in `assets/openspec-logo.svg`, keeping the
       paths. Render it at 16 and 24px next to another rail icon and confirm the glyph fills the box
       without uneven cells; if cells are uneven, retrace on a grid that divides 16 and 24.
 - [ ] 9.8 Release. Update `README.md` (footer, chips follow `openspec config profile`, compact

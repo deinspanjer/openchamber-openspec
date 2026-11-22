@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="crispEdges">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" shape-rendering="crispEdges">
   <path fill="white" d="
-    M219 124h74v37h-74z
-    M182 161h37v38h-38v-37h1z M293 161h37v1h1v37h-38z
-    M144 199h37v112h-37z M219 199h74v112h-74z M331 199h37v112h-37z
-    M181 311h38v38h-37v-1h-1z M293 311h38v37h-1v1h-37z
-    M219 349h74v37h-74z
+    M3 0h2v1H3z
+    M2 1h1v1H2z M5 1h1v1H5z
+    M1 2h1v4H1z M3 2h2v4H3z M6 2h1v4H6z
+    M2 6h1v1H2z M5 6h1v1H5z
+    M3 7h2v1H3z
   "/>
 </svg>
