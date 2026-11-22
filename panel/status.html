@@ -49,6 +49,7 @@
       .oc-sdk-btn.status-link[data-variant][data-size] {
         height: auto;
         padding: 0;
+        line-height: 1.45;
         border: 0;
         background: none;
         box-shadow: none;
@@ -84,6 +85,13 @@
       }
       .footer-actions {
         margin-inline-start: auto;
+      }
+      .section-controls > :first-child,
+      .footer-actions > span:not([hidden]) {
+        display: flex;
+      }
+      .footer-actions .loading-action button {
+        gap: 0;
       }
       .loading-action svg {
         width: 1em;
@@ -211,14 +219,12 @@
       .task-window .flyout {
         grid-column: 1 / -1;
       }
-      [data-pointer="coarse"] :is(button, summary) {
-        min-height: 44px;
+      [data-pointer="coarse"] .card-actions button[data-size] {
+        height: 28px;
       }
-      [data-pointer="coarse"] .section-picker li button {
+      [data-pointer="coarse"]
+        :is(.section-picker button, .untrack-link, .section-content > button) {
         min-height: 44px;
-      }
-      [data-pointer="coarse"] summary {
-        line-height: 44px;
       }
     </style>
   </head>

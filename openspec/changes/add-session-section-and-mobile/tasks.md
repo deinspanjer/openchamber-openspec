@@ -191,7 +191,7 @@ One commit per task.
       existing prompt verbatim, without a goal. `new` names no change and leaves tracking unchanged;
       the others append tracking. Implement the prompts in
       `src/panel/prompts.ts` and drop `stageChip`.
-- [ ] 9.6 Compact sizing. Fake host seam at 320px: add failing tests that on a coarse pointer chips
+- [x] 9.6 Compact sizing. Fake host seam at 320px: add failing tests that on a coarse pointer chips
       are 28px tall with at least 8px between adjacent chips, and that `＋ Track a change`, the
       footer controls, `Tasks:` lines, task titles and names are no taller than their line of text
       on both pointers, with no horizontal overflow. Assert that the board's coarse-pointer 44px

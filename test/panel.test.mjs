@@ -2444,18 +2444,13 @@ test("a long Work Status change name truncates before the count wraps", async ()
 });
 
 for (const pointer of ["coarse", "fine"]) {
-  test(`Work Status secondary links and chips keep their ${pointer} sizing`, async () => {
+  test(`Work Status keeps Untrack right-aligned on a ${pointer} pointer`, async () => {
     await withPanel(async (browser, url) => {
       const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
       await page.goto(`${url}?status=item&pointer=${pointer}`);
       const frame = page.frameLocator("iframe");
       const track = frame.getByRole("button", { name: "＋ Track a change" });
       await track.waitFor();
-      const chip = frame.getByRole("button", { name: "validate", exact: true });
-      const chipHeight = (await chip.boundingBox()).height;
-      assert.ok(pointer === "coarse" ? chipHeight >= 44 : chipHeight <= 24);
-      assert.ok((await track.boundingBox()).height <= chipHeight);
-      if (pointer === "coarse") assert.ok((await track.boundingBox()).height >= 44);
       assert.equal(
         await track.evaluate((node) => getComputedStyle(node).textDecorationLine),
         "underline",
@@ -2477,27 +2472,73 @@ for (const pointer of ["coarse", "fine"]) {
       assert.ok(
         pointer === "coarse"
           ? (await untrack.boundingBox()).height >= 44
-          : (await untrack.boundingBox()).height <= chipHeight,
+          : (await untrack.boundingBox()).height <= 24,
       );
     });
   });
 
   test(`session section keeps two cards within 320px for a ${pointer} pointer`, async () => {
     await withPanel(async (browser, url) => {
-      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
-      await page.goto(`${url}?status=compact-touch&pointer=${pointer}`);
+      const page = await browser.newPage({
+        viewport: { width: 320, height: 720 },
+        hasTouch: pointer === "coarse",
+      });
+      await page.goto(`${url}?status=compact-touch&pointer=${pointer}&hold-ready`);
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate(() => {
+        __workflows(["new"]);
+        __releaseReady();
+      });
       const frame = page.frameLocator("iframe");
       await frame
         .getByRole("article")
         .filter({ hasText: "second-change" })
         .waitFor({ timeout: 3000 });
       await frame.locator("summary:visible").getByText("Tasks:", { exact: true }).click();
-      const controls = frame.locator("article :is(button, summary):visible");
-      const heights = await controls.evaluateAll((nodes) =>
-        nodes.map((node) => node.getBoundingClientRect().height),
+      const chips = await frame
+        .locator("article .card-actions")
+        .evaluateAll((rows) =>
+          rows.map((row) =>
+            [...row.querySelectorAll("button")]
+              .filter((button) => button.getClientRects().length)
+              .map((button) => button.getBoundingClientRect().toJSON()),
+          ),
+        );
+      assert.deepEqual(
+        chips.map((row) => row.length),
+        [3, 3],
       );
-      assert.equal(heights.length, 15);
-      for (const height of heights) assert.equal(height >= 44, pointer === "coarse");
+      for (const row of chips) {
+        for (const [index, box] of row.entries()) {
+          if (pointer === "coarse") {
+            assert.equal(box.height, 28);
+            if (index > 0) {
+              const previous = row[index - 1];
+              assert.ok(box.left - previous.right >= 8 || box.top - previous.bottom >= 8);
+            }
+          } else assert.ok(box.height <= 24);
+        }
+      }
+      const lines = await frame
+        .locator("footer button:visible, article :is(summary, .flyout-trigger):visible")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => ({
+            label: node.getAttribute("aria-label") ?? node.textContent.slice(0, 40),
+            height: node.getBoundingClientRect().height,
+            lineHeight: parseFloat(getComputedStyle(node).lineHeight),
+          })),
+        );
+      assert.equal(lines.length, 13);
+      for (const { label, height, lineHeight } of lines)
+        assert.ok(
+          height > 0 && height <= lineHeight + 0.05,
+          `${label}: ${height}px exceeds line height ${lineHeight}px`,
+        );
+      const footer = frame.locator("footer");
+      assert.ok(
+        (await footer.boundingBox()).height <=
+          Math.max(...lines.slice(-4).map(({ lineHeight }) => lineHeight)) + 0.05,
+      );
       assert.ok(
         await frame
           .locator("html")
@@ -2531,39 +2572,15 @@ for (const pointer of ["coarse", "fine"]) {
       const tab = frame.getByRole("tab").first();
       const detailHeight = [(await back.boundingBox()).height, (await tab.boundingBox()).height];
 
-      await page.goto(`${url}?status=progress&pointer=${pointer}`);
-      const section = page.frameLocator("iframe");
-      const change = section.getByRole("button", { name: "＋ Track a change", exact: true });
-      await change.waitFor();
-      const sectionHeight = (await change.boundingBox()).height;
-      const summaryHeight = (await section.locator("details summary").boundingBox()).height;
-      await change.click();
-      const option = section.getByRole("button", { name: "second-change", exact: true });
-      await option.waitFor();
-      const optionHeight = (await option.boundingBox()).height;
-      const heights = [
-        ...boardHeight,
-        dialogHeight,
-        cancelHeight,
-        ...detailHeight,
-        sectionHeight,
-        summaryHeight,
-        optionHeight,
-      ];
+      const heights = [...boardHeight, dialogHeight, cancelHeight, ...detailHeight];
       if (pointer === "coarse") {
         for (const height of heights)
           assert.ok(height >= 44, `Expected at least 44px, got ${height}px`);
-        assert.equal(
-          await section.locator("html").evaluate((node) => node.scrollWidth > innerWidth),
-          false,
-        );
       } else {
         assert.deepEqual(boardHeight, [28, 36]);
         assert.deepEqual(detailHeight, [28, 28]);
         assert.equal(cancelHeight, 28);
-        assert.ok(
-          dialogHeight < 44 && sectionHeight < 44 && summaryHeight < 44 && optionHeight < 44,
-        );
+        assert.ok(dialogHeight < 44);
       }
       await page.close();
     });
