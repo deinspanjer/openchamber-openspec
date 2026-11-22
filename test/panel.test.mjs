@@ -173,10 +173,13 @@ function hostHtml(statusCase) {
     window.__readiness = (mode) => { readinessCase = mode; };
     window.__proposalStatus = (status) => { artifacts[0].status = status; };
     window.__draft = () => draft;
-    window.__session = (id) => { ready.session = id ? { id } : null;
+    window.__session = (id, busy = false) => { ready.session = id ? { id, busy } : null;
       for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
-        type: "session", payload: { session: ready.session } }, "*"); };
+        type: "session", payload: { session: ready.session } }, "*");
+      if (statusCase && id) __lifecycle(id, busy ? "started" : "completed");
+    };
     window.__lifecycle = (sessionId, phase) => {
+      if (ready.session?.id === sessionId) ready.session.busy = phase === "started";
       for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
         type: "session-lifecycle", payload: { sessionId, phase } }, "*");
     };
@@ -818,6 +821,38 @@ test("session section refreshes once for a completed turn in the shown session o
   });
 });
 
+test("session section reads once on an idle session switch, then once for a finished turn", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=switch`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByText("1/2", { exact: true }).waitFor();
+    await page.evaluate(() => {
+      __session("replacement-session");
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length >= 2);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
+      2,
+    );
+    await page.evaluate(() => {
+      __lifecycle("replacement-session", "started");
+      __lifecycle("replacement-session", "completed");
+      __theme("dark");
+    });
+    await frame.locator('html[data-oc-theme="dark"]').waitFor();
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length >= 3);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
+      3,
+    );
+    await page.close();
+  });
+});
+
 test("session section coalesces refresh triggers during a read", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
@@ -826,6 +861,7 @@ test("session section coalesces refresh triggers during a read", async () => {
     await frame.getByText("1/2", { exact: true }).waitFor();
     await page.evaluate(() => {
       __holdTasks();
+      __lifecycle("fixture-session", "started");
       __lifecycle("fixture-session", "completed");
     });
     await page.waitForFunction(
@@ -836,7 +872,9 @@ test("session section coalesces refresh triggers during a read", async () => {
       },
     );
     await page.evaluate(() => {
+      __lifecycle("fixture-session", "started");
       __lifecycle("fixture-session", "completed");
+      __lifecycle("fixture-session", "started");
       __lifecycle("fixture-session", "completed");
       __theme("light");
     });

@@ -2928,6 +2928,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var panelRoot = root;
   var directory = null;
   var sessionId = null;
+  var turnStarted = false;
   var epoch = 0;
   var projectEpoch = 0;
   var sessions = null;
@@ -3214,6 +3215,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   function updateContext(nextDirectory, nextSession) {
     const directoryChanged = nextDirectory !== directory;
     if (!directoryChanged && nextSession === sessionId) return;
+    turnStarted = false;
     directory = nextDirectory;
     sessionId = nextSession;
     epoch++;
@@ -3238,9 +3240,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     lastHeight = height;
     void host.setHeight(height).catch((error) => console.warn("Could not resize the OpenSpec section.", error));
   });
-  var replayedSession = null;
   var offReady = host.onReady((ready2) => {
-    replayedSession = ready2.session?.id ?? null;
     const nextStatusControls = ready2.features?.statusControls === true;
     const statusControlsChanged = nextStatusControls !== hasStatusControls;
     const directoryChanged = ready2.directory !== directory;
@@ -3253,11 +3253,10 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var offDirectory = host.onDirectory((next) => updateContext(next, sessionId));
   var offSession = host.onSession((next) => updateContext(directory, next?.id ?? null));
   var offLifecycle = host.onSessionLifecycle((event) => {
-    if (event.sessionId === replayedSession) {
-      replayedSession = null;
-      return;
-    }
-    if (event.phase === "completed" && event.sessionId === sessionId) read();
+    if (event.sessionId !== sessionId) return;
+    const completedTurn = turnStarted && event.phase === "completed";
+    turnStarted = event.phase === "started";
+    if (completedTurn) read();
   });
   var offStatusControl = host.onStatusControl(({ id }) => {
     if (id === "refresh") refresh();

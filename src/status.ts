@@ -33,6 +33,7 @@ const panelRoot = root;
 
 let directory: string | null = null;
 let sessionId: string | null = null;
+let turnStarted = false;
 let epoch = 0;
 let projectEpoch = 0;
 let sessions: GuestSessionsSnapshot | null = null;
@@ -359,6 +360,7 @@ function publishRefreshControl() {
 function updateContext(nextDirectory: string | null, nextSession: string | null) {
   const directoryChanged = nextDirectory !== directory;
   if (!directoryChanged && nextSession === sessionId) return;
+  turnStarted = false;
   directory = nextDirectory;
   sessionId = nextSession;
   epoch++;
@@ -386,10 +388,7 @@ const resize = new ResizeObserver(() => {
     .setHeight(height)
     .catch((error: unknown) => console.warn("Could not resize the OpenSpec section.", error));
 });
-let replayedSession: string | null = null;
 const offReady = host.onReady((ready) => {
-  // The SDK emits a synthetic lifecycle phase immediately after each ready snapshot.
-  replayedSession = ready.session?.id ?? null;
   const nextStatusControls = ready.features?.statusControls === true;
   const statusControlsChanged = nextStatusControls !== hasStatusControls;
   const directoryChanged = ready.directory !== directory;
@@ -402,11 +401,10 @@ const offReady = host.onReady((ready) => {
 const offDirectory = host.onDirectory((next) => updateContext(next, sessionId));
 const offSession = host.onSession((next) => updateContext(directory, next?.id ?? null));
 const offLifecycle = host.onSessionLifecycle((event) => {
-  if (event.sessionId === replayedSession) {
-    replayedSession = null;
-    return;
-  }
-  if (event.phase === "completed" && event.sessionId === sessionId) read();
+  if (event.sessionId !== sessionId) return;
+  const completedTurn = turnStarted && event.phase === "completed";
+  turnStarted = event.phase === "started";
+  if (completedTurn) read();
 });
 const offStatusControl = host.onStatusControl(({ id }) => {
   if (id === "refresh") refresh();
