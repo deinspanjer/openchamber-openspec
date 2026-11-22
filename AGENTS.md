@@ -16,9 +16,10 @@
   invoke the real CLI against disposable OpenSpec roots, not an installed extension or live project.
 - VS Code's **Setup: worktree** runs `uv run --no-project scripts/setup_worktree.py` (Python 3.12+).
   It links `node_modules` from the main checkout and refuses conflicting destinations or tracked
-  paths. Git checks out the tracked `openspec/` files in each worktree. To share uncommitted planning
-  through a project setup hook, see [Planning across worktrees](README.md#planning-across-worktrees).
-  Installs affect every linked worktree; keep separate dependencies when branches differ.
+  paths. Git checks out the tracked `openspec/` files in each worktree. To share uncommitted
+  planning through a project setup hook, see
+  [Planning across worktrees](README.md#planning-across-worktrees). Installs affect every linked
+  worktree; keep separate dependencies when branches differ.
 
 ## Runtime boundaries
 
@@ -36,18 +37,18 @@
   processes.
 - The extension manifest is `package.json`'s `openchamber` field, not `service/package.json`. The
   latter keeps generated `service/main.js` CommonJS inside this ESM repository.
-- `panel/main.js` and `panel/status.js` are generated ES2022 browser IIFEs. `service/main.js` is
-  the generated Node 22 CJS bundle. Rebuild all three after private-protocol changes. Installation
-  does not build them. To activate changes, reinstall or update the extension and restart its
-  service as below. `npm run clean` removes only these three bundles, not `build/`.
+- `panel/main.js` and `panel/status.js` are generated ES2022 browser IIFEs. `service/main.js` is the
+  generated Node 22 CJS bundle. Rebuild all three after private-protocol changes. Installation does
+  not build them. To activate changes, reinstall or update the extension and restart its service as
+  below. `npm run clean` removes only these three bundles, not `build/`.
 
 ## Behaviour constraints
 
 - Load the board only on initial/context loads, explicit Refresh, and after the panel's own create
   or delete. Do not add polling, visibility revalidation, TTL, or board-wide document prefetch.
-- Load the Work Status section on mount, session or project changes, explicit Refresh, and after
-  the shown session finishes a turn. Read the listing and only the tracked change's summary and
-  tasks. Do not poll, refresh on visibility changes, or read board-wide summaries.
+- Load the Work Status section on mount, session or project changes, explicit Refresh, and after the
+  shown session finishes a turn. Read the listing and only the tracked change's summary and tasks.
+  Do not poll, refresh on visibility changes, or read board-wide summaries.
 - Retained reads do not authorise writes or recovery. Reconcile uncertain writes with a fresh
   listing in the original context; do not retry the mutation automatically.
 - Deletion checks the active parent and target after its final CLI context check. These checks and
@@ -64,5 +65,5 @@
   extension iframe.
 - Ask the user before a check creates real sessions or worktrees.
 - Git-URL installs update only when `package.json` `version` increases. OpenChamber compares semver,
-  not commits, so bump the version (`npm version <x.y.z> --no-git-tag-version`) in any release
-  users should receive.
+  not commits, so bump the version (`npm version <x.y.z> --no-git-tag-version`) in any release users
+  should receive.
