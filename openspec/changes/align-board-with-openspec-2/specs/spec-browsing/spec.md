@@ -24,16 +24,16 @@ root, in the CLI's order. Each row SHALL show the spec's id and its requirement 
 
 ### Requirement: Read a spec as a rendered document
 
-Activating a spec row SHALL open that spec read-only: its title, its purpose, and each requirement
-with its text and scenarios, rendered by the existing document renderer and its safety rules. A
+Activating a spec row SHALL open that spec's document read-only, as written in its `spec.md`,
+rendered by the existing document renderer and its safety rules. A
 back control SHALL return to the list with its scroll position. A failed read SHALL show the error
 and a retry in the spec view, without partial content.
 
 #### Scenario: Open a spec
 
 - **WHEN** the user activates `change-loading`
-- **THEN** the view shows `change-loading`'s purpose and its five requirements with their scenarios
-  as formatted headings, text and lists
+- **THEN** the view shows `change-loading`'s whole spec document, including its purpose and its five
+  requirements with their scenarios, as formatted headings, text and lists
 
 #### Scenario: Untrusted content
 

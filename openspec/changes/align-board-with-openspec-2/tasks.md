@@ -42,10 +42,10 @@ task.
       disposable root holding a top-level and a nested spec. Add a rejected `spec` id with a
       leading `-` or a `..` segment, an unknown spec's CLI error, and malformed output. Implement
       the routes and client calls. Fake host seam: add failing tests that `Specs` lists ids with
-      requirement counts (`1 requirement`, `5 requirements`). Opening a spec renders its purpose,
-      requirements and scenarios through the document renderer, with raw HTML inert. Back restores
+      requirement counts (`1 requirement`, `5 requirements`). Opening a spec renders its `spec.md` as written
+      (including a non-standard section) through the document renderer, with raw HTML inert. Back restores
       the list's scroll, reopening reads nothing, and a failed read shows a retry. Implement the
-      Markdown composition, the spec pane and its `resources.ts` entries.
+      spec read (listing-gated, `realpath` inside the specs tree), the spec pane and its `resources.ts` entries.
 
 ## 3. Release
 

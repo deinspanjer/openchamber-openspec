@@ -19,9 +19,9 @@ CLI facts, checked on 2.1.0 and, where noted, on 1.13.1 through `npx`:
   status, archived }], root }`. `name` is the archive directory name, e.g.
   `2026-11-22-refresh-workflow-prompts-and-modal-backdrops`. 1.13.1 rejects `--archived`.
 - `list --specs --json` → `{ specs: [{ id, requirementCount }], root }`. Same on 1.13.1.
-- `show <id> --type spec --json` → `{ id, title, overview, requirementCount, requirements: [{ name,
+- (Not used for rendering: `show <id> --type spec --json` → `{ id, title, overview, requirementCount, requirements: [{ name,
   text, scenarios: [{ name, rawText }] }], metadata, root }`. Same on 1.13.1. An unknown id exits 1
-  with `status[0].message`.
+  with `status[0].message`.)
 - The bulk-archive skill asks the user to choose changes and must not auto-select
   (`getBulkArchiveChangeSkillTemplate`, step 2).
 
@@ -106,22 +106,20 @@ wording `<completed> of <total> tasks`.
 ### Specs routes and view
 
 Add `/specs`: `{ directory, expectedRoot, expectedPlanning? }` → `{ specs: [{ id, requirementCount
-}] }` from `list --specs`. Add `/spec`: the same plus `spec` → `{ id, title, overview, requirements:
-[{ name, text, scenarios: [{ name, rawText }] }] }` from `show <spec> --type spec`. Both use
-`checked` with strict root checks. `spec` must match
+}] }` from `list --specs`. Add `/spec`: the same plus `spec` → `{ id, content }`, the raw text of
+`<planning root>/specs/<spec>/spec.md`. `spec` must match
 `^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$` and contain no `..` segment, or the
-route returns `BAD_SPEC`. The pattern allows nested capability paths and keeps a leading `-` out of
-the CLI's arguments. `show` is read-only, so no listing check precedes it.
+route returns `BAD_SPEC`. The route also requires `spec` to appear in a fresh `list --specs` for the
+same scope, so only specs the CLI knows are read. The file read reuses the document reader's
+safeguards: `realpath` must stay inside `<planning root>/specs`, the same size bound and UTF-8
+decoding apply, and a symlink out of the tree is `BAD_SPEC_PATH`. Both routes use `checked` with
+strict root checks.
 
-The panel composes Markdown from the decoded fields: `# <title>`, `## Purpose` and the overview,
-`## Requirements`, then `### Requirement: <name>`, its text, and `#### Scenario: <name>` with
-`rawText` for each. It renders the result with `renderDocument`, so the renderer's sanitising and
-link rules apply unchanged.
-
-`show --json` rather than reading `specs/<id>/spec.md`: the CLI resolves the root, stores and spec
-location, and the service needs no new file-read path. The cost is that sections other than Purpose
-and Requirements are not shown. The service runner always appends `--json`, so plain `show` output
-is not an option.
+The panel renders `content` with `renderDocument`, so the renderer's sanitising and link rules
+apply unchanged. Reading the file rather than rebuilding Markdown from `show --json` (decided
+2026-11-22 with the user) shows the whole spec as written, including sections other than Purpose
+and Requirements. It costs a file-read path scoped to the specs tree, which mirrors the existing
+change-document reads.
 
 ### Retained reads
 
@@ -154,8 +152,8 @@ No new test files or helpers.
   session open, and the prompt recommends all qualifying changes.
 - A very large spec can exceed the 240,000-byte response limit → the spec view shows
   `RESPONSE_TOO_LARGE`, the same as an oversized document.
-- Spec Markdown is rebuilt from JSON, so a spec's formatting outside requirement text can differ
-  from the file → accepted for a read-only view.
+- The spec read adds a second file-read path → limited to `spec.md` under the specs tree, gated on
+  the CLI's spec listing and the same `realpath` and size checks as change documents.
 
 ## Migration Plan
 
