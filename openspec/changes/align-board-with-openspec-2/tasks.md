@@ -20,7 +20,7 @@ task.
       Complete cards and detail only when the set has `verify`. Implement in `workflow.ts`,
       `primary-action.ts`, `board-view.ts`, `detail-view.ts` and `controller.ts`, and update the
       existing vocabulary and verify tests to the core-set expectations.
-- [ ] 1.3 Archive all. Same seam: add failing tests that confirming `archive all` submits the
+- [x] 1.3 Archive all. Same seam: add failing tests that confirming `archive all` submits the
       design's bulk prompt naming `openspec-bulk-archive-change` when the set has `bulk-archive`,
       and today's prompt otherwise, unchanged. Implement `archiveAllPrompt(workflows)`.
 

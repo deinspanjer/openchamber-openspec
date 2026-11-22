@@ -702,7 +702,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         title: "Archive completed OpenSpec changes",
         url: "https://openspec.dev/docs/quickstart",
         navigation: "preserve",
-        text: archiveAllPrompt,
+        text: archiveAllPrompt(workflows),
       });
       if (!current()) return;
       if (result.sessionId && result.sent === "sent") {
