@@ -624,7 +624,7 @@ for (const [scenario, count, name, progress] of [
           /2\.1 Add a section.*\nKeep the whole description readable/s,
         );
       } else {
-        assert.equal(await detail.count(), 0);
+        assert.equal(await detail.isVisible(), false);
       }
       const artifacts = frame.getByRole("list", { name: "Planning artefacts" });
       assert.deepEqual(
@@ -849,6 +849,56 @@ test("session section reads once on an idle session switch, then once for a fini
       await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
       3,
     );
+    await page.close();
+  });
+});
+
+test("session section preserves an open disclosure, focus and menu across finished-turn reads", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=progress`);
+    const frame = page.frameLocator("iframe");
+    const detail = frame.locator("details");
+    const refresh = frame.getByRole("button", { name: "Refresh", exact: true });
+    await detail.locator("summary").click();
+    await refresh.focus();
+    await page.evaluate(() => {
+      __lifecycle("fixture-session", "started");
+      __lifecycle("fixture-session", "completed");
+    });
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 2);
+    await frame.locator("#root").evaluate(() => new Promise(requestAnimationFrame));
+    assert.notEqual(await detail.getAttribute("open"), null);
+    assert.equal(await refresh.evaluate((node) => document.activeElement === node), true);
+
+    await frame.getByRole("button", { name: "Change…", exact: true }).click();
+    await frame.getByRole("menu").waitFor();
+    await page.evaluate(() => {
+      __lifecycle("fixture-session", "started");
+      __lifecycle("fixture-session", "completed");
+    });
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 3);
+    await frame.locator("#root").evaluate(() => new Promise(requestAnimationFrame));
+    assert.equal(await frame.getByRole("menu").isVisible(), true);
+    await page.close();
+  });
+});
+
+test("session section collapses the disclosure when a finished turn changes the current task", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=progress`);
+    const frame = page.frameLocator("iframe");
+    const detail = frame.locator("details");
+    await detail.locator("summary").click();
+    await page.evaluate(() => {
+      __edit("More tasks complete");
+      __lifecycle("fixture-session", "started");
+      __lifecycle("fixture-session", "completed");
+    });
+    await frame.getByText("4/7", { exact: true }).waitFor();
+    assert.equal(await detail.locator("summary").innerText(), "Task 5");
+    assert.equal(await detail.getAttribute("open"), null);
     await page.close();
   });
 });

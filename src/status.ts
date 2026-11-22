@@ -43,73 +43,92 @@ let reading = false;
 let queued = false;
 let selection: { listing: Listing; saved: string | null; change: string | null } | null = null;
 let hasStatusControls = false;
-let headerRefresh = false;
 let headerRequest = 0;
-let bodyRefresh: HTMLElement | undefined;
-const handles: { dispose(): void }[] = [];
+const notes = document.createElement("div");
+const content = document.createElement("div");
+content.className = "section-content";
+const controls = document.createElement("div");
+controls.className = "section-controls";
+for (const element of [notes, content, controls]) element.hidden = true;
+panelRoot.append(notes, content, controls);
+
+const bodyRefresh = document.createElement("div");
+const primaryRoot = document.createElement("div");
+const verifyRoot = document.createElement("div");
+const pickerRoot = document.createElement("div");
+controls.append(bodyRefresh);
+const refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
+const openBoard = mountButton(controls, {
+  label: "Open board",
+  size: "sm",
+  variant: "secondary",
+  onClick: () => {
+    const current = captureContext();
+    void host
+      .openSurface("plugin:openspec-board")
+      .catch((caught: unknown) => showError(current, caught, "Could not open the OpenSpec board."));
+  },
+});
+controls.append(primaryRoot, verifyRoot, pickerRoot);
+let trackedChange: DerivedChange | null = null;
+const primary = mountButton(primaryRoot, {
+  label: "",
+  size: "sm",
+  onClick: () => {
+    if (trackedChange) void preparePrompt(trackedChange, "primary", captureContext());
+  },
+});
+const verify = mountButton(verifyRoot, {
+  label: "verify",
+  size: "sm",
+  variant: "secondary",
+  onClick: () => {
+    if (trackedChange) void preparePrompt(trackedChange, "verify", captureContext());
+  },
+});
+let menu: ReturnType<typeof mountMenu> | undefined;
+let pickerKey = "";
+let viewKey = "";
+
+function captureContext() {
+  const capturedEpoch = epoch;
+  return () => !disposed && epoch === capturedEpoch;
+}
 
 function render(view: View) {
-  for (const handle of handles.splice(0)) handle.dispose();
-  panelRoot.replaceChildren();
-  bodyRefresh = undefined;
-  if (view.kind === "empty") return;
-  if (view.kind === "loading") {
-    note("Loading OpenSpec change…", "status");
-    return;
-  }
-  const controls = document.createElement("div");
-  controls.className = "section-controls";
-  bodyRefresh = document.createElement("div");
-  bodyRefresh.hidden = headerRefresh;
-  controls.append(bodyRefresh);
-  handles.push(mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh }));
-  const capturedEpoch = epoch;
-  const current = () => !disposed && epoch === capturedEpoch;
-  handles.push(
-    mountButton(controls, {
-      label: "Open board",
-      size: "sm",
-      variant: "secondary",
-      onClick: () =>
-        void host
-          .openSurface("plugin:openspec-board")
-          .catch((caught: unknown) =>
-            showError(current, caught, "Could not open the OpenSpec board."),
-          ),
-    }),
-  );
+  const nextViewKey = JSON.stringify([epoch, view]);
+  if (viewKey === nextViewKey) return;
+  viewKey = nextViewKey;
+  controls.hidden = view.kind === "empty" || view.kind === "loading";
+  content.hidden = view.kind !== "tracked";
+  trackedChange = view.kind === "tracked" ? view.change : null;
+  primaryRoot.hidden = !trackedChange;
+  verifyRoot.hidden = trackedChange?.stage !== "complete";
+  notes.replaceChildren();
   if (view.kind === "tracked") {
     renderTracked(view.change, view.tasks);
-    const change = view.change;
-    for (const action of change.stage === "complete"
-      ? (["primary", "verify"] as const)
-      : (["primary"] as const)) {
-      handles.push(
-        mountButton(controls, {
-          label: action === "primary" ? workflowLabel(change.stage) : "verify",
-          size: "sm",
-          variant: action === "primary" ? "default" : "secondary",
-          onClick: () => void preparePrompt(change, action, current),
-        }),
-      );
-    }
-    mountPicker(controls, view.listing, "Change…", current);
-    panelRoot.append(controls);
-    return;
-  }
-  if (view.kind === "picker") {
+    primary.update({ label: workflowLabel(view.change.stage) });
+  } else if (view.kind === "picker") {
     if (view.staleSaved) note(`Saved change ${view.staleSaved} is no longer active.`);
     if (!sessionId) note("Start a session to choose a change.");
-    if (!view.listing.changes.length) {
-      note("No active changes.");
-    } else {
-      mountPicker(controls, view.listing, "Choose a change", current);
-    }
-    panelRoot.append(controls);
-    return;
+    if (!view.listing.changes.length) note("No active changes.");
+  } else if (view.kind === "error") {
+    note(view.message, "alert");
+  } else if (view.kind === "loading") {
+    note("Loading OpenSpec change…", "status");
   }
-  if (view.kind === "error") note(view.message, "alert");
-  panelRoot.append(controls);
+  notes.hidden = !notes.childElementCount;
+  if ((view.kind === "tracked" || view.kind === "picker") && view.listing.changes.length)
+    updatePicker(view.listing, view.kind === "tracked" ? "Change…" : "Choose a change");
+  else {
+    pickerKey = "";
+    menu?.dispose();
+    menu = undefined;
+  }
+  if (view.kind === "empty" || view.kind === "loading") {
+    disclosure.open = false;
+    taskKey = "";
+  }
 }
 
 function pickerPriority({ completedTasks, totalTasks }: ListingEntry) {
@@ -118,24 +137,23 @@ function pickerPriority({ completedTasks, totalTasks }: ListingEntry) {
   return completedTasks < totalTasks ? 0 : 3;
 }
 
-function mountPicker(
-  controls: HTMLElement,
-  listing: Listing,
-  label: string,
-  current: () => boolean,
-) {
-  const picker = document.createElement("div");
-  controls.append(picker);
-  handles.push(
-    mountMenu(picker, {
+function updatePicker(listing: Listing, label: string) {
+  const items = [...listing.changes]
+    .sort((left, right) => pickerPriority(left) - pickerPriority(right))
+    .map(({ id }) => ({ id, label: id, disabled: !sessionId }));
+  const nextKey = JSON.stringify([label, items]);
+  if (pickerKey === nextKey) return;
+  pickerKey = nextKey;
+  if (menu) menu.update({ label, items });
+  else {
+    menu = mountMenu(pickerRoot, {
       label,
       size: "sm",
       variant: "secondary",
-      items: [...listing.changes]
-        .sort((left, right) => pickerPriority(left) - pickerPriority(right))
-        .map(({ id }) => ({ id, label: id, disabled: !sessionId })),
+      items,
       onSelect: (id) => {
         const session = sessionId;
+        const current = captureContext();
         if (!session || !current()) return;
         void (async () => {
           const saved = await saveTrackedChange(host, session, id, current);
@@ -144,8 +162,8 @@ function mountPicker(
           else await showError(current, null, "Could not save the tracked OpenSpec change.");
         })();
       },
-    }),
-  );
+    });
+  }
 }
 
 async function showError(current: () => boolean, caught: unknown, fallback: string) {
@@ -178,52 +196,61 @@ async function preparePrompt(
   }
 }
 
-function renderTracked(change: DerivedChange, tasks: Task[]) {
-  const heading = document.createElement("div");
-  heading.className = "section-heading";
-  const title = document.createElement("h1");
-  title.textContent = change.id;
-  heading.append(title);
-  handles.push(mountBadge(heading, { label: stageLabel(change.stage) }));
-  panelRoot.append(heading);
+const heading = document.createElement("div");
+heading.className = "section-heading";
+const title = document.createElement("h1");
+heading.append(title);
+const stage = mountBadge(heading, { label: "" });
+const meter = document.createElement("div");
+meter.className = "section-progress";
+const progress = mountProgress(meter, { value: 0 });
+meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
+const count = document.createElement("span");
+meter.append(count);
+const disclosure = document.createElement("details");
+const summary = document.createElement("summary");
+const description = document.createElement("p");
+disclosure.append(summary, description);
+let taskKey = "";
+const artifacts = document.createElement("ul");
+artifacts.className = "section-artefacts";
+artifacts.setAttribute("aria-label", "Planning artefacts");
+let artifactKey = "";
+let artifactBadges: ReturnType<typeof mountBadge>[] = [];
+content.append(heading, meter, disclosure, artifacts);
 
-  const meter = document.createElement("div");
-  meter.className = "section-progress";
+function renderTracked(change: DerivedChange, tasks: Task[]) {
+  if (title.textContent !== change.id) title.textContent = change.id;
+  stage.update({ label: stageLabel(change.stage) });
   const { completedTasks, totalTasks } = change;
-  handles.push(
-    mountProgress(meter, {
-      value: totalTasks ? (100 * completedTasks) / totalTasks : 0,
-    }),
-  );
-  meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
-  const count = document.createElement("span");
+  progress.update({ value: totalTasks ? (100 * completedTasks) / totalTasks : 0 });
   count.textContent = `${completedTasks}/${totalTasks}`;
-  meter.append(count);
-  panelRoot.append(meter);
 
   const next = completedTasks < totalTasks ? tasks.find((task) => !task.done) : undefined;
+  const nextKey = next ? JSON.stringify([change.id, next.id]) : "";
+  if (nextKey !== taskKey) disclosure.open = false;
+  taskKey = nextKey;
+  disclosure.hidden = !next;
   if (next) {
-    const disclosure = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.textContent = next.description;
-    const description = document.createElement("p");
-    description.textContent = next.description;
-    disclosure.append(summary, description);
-    panelRoot.append(disclosure);
+    if (summary.textContent !== next.description) summary.textContent = next.description;
+    if (description.textContent !== next.description) description.textContent = next.description;
   }
 
   const required = requiredArtifactIds(change);
-  const list = document.createElement("ul");
-  list.className = "section-artefacts";
-  list.setAttribute("aria-label", "Planning artefacts");
-  for (const artifact of change.artifacts) {
-    if (!required.has(artifact.id)) continue;
+  const applicable = change.artifacts.filter(({ id }) => required.has(id));
+  const nextArtifactKey = JSON.stringify(applicable.map(({ id, status }) => [id, status]));
+  if (artifactKey === nextArtifactKey) return;
+  artifactKey = nextArtifactKey;
+  for (const badge of artifactBadges) badge.dispose();
+  artifactBadges = [];
+  artifacts.replaceChildren();
+  artifacts.hidden = !applicable.length;
+  for (const artifact of applicable) {
     const item = document.createElement("li");
     item.append(`${artifact.id} `);
-    handles.push(mountBadge(item, { label: artifact.status }));
-    list.append(item);
+    artifactBadges.push(mountBadge(item, { label: artifact.status }));
+    artifacts.append(item);
   }
-  if (list.childElementCount) panelRoot.append(list);
 }
 
 function note(text: string, role?: string) {
@@ -231,7 +258,7 @@ function note(text: string, role?: string) {
   line.className = "note";
   if (role) line.setAttribute("role", role);
   line.textContent = text;
-  panelRoot.append(line);
+  notes.append(line);
 }
 
 function resolve(listing: Listing, saved: string | null) {
@@ -346,8 +373,7 @@ function publishRefreshControl() {
   const request = ++headerRequest;
   const showHeader = (visible: boolean) => {
     if (disposed || headerRequest !== request) return;
-    headerRefresh = visible;
-    if (bodyRefresh) bodyRefresh.hidden = visible;
+    bodyRefresh.hidden = visible;
   };
   showHeader(false);
   if (!directory || !hasStatusControls) return;
@@ -420,7 +446,17 @@ window.addEventListener(
     offLifecycle();
     offStatusControl();
     offSessions?.();
-    for (const handle of handles.splice(0)) handle.dispose();
+    for (const handle of [
+      refreshButton,
+      openBoard,
+      primary,
+      verify,
+      stage,
+      progress,
+      ...artifactBadges,
+    ])
+      handle.dispose();
+    menu?.dispose();
     host.dispose();
   },
   { once: true },

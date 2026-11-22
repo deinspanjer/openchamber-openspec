@@ -94,10 +94,10 @@
         let written = 0;
         while (written < out.length && chunks.length > 0) {
           const head = chunks[0];
-          const count2 = Math.min(out.length - written, head.length - offset);
-          out.set(head.subarray(offset, offset + count2), written);
-          written += count2;
-          offset += count2;
+          const count3 = Math.min(out.length - written, head.length - offset);
+          out.set(head.subarray(offset, offset + count3), written);
+          written += count3;
+          offset += count3;
           if (offset >= head.length) {
             chunks.shift();
             queued2 -= head.length;
@@ -127,11 +127,11 @@
   var hasOnlyKeys = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
   var isLabel = (value) => String(value) === value && value.length >= 1 && value.length <= GUEST_STATUS_CONTROL_LABEL_MAX;
   var isValue = (value) => String(value) === value && value.length >= 1 && value.length <= GUEST_STATUS_CONTROL_VALUE_MAX;
-  var isGuestStatusControls = (controls) => {
-    if (!Array.isArray(controls) || controls.length > GUEST_STATUS_CONTROLS_MAX)
+  var isGuestStatusControls = (controls2) => {
+    if (!Array.isArray(controls2) || controls2.length > GUEST_STATUS_CONTROLS_MAX)
       return false;
     const ids = /* @__PURE__ */ new Set();
-    for (const control of controls) {
+    for (const control of controls2) {
       if (!isControlObject(control) || !GUEST_STATUS_CONTROL_ID.test(control.id) || !isLabel(control.label))
         return false;
       if (control.disabled !== void 0 && control.disabled !== true && control.disabled !== false)
@@ -320,7 +320,7 @@
   var clampBranch = (value) => value?.trim().slice(0, GUEST_ATTACH_BRANCH_MAX) ?? "";
   var clampAttachRequest = (request) => {
     const id = request.id.trim().slice(0, GUEST_ATTACH_ID_MAX);
-    const title = request.title.trim().slice(0, GUEST_ATTACH_TITLE_MAX);
+    const title2 = request.title.trim().slice(0, GUEST_ATTACH_TITLE_MAX);
     const url = request.url.trim().slice(0, GUEST_ATTACH_URL_MAX);
     const text = request.text?.trim().slice(0, GUEST_ATTACH_TEXT_MAX);
     const author = request.author?.trim().slice(0, GUEST_ATTACH_AUTHOR_MAX);
@@ -328,7 +328,7 @@
     const next = {
       providerId: request.providerId.trim(),
       id,
-      title: title || id,
+      title: title2 || id,
       url,
       kind
     };
@@ -370,10 +370,10 @@
     }
     return next;
   };
-  var clampBadgeCount = (count2) => {
-    if (count2 === null || !Number.isFinite(count2))
+  var clampBadgeCount = (count3) => {
+    if (count3 === null || !Number.isFinite(count3))
       return null;
-    return Math.min(GUEST_BADGE_MAX, Math.max(0, Math.round(count2)));
+    return Math.min(GUEST_BADGE_MAX, Math.max(0, Math.round(count3)));
   };
   var clampFrameHeight = (height) => {
     if (!Number.isFinite(height))
@@ -1166,14 +1166,14 @@
           popoverClosedListeners.delete(listener);
         };
       },
-      setStatusControls: (controls) => {
+      setStatusControls: (controls2) => {
         if (lastReady?.features?.statusControls !== true) {
           return Promise.reject(new HostRequestError("UNSUPPORTED", "This host does not support status controls."));
         }
-        if (!isGuestStatusControls(controls)) {
+        if (!isGuestStatusControls(controls2)) {
           return Promise.reject(new HostRequestError("HOST_REJECTED", "Status controls must have unique bounded ids and valid selected options."));
         }
-        return request({ ...envelope, type: "status-controls", id: nextId(ids), payload: { controls } });
+        return request({ ...envelope, type: "status-controls", id: nextId(ids), payload: { controls: controls2 } });
       },
       openPopover: (payload) => {
         if (lastReady?.features?.popovers !== true) {
@@ -1368,11 +1368,11 @@
         }
         return result;
       }),
-      writeFile: (path, content) => {
+      writeFile: (path, content2) => {
         if (!isGuestFilePath(path)) {
           return rejectBadFilePath();
         }
-        if (content.length > GUEST_FILE_CONTENT_MAX) {
+        if (content2.length > GUEST_FILE_CONTENT_MAX) {
           return Promise.reject(new HostRequestError("FILE_TOO_LARGE", `Content is over ${GUEST_FILE_CONTENT_MAX} characters.`));
         }
         return send({
@@ -1380,7 +1380,7 @@
           v: OPENCHAMBER_SDK_API_VERSION,
           type: "file-write",
           id: nextId(ids),
-          payload: { path, content }
+          payload: { path, content: content2 }
         }).then((result) => {
           if (!isFileWriteResult(result)) {
             throw new HostRequestError("HOST_REJECTED", "Host did not confirm the write.");
@@ -1453,12 +1453,12 @@
         };
       },
       openMicrophone,
-      setBadge: (count2) => request({
+      setBadge: (count3) => request({
         channel: OPENCHAMBER_SDK_CHANNEL,
         v: OPENCHAMBER_SDK_API_VERSION,
         type: "badge",
         id: nextId(ids),
-        payload: { count: clampBadgeCount(count2) }
+        payload: { count: clampBadgeCount(count3) }
       }),
       setHeight: (height) => request({
         channel: OPENCHAMBER_SDK_CHANNEL,
@@ -2421,10 +2421,10 @@ ${GUEST_UI_LOOK_CSS}`;
     const pendingCondition = applicable.some(
       (artifact) => artifact.status !== "done" && artifact.status !== "skipped"
     );
-    const stage = pendingCondition ? "planning" : change.totalTasks === 0 || change.completedTasks === 0 ? "ready" : change.completedTasks === change.totalTasks ? "complete" : "progress";
+    const stage2 = pendingCondition ? "planning" : change.totalTasks === 0 || change.completedTasks === 0 ? "ready" : change.completedTasks === change.totalTasks ? "complete" : "progress";
     return {
       ...change,
-      stage,
+      stage: stage2,
       completedArtifacts,
       totalArtifacts: applicable.length,
       pendingCondition
@@ -2496,7 +2496,7 @@ ${GUEST_UI_LOOK_CSS}`;
   }
   function decodeArtifacts(value, requires) {
     if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
-    const artifacts = value.map((value2) => {
+    const artifacts2 = value.map((value2) => {
       const item = record(value2);
       const id = string(item.id);
       const status = item.status;
@@ -2504,8 +2504,8 @@ ${GUEST_UI_LOOK_CSS}`;
         throw new Error("Invalid artefact status.");
       return { id, status, outputPath: string(item.outputPath), requires: names(item.requires) };
     });
-    const byId = new Map(artifacts.map((item) => [item.id, item]));
-    if (byId.size !== artifacts.length) throw new Error("Duplicate artefact.");
+    const byId = new Map(artifacts2.map((item) => [item.id, item]));
+    if (byId.size !== artifacts2.length) throw new Error("Duplicate artefact.");
     const visiting = /* @__PURE__ */ new Set();
     const visited = /* @__PURE__ */ new Set();
     function visit(id) {
@@ -2517,23 +2517,23 @@ ${GUEST_UI_LOOK_CSS}`;
       visiting.delete(id);
       visited.add(id);
     }
-    artifacts.forEach((item) => visit(item.id));
+    artifacts2.forEach((item) => visit(item.id));
     names(requires).forEach((id) => {
       if (!byId.has(id)) throw new Error("Invalid apply requirement.");
     });
-    return artifacts;
+    return artifacts2;
   }
   function decodeSummary(value) {
     const item = record(value);
     const id = string(item.id);
     if (!isChangeName(id)) throw new Error("Invalid change name.");
     if (item.goal !== null && typeof item.goal !== "string") throw new Error("Invalid goal.");
-    const artifacts = decodeArtifacts(item.artifacts, item.applyRequires);
+    const artifacts2 = decodeArtifacts(item.artifacts, item.applyRequires);
     if (!Array.isArray(item.documents)) throw new Error("Invalid documents.");
     const documents = item.documents.map((value2) => {
       const document2 = record(value2);
       const artifactId = string(document2.artifactId);
-      if (!artifacts.some((item2) => item2.id === artifactId))
+      if (!artifacts2.some((item2) => item2.id === artifactId))
         throw new Error("Unknown document artefact.");
       return { artifactId, selector: string(document2.selector), label: string(document2.label) };
     });
@@ -2544,7 +2544,7 @@ ${GUEST_UI_LOOK_CSS}`;
       root: string(item.root),
       goal: item.goal,
       affectedAreas: names(item.affectedAreas),
-      artifacts,
+      artifacts: artifacts2,
       applyRequires: names(item.applyRequires),
       documents
     };
@@ -2574,9 +2574,9 @@ ${GUEST_UI_LOOK_CSS}`;
       if (!isChangeName(id) || "summary" in item === "error" in item)
         throw new Error("Invalid summary entry.");
       if ("summary" in item) {
-        const summary = decodeSummary(item.summary);
-        if (summary.id !== id || summary.root !== root2) throw new Error("Invalid summary scope.");
-        return { id, summary };
+        const summary2 = decodeSummary(item.summary);
+        if (summary2.id !== id || summary2.root !== root2) throw new Error("Invalid summary scope.");
+        return { id, summary: summary2 };
       }
       const error = record(item.error);
       return { id, error: { code: string(error.code), message: string(error.message) } };
@@ -2861,9 +2861,9 @@ Investigate the goal, relevant code, options and trade-offs for ${target}. Discu
 
 Inspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
     if (change.stage === "ready" || change.stage === "progress") {
-      const progress = change.stage === "progress" ? `
+      const progress2 = change.stage === "progress" ? `
 ${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.` : "";
-      return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress}
+      return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress2}
 
 Complete all remaining tasks in ${target}, then verify the implementation against its change artefacts. Resolve any issues found and verify again until all tasks are complete and verification passes. If blocked, report the blocker rather than marking unfinished work complete.`;
     }
@@ -2917,8 +2917,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     { id: "progress", label: "In Progress", action: "continue" },
     { id: "complete", label: "Complete", action: "archive" }
   ];
-  var workflowLabel = (stage) => stages.find((item) => item.id === stage).action;
-  var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
+  var workflowLabel = (stage2) => stages.find((item) => item.id === stage2).action;
+  var stageLabel = (stage2) => stages.find((item) => item.id === stage2).label;
 
   // src/status.ts
   var root = document.querySelector("#root");
@@ -2938,84 +2938,108 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var queued = false;
   var selection2 = null;
   var hasStatusControls = false;
-  var headerRefresh = false;
   var headerRequest = 0;
-  var bodyRefresh;
-  var handles = [];
-  function render(view) {
-    for (const handle of handles.splice(0)) handle.dispose();
-    panelRoot.replaceChildren();
-    bodyRefresh = void 0;
-    if (view.kind === "empty") return;
-    if (view.kind === "loading") {
-      note("Loading OpenSpec change\u2026", "status");
-      return;
+  var notes = document.createElement("div");
+  var content = document.createElement("div");
+  content.className = "section-content";
+  var controls = document.createElement("div");
+  controls.className = "section-controls";
+  for (const element of [notes, content, controls]) element.hidden = true;
+  panelRoot.append(notes, content, controls);
+  var bodyRefresh = document.createElement("div");
+  var primaryRoot = document.createElement("div");
+  var verifyRoot = document.createElement("div");
+  var pickerRoot = document.createElement("div");
+  controls.append(bodyRefresh);
+  var refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
+  var openBoard = mountButton(controls, {
+    label: "Open board",
+    size: "sm",
+    variant: "secondary",
+    onClick: () => {
+      const current = captureContext();
+      void host.openSurface("plugin:openspec-board").catch((caught) => showError(current, caught, "Could not open the OpenSpec board."));
     }
-    const controls = document.createElement("div");
-    controls.className = "section-controls";
-    bodyRefresh = document.createElement("div");
-    bodyRefresh.hidden = headerRefresh;
-    controls.append(bodyRefresh);
-    handles.push(mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh }));
+  });
+  controls.append(primaryRoot, verifyRoot, pickerRoot);
+  var trackedChange = null;
+  var primary2 = mountButton(primaryRoot, {
+    label: "",
+    size: "sm",
+    onClick: () => {
+      if (trackedChange) void preparePrompt(trackedChange, "primary", captureContext());
+    }
+  });
+  var verify = mountButton(verifyRoot, {
+    label: "verify",
+    size: "sm",
+    variant: "secondary",
+    onClick: () => {
+      if (trackedChange) void preparePrompt(trackedChange, "verify", captureContext());
+    }
+  });
+  var menu;
+  var pickerKey = "";
+  var viewKey = "";
+  function captureContext() {
     const capturedEpoch = epoch;
-    const current = () => !disposed && epoch === capturedEpoch;
-    handles.push(
-      mountButton(controls, {
-        label: "Open board",
-        size: "sm",
-        variant: "secondary",
-        onClick: () => void host.openSurface("plugin:openspec-board").catch(
-          (caught) => showError(current, caught, "Could not open the OpenSpec board.")
-        )
-      })
-    );
+    return () => !disposed && epoch === capturedEpoch;
+  }
+  function render(view) {
+    const nextViewKey = JSON.stringify([epoch, view]);
+    if (viewKey === nextViewKey) return;
+    viewKey = nextViewKey;
+    controls.hidden = view.kind === "empty" || view.kind === "loading";
+    content.hidden = view.kind !== "tracked";
+    trackedChange = view.kind === "tracked" ? view.change : null;
+    primaryRoot.hidden = !trackedChange;
+    verifyRoot.hidden = trackedChange?.stage !== "complete";
+    notes.replaceChildren();
     if (view.kind === "tracked") {
       renderTracked(view.change, view.tasks);
-      const change = view.change;
-      for (const action of change.stage === "complete" ? ["primary", "verify"] : ["primary"]) {
-        handles.push(
-          mountButton(controls, {
-            label: action === "primary" ? workflowLabel(change.stage) : "verify",
-            size: "sm",
-            variant: action === "primary" ? "default" : "secondary",
-            onClick: () => void preparePrompt(change, action, current)
-          })
-        );
-      }
-      mountPicker(controls, view.listing, "Change\u2026", current);
-      panelRoot.append(controls);
-      return;
-    }
-    if (view.kind === "picker") {
+      primary2.update({ label: workflowLabel(view.change.stage) });
+    } else if (view.kind === "picker") {
       if (view.staleSaved) note(`Saved change ${view.staleSaved} is no longer active.`);
       if (!sessionId) note("Start a session to choose a change.");
-      if (!view.listing.changes.length) {
-        note("No active changes.");
-      } else {
-        mountPicker(controls, view.listing, "Choose a change", current);
-      }
-      panelRoot.append(controls);
-      return;
+      if (!view.listing.changes.length) note("No active changes.");
+    } else if (view.kind === "error") {
+      note(view.message, "alert");
+    } else if (view.kind === "loading") {
+      note("Loading OpenSpec change\u2026", "status");
     }
-    if (view.kind === "error") note(view.message, "alert");
-    panelRoot.append(controls);
+    notes.hidden = !notes.childElementCount;
+    if ((view.kind === "tracked" || view.kind === "picker") && view.listing.changes.length)
+      updatePicker(view.listing, view.kind === "tracked" ? "Change\u2026" : "Choose a change");
+    else {
+      pickerKey = "";
+      menu?.dispose();
+      menu = void 0;
+    }
+    if (view.kind === "empty" || view.kind === "loading") {
+      disclosure.open = false;
+      taskKey = "";
+    }
   }
   function pickerPriority({ completedTasks, totalTasks }) {
     if (!totalTasks) return 2;
     if (!completedTasks) return 1;
     return completedTasks < totalTasks ? 0 : 3;
   }
-  function mountPicker(controls, listing, label, current) {
-    const picker = document.createElement("div");
-    controls.append(picker);
-    handles.push(
-      mountMenu(picker, {
+  function updatePicker(listing, label) {
+    const items = [...listing.changes].sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => ({ id, label: id, disabled: !sessionId }));
+    const nextKey = JSON.stringify([label, items]);
+    if (pickerKey === nextKey) return;
+    pickerKey = nextKey;
+    if (menu) menu.update({ label, items });
+    else {
+      menu = mountMenu(pickerRoot, {
         label,
         size: "sm",
         variant: "secondary",
-        items: [...listing.changes].sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => ({ id, label: id, disabled: !sessionId })),
+        items,
         onSelect: (id) => {
           const session = sessionId;
+          const current = captureContext();
           if (!session || !current()) return;
           void (async () => {
             const saved = await saveTrackedChange(host, session, id, current);
@@ -3024,8 +3048,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
             else await showError(current, null, "Could not save the tracked OpenSpec change.");
           })();
         }
-      })
-    );
+      });
+    }
   }
   async function showError(current, caught, fallback) {
     if (!current()) return;
@@ -3049,56 +3073,65 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       await showError(current, caught, "The workflow prompt could not be prepared.");
     }
   }
+  var heading = document.createElement("div");
+  heading.className = "section-heading";
+  var title = document.createElement("h1");
+  heading.append(title);
+  var stage = mountBadge(heading, { label: "" });
+  var meter = document.createElement("div");
+  meter.className = "section-progress";
+  var progress = mountProgress(meter, { value: 0 });
+  meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
+  var count2 = document.createElement("span");
+  meter.append(count2);
+  var disclosure = document.createElement("details");
+  var summary = document.createElement("summary");
+  var description = document.createElement("p");
+  disclosure.append(summary, description);
+  var taskKey = "";
+  var artifacts = document.createElement("ul");
+  artifacts.className = "section-artefacts";
+  artifacts.setAttribute("aria-label", "Planning artefacts");
+  var artifactKey = "";
+  var artifactBadges = [];
+  content.append(heading, meter, disclosure, artifacts);
   function renderTracked(change, tasks) {
-    const heading = document.createElement("div");
-    heading.className = "section-heading";
-    const title = document.createElement("h1");
-    title.textContent = change.id;
-    heading.append(title);
-    handles.push(mountBadge(heading, { label: stageLabel(change.stage) }));
-    panelRoot.append(heading);
-    const meter = document.createElement("div");
-    meter.className = "section-progress";
+    if (title.textContent !== change.id) title.textContent = change.id;
+    stage.update({ label: stageLabel(change.stage) });
     const { completedTasks, totalTasks } = change;
-    handles.push(
-      mountProgress(meter, {
-        value: totalTasks ? 100 * completedTasks / totalTasks : 0
-      })
-    );
-    meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
-    const count2 = document.createElement("span");
+    progress.update({ value: totalTasks ? 100 * completedTasks / totalTasks : 0 });
     count2.textContent = `${completedTasks}/${totalTasks}`;
-    meter.append(count2);
-    panelRoot.append(meter);
     const next = completedTasks < totalTasks ? tasks.find((task) => !task.done) : void 0;
+    const nextKey = next ? JSON.stringify([change.id, next.id]) : "";
+    if (nextKey !== taskKey) disclosure.open = false;
+    taskKey = nextKey;
+    disclosure.hidden = !next;
     if (next) {
-      const disclosure = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = next.description;
-      const description = document.createElement("p");
-      description.textContent = next.description;
-      disclosure.append(summary, description);
-      panelRoot.append(disclosure);
+      if (summary.textContent !== next.description) summary.textContent = next.description;
+      if (description.textContent !== next.description) description.textContent = next.description;
     }
     const required = requiredArtifactIds(change);
-    const list = document.createElement("ul");
-    list.className = "section-artefacts";
-    list.setAttribute("aria-label", "Planning artefacts");
-    for (const artifact of change.artifacts) {
-      if (!required.has(artifact.id)) continue;
+    const applicable = change.artifacts.filter(({ id }) => required.has(id));
+    const nextArtifactKey = JSON.stringify(applicable.map(({ id, status }) => [id, status]));
+    if (artifactKey === nextArtifactKey) return;
+    artifactKey = nextArtifactKey;
+    for (const badge of artifactBadges) badge.dispose();
+    artifactBadges = [];
+    artifacts.replaceChildren();
+    artifacts.hidden = !applicable.length;
+    for (const artifact of applicable) {
       const item = document.createElement("li");
       item.append(`${artifact.id} `);
-      handles.push(mountBadge(item, { label: artifact.status }));
-      list.append(item);
+      artifactBadges.push(mountBadge(item, { label: artifact.status }));
+      artifacts.append(item);
     }
-    if (list.childElementCount) panelRoot.append(list);
   }
   function note(text, role) {
     const line = document.createElement("p");
     line.className = "note";
     if (role) line.setAttribute("role", role);
     line.textContent = text;
-    panelRoot.append(line);
+    notes.append(line);
   }
   function resolve(listing, saved) {
     const record2 = sessions?.sessions.find((item) => item.id === sessionId);
@@ -3132,11 +3165,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           render({ kind: "picker", listing, staleSaved: tracked.staleSaved });
         } else {
           const entry = listing.changes.find(({ id }) => id === tracked.change);
-          const summary = await client.summary(listing, entry.id);
+          const summary2 = await client.summary(listing, entry.id);
           if (!current()) return;
           const tasks = await client.tasks(listing, entry.id);
           if (!current()) return;
-          render({ kind: "tracked", listing, change: deriveChange({ ...summary, ...entry }), tasks });
+          render({ kind: "tracked", listing, change: deriveChange({ ...summary2, ...entry }), tasks });
         }
       } catch (caught) {
         if (current())
@@ -3205,8 +3238,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     const request = ++headerRequest;
     const showHeader = (visible) => {
       if (disposed || headerRequest !== request) return;
-      headerRefresh = visible;
-      if (bodyRefresh) bodyRefresh.hidden = visible;
+      bodyRefresh.hidden = visible;
     };
     showHeader(false);
     if (!directory || !hasStatusControls) return;
@@ -3272,7 +3304,17 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       offLifecycle();
       offStatusControl();
       offSessions?.();
-      for (const handle of handles.splice(0)) handle.dispose();
+      for (const handle of [
+        refreshButton,
+        openBoard,
+        primary2,
+        verify,
+        stage,
+        progress,
+        ...artifactBadges
+      ])
+        handle.dispose();
+      menu?.dispose();
       host.dispose();
     },
     { once: true }

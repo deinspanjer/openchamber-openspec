@@ -8,11 +8,17 @@
       body {
         margin: 0;
       }
-      main {
+      main,
+      .section-content {
         display: grid;
         gap: 8px;
+      }
+      main {
         padding: 8px 12px;
         overflow-wrap: anywhere;
+      }
+      [hidden] {
+        display: none;
       }
       h1,
       p {
