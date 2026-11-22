@@ -3085,6 +3085,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   }
 
   // src/status.ts
+  var isValidationIssue = ({ level }) => level !== "INFO";
   var root = document.querySelector("#root");
   if (!root) throw new Error("Status section root is missing");
   var host = connectHost();
@@ -3620,7 +3621,11 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     const data = {
       kind: "validation",
       change,
-      result: { valid: validation.valid, total: validation.issues.length, issues: [] }
+      result: {
+        valid: validation.valid,
+        totalIssues: validation.issues.filter(isValidationIssue).length,
+        issues: []
+      }
     };
     for (const issue of validation.issues.slice(0, 20)) {
       data.result.issues.push({ ...issue, message: ellipsize(issue.message, 300) });
@@ -3636,14 +3641,14 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       return "id" in value && typeof value.id === "string" && "description" in value && typeof value.description === "string" ? { kind: "task", id: value.id, description: value.description } : null;
     if (value.kind === "validation" && "change" in value && typeof value.change === "string") {
       try {
-        if (!("result" in value) || !value.result || typeof value.result !== "object" || !("total" in value.result) || typeof value.result.total !== "number" || !Number.isSafeInteger(value.result.total))
+        if (!("result" in value) || !value.result || typeof value.result !== "object" || !("totalIssues" in value.result) || typeof value.result.totalIssues !== "number" || !Number.isSafeInteger(value.result.totalIssues))
           return null;
         const result = decodeValidation(value.result);
-        if (value.result.total < result.issues.length) return null;
+        if (value.result.totalIssues < result.issues.filter(isValidationIssue).length) return null;
         return {
           kind: "validation",
           change: value.change,
-          result: { ...result, total: value.result.total }
+          result: { ...result, totalIssues: value.result.totalIssues }
         };
       } catch {
         return null;
@@ -3671,28 +3676,35 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     const heading = document.createElement(container === panelRoot ? "h1" : "p");
     heading.className = "flyout-heading";
     if (data.kind === "validation") {
-      const { valid, issues, total } = data.result;
+      const { valid, issues, totalIssues } = data.result;
       heading.textContent = data.change;
       const result = document.createElement("p");
-      result.textContent = `${valid ? "Valid" : "Invalid"} \xB7 ${total} ${total === 1 ? "issue" : "issues"}`;
+      result.textContent = `${valid ? "Valid" : "Invalid"} \xB7 ${totalIssues} ${totalIssues === 1 ? "issue" : "issues"}`;
       container.replaceChildren(heading, result);
-      if (issues.length) {
-        const list = document.createElement("ul");
-        list.className = "validation-issues";
-        for (const issue of issues) {
-          const item = document.createElement("li");
-          const location = document.createElement("strong");
-          location.textContent = `${issue.level} \xB7 ${issue.path}`;
-          const message = document.createElement("p");
-          message.textContent = issue.message;
-          item.append(location, message);
-          list.append(item);
+      const list = document.createElement("ul");
+      list.className = "validation-issues";
+      for (const issue of issues) {
+        const location = issue.path === "file" ? "" : ` \xB7 ${issue.path}`;
+        if (!isValidationIssue(issue)) {
+          const note2 = document.createElement("p");
+          note2.className = "note";
+          note2.textContent = `Note${location}: ${issue.message}`;
+          container.append(note2);
+          continue;
         }
-        container.append(list);
+        const item = document.createElement("li");
+        const label = document.createElement("strong");
+        label.textContent = `${issue.level}${location}`;
+        const message = document.createElement("p");
+        message.textContent = issue.message;
+        item.append(label, message);
+        list.append(item);
       }
-      if (total > issues.length) {
+      if (list.childElementCount) container.append(list);
+      const hiddenIssues = totalIssues - list.childElementCount;
+      if (hiddenIssues > 0) {
         const omitted = document.createElement("p");
-        omitted.textContent = `+${total - issues.length} more issues: open the board or run openspec validate`;
+        omitted.textContent = `+${hiddenIssues} more issues: open the board or run openspec validate`;
         container.append(omitted);
       }
       return;

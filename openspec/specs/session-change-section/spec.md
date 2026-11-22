@@ -278,8 +278,10 @@ The stage and secondary chips SHALL follow the change's stage and the configured
 
 ### Requirement: Validate a change on request
 
-`validate` SHALL run OpenSpec validation for that change and show the result in a flyout: valid, or
-each reported issue. It SHALL change no files and SHALL run only when activated.
+`validate` SHALL run OpenSpec validation for that change and report whether it is valid. The result
+SHALL list warnings and errors as issues and show informational results as muted `Note` lines.
+The placeholder `file` SHALL NOT be shown as a location. Notes SHALL NOT count toward issue totals
+or omitted-issue counts. Validation SHALL change no files and SHALL run only when activated.
 
 #### Scenario: Valid change
 
@@ -289,7 +291,13 @@ each reported issue. It SHALL change no files and SHALL run only when activated.
 #### Scenario: Invalid change
 
 - **WHEN** validation reports issues
-- **THEN** the flyout lists each issue's message and location
+- **THEN** the flyout lists the warnings and errors with their messages and any real locations
+
+#### Scenario: Validation reports an informational note
+
+- **WHEN** validation passes and reports an informational result with the placeholder location `file`
+- **THEN** the flyout reports that the change is valid and shows a muted `Note` without a location
+- **AND** the note does not count as an issue
 
 ### Requirement: Open the board on the change
 

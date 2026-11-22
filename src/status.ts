@@ -44,9 +44,10 @@ type TaskFlyout = { kind: "task"; id: string; description: string };
 type ValidationFlyout = {
   kind: "validation";
   change: string;
-  result: ValidationResult & { total: number };
+  result: ValidationResult & { totalIssues: number };
 };
 type Flyout = ChangeFlyout | TaskFlyout | ValidationFlyout;
+const isValidationIssue = ({ level }: ValidationResult["issues"][number]) => level !== "INFO";
 
 const root = document.querySelector<HTMLElement>("#root");
 if (!root) throw new Error("Status section root is missing");
@@ -639,7 +640,11 @@ function validationFlyout(change: string, validation: ValidationResult): Validat
   const data: ValidationFlyout = {
     kind: "validation",
     change,
-    result: { valid: validation.valid, total: validation.issues.length, issues: [] },
+    result: {
+      valid: validation.valid,
+      totalIssues: validation.issues.filter(isValidationIssue).length,
+      issues: [],
+    },
   };
   for (const issue of validation.issues.slice(0, 20)) {
     data.result.issues.push({ ...issue, message: ellipsize(issue.message, 300) });
@@ -665,17 +670,17 @@ function decodeFlyout(value: unknown): Flyout | null {
         !("result" in value) ||
         !value.result ||
         typeof value.result !== "object" ||
-        !("total" in value.result) ||
-        typeof value.result.total !== "number" ||
-        !Number.isSafeInteger(value.result.total)
+        !("totalIssues" in value.result) ||
+        typeof value.result.totalIssues !== "number" ||
+        !Number.isSafeInteger(value.result.totalIssues)
       )
         return null;
       const result = decodeValidation(value.result);
-      if (value.result.total < result.issues.length) return null;
+      if (value.result.totalIssues < result.issues.filter(isValidationIssue).length) return null;
       return {
         kind: "validation",
         change: value.change,
-        result: { ...result, total: value.result.total },
+        result: { ...result, totalIssues: value.result.totalIssues },
       };
     } catch {
       return null;
@@ -727,28 +732,35 @@ function renderFlyout(container: HTMLElement, data: Flyout, context: FlyoutConte
   const heading = document.createElement(container === panelRoot ? "h1" : "p");
   heading.className = "flyout-heading";
   if (data.kind === "validation") {
-    const { valid, issues, total } = data.result;
+    const { valid, issues, totalIssues } = data.result;
     heading.textContent = data.change;
     const result = document.createElement("p");
-    result.textContent = `${valid ? "Valid" : "Invalid"} · ${total} ${total === 1 ? "issue" : "issues"}`;
+    result.textContent = `${valid ? "Valid" : "Invalid"} · ${totalIssues} ${totalIssues === 1 ? "issue" : "issues"}`;
     container.replaceChildren(heading, result);
-    if (issues.length) {
-      const list = document.createElement("ul");
-      list.className = "validation-issues";
-      for (const issue of issues) {
-        const item = document.createElement("li");
-        const location = document.createElement("strong");
-        location.textContent = `${issue.level} · ${issue.path}`;
-        const message = document.createElement("p");
-        message.textContent = issue.message;
-        item.append(location, message);
-        list.append(item);
+    const list = document.createElement("ul");
+    list.className = "validation-issues";
+    for (const issue of issues) {
+      const location = issue.path === "file" ? "" : ` · ${issue.path}`;
+      if (!isValidationIssue(issue)) {
+        const note = document.createElement("p");
+        note.className = "note";
+        note.textContent = `Note${location}: ${issue.message}`;
+        container.append(note);
+        continue;
       }
-      container.append(list);
+      const item = document.createElement("li");
+      const label = document.createElement("strong");
+      label.textContent = `${issue.level}${location}`;
+      const message = document.createElement("p");
+      message.textContent = issue.message;
+      item.append(label, message);
+      list.append(item);
     }
-    if (total > issues.length) {
+    if (list.childElementCount) container.append(list);
+    const hiddenIssues = totalIssues - list.childElementCount;
+    if (hiddenIssues > 0) {
       const omitted = document.createElement("p");
-      omitted.textContent = `+${total - issues.length} more issues: open the board or run openspec validate`;
+      omitted.textContent = `+${hiddenIssues} more issues: open the board or run openspec validate`;
       container.append(omitted);
     }
     return;

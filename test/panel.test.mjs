@@ -112,6 +112,8 @@ function hostHtml(statusCase, pointer, popovers) {
     const pendingSummaries = [];
     const pendingValidation = [];
     let holdValidation = false;
+    let validationResult = null;
+    window.__validation = (value) => { validationResult = value; };
     let rejectNextPopover = false;
     window.__holdValidation = () => { holdValidation = true; };
     window.__releaseValidation = () => {
@@ -444,15 +446,20 @@ function hostHtml(statusCase, pointer, popovers) {
            __serviceEvent("focus");
            send({ ok: true });
          }
-         else if (path === "/validate") {
-           if (body.change === "first-change") {
-             const finish = () => send({ valid: true, issues: [] });
+          else if (path === "/validate") {
+            if (body.change === "first-change") {
+              const value = validationResult ?? { valid: true, issues: [] };
+              const finish = () => send(value);
              if (holdValidation) pendingValidation.push(finish); else finish();
            }
            else if (statusCase === "compact-validation-budget") send({ valid: false,
-             issues: Array.from({ length: 23 }, (_, i) => ({
-               level: "ERROR", path: "specs/" + i, message: String.fromCharCode(1).repeat(400),
-             })) });
+               issues: [
+                 { level: "INFO", path: "file", message: "This note does not affect validation." },
+                 ...Array.from({ length: 23 }, (_, i) => ({
+                   level: "ERROR", path: "specs/" + i, message: String.fromCharCode(1).repeat(400),
+                 })),
+                 { level: "INFO", path: "file", message: "An omitted note is not an omitted issue." },
+               ] });
            else send({ valid: false, issues: Array.from({ length: 23 }, (_, i) => ({
              level: "ERROR", path: "specs/" + i, message: ("Issue " + i + " ").padEnd(400, "x"),
            })) });
@@ -1890,6 +1897,61 @@ for (const failure of ["no geometry", "host rejection"]) {
 }
 
 for (const popovers of [false, true]) {
+  test(`validation distinguishes notes from warnings and real locations in the ${popovers ? "popover" : "inline result"}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ hasTouch: popovers });
+      await page.goto(`${url}?status=item${popovers ? "&popovers&pointer=coarse" : ""}`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const result = popovers
+        ? page.frameLocator('iframe[title="OpenSpec test popover"]')
+        : section;
+      const chip = section.getByRole("button", { name: "validate" });
+      await chip.waitFor();
+      await page.evaluate(() =>
+        __validation({
+          valid: true,
+          issues: [
+            {
+              level: "INFO",
+              path: "file",
+              message: "skip_specs is set in .openspec.yaml: zero deltas accepted",
+            },
+            { level: "WARNING", path: "specs/example/spec.md", message: "Check this requirement." },
+            { level: "WARNING", path: "file", message: "Check the change." },
+          ],
+        }),
+      );
+      if (popovers) await chip.tap({ timeout: 3000 });
+      else await chip.click({ timeout: 3000 });
+      const note = result.getByText(
+        "Note: skip_specs is set in .openspec.yaml: zero deltas accepted",
+        {
+          exact: true,
+        },
+      );
+      await note.waitFor({ timeout: 3000 });
+      assert.equal(
+        await note.evaluate((node) => {
+          const probe = document.createElement("span");
+          probe.style.color = "var(--oc-muted)";
+          node.append(probe);
+          const muted = getComputedStyle(probe).color;
+          probe.remove();
+          return getComputedStyle(node).color === muted;
+        }),
+        true,
+      );
+      await result.getByText("Valid · 2 issues", { exact: true }).waitFor();
+      const issues = result.getByRole("listitem");
+      assert.equal(await issues.count(), 2);
+      assert.match(
+        await issues.first().innerText(),
+        /WARNING · specs\/example\/spec\.md.*Check this requirement\./s,
+      );
+      assert.equal(await issues.last().getByText("WARNING", { exact: true }).count(), 1);
+    });
+  });
+
   test(`a repeat validate click reruns validation while its ${popovers ? "popover" : "inline result"} is open`, async () => {
     await withPanel(async (browser, url) => {
       const page = await browser.newPage({ hasTouch: popovers });
@@ -1930,6 +1992,9 @@ test("session section omits additional validation issues to fit JSON-escaped mes
       else await chip.click({ timeout: 3000 });
       const flyout = popovers ? page.frameLocator('iframe[title="OpenSpec test popover"]') : card;
       await flyout.getByText("Invalid · 23 issues", { exact: true }).waitFor({ timeout: 3000 });
+      await flyout
+        .getByText("Note: This note does not affect validation.", { exact: true })
+        .waitFor();
       const count = await flyout.getByRole("listitem").count();
       assert.ok(count > 0 && count < 20);
       await flyout
