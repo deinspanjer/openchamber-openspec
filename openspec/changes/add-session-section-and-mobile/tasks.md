@@ -124,16 +124,36 @@ delivery in both directions. No new test files or shared helpers. One commit per
       handoff. Bump the version to 1.4.0 with `npm version 1.4.0 --no-git-tag-version`. Verify
       with `npm run check` and `npm run format:check`.
 
-## 8. Live checks
+## 8. Live-use polish (2026-11-22, from the user's phone screenshot of 1.4.1)
 
-- [ ] 8.1 Live-host check per `AGENTS.md` on the released 1.4.0: update, then disable and enable,
-      confirm Enabled. Track two changes in a session, expand Tasks, open each flyout, validate,
-      open the board from a card, and finish a turn to watch a count update. Ask the user before
-      any check that creates sessions or worktrees.
-- [ ] 8.2 Phone check with the user: the Status tab and the board page from the More menu. Confirm
-      touch sizes, bottom-sheet flyouts, insets and keyboard behaviour, and drop inset padding if
-      the host already applies it. Report anything not verified.
+- [ ] 8.1 Fake host seam: card line 1 never wraps the count. The name truncates with an ellipsis
+      and `n/m` stays on one line (e.g. `6/6` with a long name at 320px). `Tasks:` is not
+      underlined; the task title keeps its flyout affordance.
+- [ ] 8.2 Same seam: `＋ Track a change` renders as a compact link-style control, no taller than a
+      chip on a fine pointer, with 44px only as the touch target on a coarse pointer. In the change
+      flyout, `Untrack` is a smaller link aligned right. Chips get slightly less vertical padding
+      while keeping 44px coarse-pointer targets.
+- [ ] 8.3 Same seam: the section's header Refresh works. Reproduce against the real host contract
+      first (`setStatusControls` / `onStatusControl` in /Users/dre/src/openchamber v2.7.3), pin it
+      with a fake host that sends the real control activation, then fix.
+- [ ] 8.4 Same seam: debounce the mount-time reads, so `ready`, the session push and lifecycle
+      events coalesce into one read, and show the last known cards per session immediately instead
+      of an empty section. Keep them in memory across session switches, and in device storage
+      (`features.deviceStorage`) across frame remounts. Replace them when the read lands, and mark
+      them stale while it runs. A failed read keeps the cached cards with an error note.
+- [ ] 8.5 Redraw `assets/openspec-logo.svg` as a crisp integer-grid pixel glyph matching OpenSpec's
+      official icon (`website/public/docs/icon-512.png` in Fission-AI/OpenSpec), using
+      `shape-rendering="crispEdges"` and no fractional transforms. Verify by rendering it at 16, 24
+      and 32 px.
+- [ ] 8.6 Run the full panel suite twice and `npm run check`, then release 1.4.2 with
+      `npm version 1.4.2 --no-git-tag-version`.
 
 ## Workflow follow-up
+
+- Best effort by the agent, with the user's approval rather than as tracked tasks: a live desktop
+  check per `AGENTS.md` on the latest release (track two changes, expand Tasks, open flyouts,
+  validate, open the board from a card, finish a turn to watch a count update), and a phone check
+  with the user (Status tab, More-menu board page, touch sizes, bottom-sheet flyouts, insets,
+  keyboard). Ask before any check that creates sessions or worktrees.
 
 - Draft the upstream OpenChamber issues listed in `design.md` for the user to approve.
