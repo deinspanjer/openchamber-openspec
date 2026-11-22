@@ -1,6 +1,6 @@
 import { HostRequestError, type HostClient } from "@openchamber/sdk";
 import { deriveChange, type DerivedChange } from "../model.js";
-import { documentKey, type Task } from "../contracts.js";
+import { documentKey, type Task, type Workflow } from "../contracts.js";
 import { createClient, ServiceRequestError, type Scope } from "./client.js";
 import { createResources, type ReadState } from "./resources.js";
 import { mountBoardView } from "./board-view.js";
@@ -13,6 +13,7 @@ import { actionPrompt } from "./prompts.js";
 import { appendTrackedChange, resolveSessionChanges } from "./tracked-change.js";
 import { findProject } from "./project.js";
 import { inspectWorktreeDestination } from "./worktree.js";
+import { CORE_WORKFLOWS, loadWorkflows } from "./workflows.js";
 
 export function mountController(host: HostClient, appRoot: HTMLElement): () => void {
   const client = createClient(host);
@@ -31,6 +32,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     minOperation: number;
   } | null = null;
   let changes: DerivedChange[] = [];
+  let workflows: ReadonlySet<Workflow> = new Set(CORE_WORKFLOWS);
   let listedIds: ReadonlySet<string> = new Set();
   let checkFocus = true;
   let focusedChange: { name: string; reloaded: boolean } | null = null;
@@ -69,6 +71,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     scope = null;
     resources.setContext(null);
     changes = [];
+    workflows = new Set(CORE_WORKFLOWS);
     listedIds = new Set();
     focusedChange = null;
     staleIds = new Set();
@@ -96,7 +99,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     render();
   }
 
-  function loadBoard(refresh = false, reconcile = false) {
+  function loadBoard({
+    refresh = false,
+    reconcile = false,
+    workflows: readWorkflows = false,
+  } = {}) {
     if (boardActive) {
       if (reconcile) reconcileQueued = true;
       return;
@@ -121,7 +128,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     render();
     void (async () => {
       try {
-        const listing = await client.list(currentDirectory);
+        const [listing, configuredWorkflows] = await Promise.all([
+          client.list(currentDirectory),
+          readWorkflows ? loadWorkflows(client, currentDirectory) : workflows,
+        ]);
         if (
           directory !== currentDirectory ||
           epoch !== startingEpoch ||
@@ -130,9 +140,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           return;
         if (scope && scope.root !== listing.root) {
           invalidate();
-          loadBoard();
+          loadBoard({ workflows: true });
           return;
         }
+        workflows = configuredWorkflows;
         scope =
           scope?.root === listing.root && scope.planning === listing.planning
             ? scope
@@ -223,7 +234,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             }
             if (caught instanceof ServiceRequestError && caught.code === "ROOT_CHANGED") {
               invalidate();
-              loadBoard();
+              loadBoard({ workflows: true });
               return;
             }
             failures = [
@@ -255,7 +266,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         }
         if (caught instanceof ServiceRequestError && caught.code === "ROOT_CHANGED") {
           invalidate();
-          loadBoard();
+          loadBoard({ workflows: true });
           return;
         }
         pendingSummaries = 0;
@@ -272,7 +283,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           render();
           if (reconcileQueued) {
             reconcileQueued = false;
-            loadBoard(true);
+            loadBoard({ refresh: true });
           }
           applyFocus();
         }
@@ -433,7 +444,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     }
     if (state.error.code === "ROOT_CHANGED") {
       invalidate();
-      loadBoard();
+      loadBoard({ workflows: true });
       return true;
     }
     if (state.error.code === "CHANGE_UNAVAILABLE") {
@@ -599,7 +610,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     } else if (!target.reloaded) {
       if (selectedChange) closeDetail();
       focusedChange = { name: target.name, reloaded: true };
-      loadBoard(true);
+      loadBoard({ refresh: true });
     } else {
       if (selectedChange) closeDetail();
       void host
@@ -638,7 +649,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         scope.root === origin.root &&
         scope.planning === origin.planning
       )
-        loadBoard(true, true);
+        loadBoard({ refresh: true, reconcile: true });
     },
     inspect: (origin, name) => {
       if (
@@ -648,7 +659,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       )
         return;
       pendingInspection = { scope, epoch, name, minOperation: boardOperation + 1 };
-      loadBoard(true, true);
+      loadBoard({ refresh: true, reconcile: true });
     },
   });
   async function openHelp() {
@@ -740,7 +751,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     create: () => {
       if (scope) createView.open();
     },
-    retry: () => loadBoard(true),
+    retry: () => loadBoard({ refresh: true, workflows: true }),
     search: (value) => {
       search = value;
       render();
@@ -768,7 +779,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       if (pendingInspection?.name === attempt.name) pendingInspection = null;
       resources.invalidateChange(attempt.scope, attempt.name);
       render();
-      loadBoard(true, true);
+      loadBoard({ refresh: true, reconcile: true });
       queueMicrotask(() => focusBoard());
     },
   });
@@ -802,7 +813,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         })
         .catch(() => {});
     },
-    refresh: () => loadBoard(true),
+    refresh: () => loadBoard({ refresh: true, workflows: true }),
     delete: () => {
       if (scope && selectedChange && !unavailableIds.has(selectedChange.id))
         deleteView.open({ scope, epoch, selection, name: selectedChange.id });
@@ -924,14 +935,14 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     sessionId = ready.session?.id ?? null;
     if (changed) {
       invalidate();
-      loadBoard();
+      loadBoard({ workflows: true });
     } else render();
   });
   const offDirectory = host.onDirectory((nextDirectory) => {
     if (directory === nextDirectory) return;
     directory = nextDirectory;
     invalidate();
-    loadBoard();
+    loadBoard({ workflows: true });
   });
   const offSession = host.onSession((nextSession) => {
     sessionId = nextSession?.id ?? null;

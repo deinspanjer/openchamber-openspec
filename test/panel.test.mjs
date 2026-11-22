@@ -137,6 +137,13 @@ function hostHtml(statusCase, pointer, popovers) {
     let failNextListing = false;
     let workflows = ["propose", "explore", "apply", "update", "sync", "archive"];
     window.__workflows = (value) => { workflows = value; };
+    let holdWorkflows = false;
+    const pendingWorkflows = [];
+    window.__holdWorkflows = () => { holdWorkflows = true; };
+    window.__releaseWorkflows = () => {
+      holdWorkflows = false;
+      pendingWorkflows.splice(0).forEach((finish) => finish());
+    };
     const pendingDeletes = [];
     const pendingCreates = [];
     let holdProposal = false;
@@ -371,10 +378,14 @@ function hostHtml(statusCase, pointer, popovers) {
         if (body.expectedPlanning && body.expectedPlanning !== currentPlanning) {
           send({error:{code:"PLANNING_CHANGED",message:"Planning target changed. Refresh to establish the new scope."}},409); return;
         }
-         if (path === "/workflows") {
-           if (workflows === null)
-             reply({ status: 422, body: JSON.stringify({ error: { code: "OPENSPEC_ERROR", message: "Cannot read workflows" } }) });
-           else reply({ status: 200, body: JSON.stringify({ workflows }) });
+          if (path === "/workflows") {
+            const configured = workflows;
+            const finish = () => {
+              if (configured === null)
+                reply({ status: 422, body: JSON.stringify({ error: { code: "OPENSPEC_ERROR", message: "Cannot read workflows" } }) });
+              else reply({ status: 200, body: JSON.stringify({ workflows: configured }) });
+            };
+            if (holdWorkflows) pendingWorkflows.push(finish); else finish();
          }
          else if (path === "/changes") {
            if (failNextListing) { failNextListing = false;
@@ -1722,6 +1733,10 @@ for (const exists of [true, false]) {
         await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
         3,
       );
+      assert.equal(
+        await page.evaluate(() => __requests.filter(({ path }) => path === "/workflows").length),
+        2,
+      );
     });
   });
 }
@@ -2931,7 +2946,7 @@ test("presentation page fills short boards and preserves long board and detail s
   });
 });
 
-test("one board load requests one listing and one summaries batch", async () => {
+test("one board load requests one listing, workflow read and summaries batch", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(url);
@@ -2940,7 +2955,95 @@ test("one board load requests one listing and one summaries batch", async () => 
     const paths = await page.evaluate(() => __requests.map((item) => item.path));
     assert.deepEqual(
       paths.filter((path) => path.startsWith("/")),
-      ["/changes", "/summaries"],
+      ["/changes", "/workflows", "/summaries"],
+    );
+  });
+});
+
+test("board reads configured workflows on mount, refresh and directory change", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => __recreate("loaded-on-refresh"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "loaded-on-refresh", exact: true }).waitFor();
+    await page.evaluate(() => __directory("/tmp/board-workflows-other-project"));
+    await panel.getByText("0 changes · 0 of 0 tasks complete", { exact: true }).waitFor();
+    await panel.locator(".new-change-control button:enabled").waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter(({ path }) => path === "/workflows").map(({ body }) => body),
+      ),
+      [{ directory }, { directory }, { directory: "/tmp/board-workflows-other-project" }],
+    );
+  });
+});
+
+for (const first of ["/changes", "/workflows"]) {
+  test(`board waits for both the listing and workflows when ${first} answers first`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?hold-ready`);
+      const panel = page.frameLocator("iframe");
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate((path) => {
+        const frame = document.querySelector("iframe").contentWindow;
+        frame.addEventListener("message", (event) => {
+          const body = event.data?.payload?.body;
+          if (event.data?.type !== "result" || typeof body !== "string") return;
+          const value = JSON.parse(body);
+          if (
+            path === "/changes" ? !Array.isArray(value?.changes) : !Array.isArray(value?.workflows)
+          )
+            return;
+          frame.document.documentElement.dataset.firstBoardReply = path;
+        });
+        if (path === "/changes") __holdWorkflows();
+        else __holdListing();
+        __releaseReady();
+      }, first);
+      await page.waitForFunction(
+        () => ["/changes", "/workflows"].every((path) => __requests.some((r) => r.path === path)),
+        null,
+        { timeout: 3000 },
+      );
+      await panel.locator(`html[data-first-board-reply="${first}"]`).waitFor();
+      assert.equal(await panel.locator(".change-card").count(), 0);
+      assert.equal(
+        await panel.locator(".board-tally").textContent(),
+        "0 changes · 0 of 0 tasks complete",
+      );
+      await page.evaluate((path) => {
+        if (path === "/changes") __releaseWorkflows();
+        else __releaseListing();
+      }, first);
+      await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    });
+  });
+}
+
+test("board falls back to core workflows without showing the config error", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?hold-ready`);
+    const panel = page.frameLocator("iframe");
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __workflows(null);
+      __readiness("blocked-tasks");
+      __releaseReady();
+    });
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "second-change" })
+      .getByRole("button", { name: "propose", exact: true })
+      .waitFor();
+    assert.equal(await panel.getByText("Cannot read workflows").count(), 0);
+    assert.equal(
+      await page.evaluate(() => __completed.filter((p) => p === "/workflows").length),
+      1,
     );
   });
 });
@@ -3309,8 +3412,10 @@ test("four cards arrive together after the listing count and tally", async () =>
     assert.equal(await panel.locator(".change-card").count(), 4);
     assert.deepEqual(await page.evaluate(() => __requests.map((item) => item.path)), [
       "/changes",
+      "/workflows",
       "/summaries",
       "/changes",
+      "/workflows",
       "/summaries",
     ]);
   });
@@ -4211,6 +4316,7 @@ test("explicit Refresh retains opened-change observations until a new opening", 
     await panel.getByRole("button", { name: "first-change" }).waitFor();
     assert.deepEqual(await page.evaluate(() => __requests.map((request) => request.path)), [
       "/changes",
+      "/workflows",
       "/summaries",
     ]);
     await panel.getByRole("button", { name: "first-change" }).click();
@@ -4912,6 +5018,10 @@ test("safe creation refreshes the board and prompts stay unsent", async () => {
     await panel.getByLabel("Goal").fill("Test creation");
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "created-change" }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
+      1,
+    );
     await panel
       .locator(".change-card")
       .filter({ hasText: "created-change" })
@@ -5842,6 +5952,11 @@ test("confirmed deletion removes one change and returns to a refreshed, searched
     assert.equal(await dialog.isVisible(), true);
     await page.evaluate(() => __releaseDelete());
     await panel.getByRole("heading", { name: "Planning 0" }).waitFor();
+    await page.waitForFunction(() => __completed.filter((p) => p === "/summaries").length === 2);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
+      1,
+    );
     assert.equal(await search.inputValue(), "first");
     assert.equal(await panel.getByRole("button", { name: "first-change" }).count(), 0);
     assert.equal(
@@ -6941,6 +7056,10 @@ test("uncertain creation reconciles in the original context and opens the observ
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "Inspect change" }).click();
     await panel.locator(".detail").getByRole("heading", { name: "observed-change" }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
+      1,
+    );
     assert.equal(
       await page.evaluate(() => __requests.filter((item) => item.path === "/create").length),
       1,

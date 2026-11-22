@@ -7,7 +7,7 @@ task.
 
 ## 1. Workflow-aware board actions
 
-- [ ] 1.1 Board workflow read. Fake host seam (`test/panel.test.mjs`): add failing tests that the
+- [x] 1.1 Board workflow read. Fake host seam (`test/panel.test.mjs`): add failing tests that the
       board requests `/workflows` once on initial load, on a context change and on `refresh`, but
       not on reloads after create, delete, reconcile or a focus claim. Cards render only after both
       `/workflows` and `/changes` answer, and a failed `/workflows` shows core actions without an

@@ -2641,6 +2641,7 @@ ${GUEST_UI_LOOK_CSS}`;
     "verify",
     "onboard"
   ];
+  var CORE_WORKFLOWS = ["propose", "explore", "apply", "update", "sync", "archive"];
   function isWorkflow(value) {
     return ALL_WORKFLOWS.some((name) => name === value);
   }
@@ -8138,6 +8139,16 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     return project;
   }
 
+  // src/panel/workflows.ts
+  async function loadWorkflows(client, directory) {
+    try {
+      return new Set(await client.workflows(directory));
+    } catch (caught) {
+      console.warn("Could not read OpenSpec workflows; using the core workflows.", caught);
+      return new Set(CORE_WORKFLOWS);
+    }
+  }
+
   // src/panel/controller.ts
   function mountController(host2, appRoot) {
     const client = createClient(host2);
@@ -8151,6 +8162,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     let reconcileQueued = false;
     let pendingInspection = null;
     let changes = [];
+    let workflows = new Set(CORE_WORKFLOWS);
     let listedIds = /* @__PURE__ */ new Set();
     let checkFocus = true;
     let focusedChange = null;
@@ -8187,6 +8199,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       scope = null;
       resources.setContext(null);
       changes = [];
+      workflows = new Set(CORE_WORKFLOWS);
       listedIds = /* @__PURE__ */ new Set();
       focusedChange = null;
       staleIds = /* @__PURE__ */ new Set();
@@ -8212,7 +8225,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       errorMessage = "Planning target changed. Refresh to establish the new scope.";
       render();
     }
-    function loadBoard(refresh = false, reconcile = false) {
+    function loadBoard({
+      refresh = false,
+      reconcile = false,
+      workflows: readWorkflows = false
+    } = {}) {
       if (boardActive) {
         if (reconcile) reconcileQueued = true;
         return;
@@ -8237,14 +8254,18 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       render();
       void (async () => {
         try {
-          const listing = await client.list(currentDirectory);
+          const [listing, configuredWorkflows] = await Promise.all([
+            client.list(currentDirectory),
+            readWorkflows ? loadWorkflows(client, currentDirectory) : workflows
+          ]);
           if (directory !== currentDirectory || epoch !== startingEpoch || operation !== boardOperation)
             return;
           if (scope && scope.root !== listing.root) {
             invalidate();
-            loadBoard();
+            loadBoard({ workflows: true });
             return;
           }
+          workflows = configuredWorkflows;
           scope = scope?.root === listing.root && scope.planning === listing.planning ? scope : { directory: currentDirectory, root: listing.root, planning: listing.planning };
           const current = scope;
           resources.setContext(current);
@@ -8319,7 +8340,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
               }
               if (caught instanceof ServiceRequestError && caught.code === "ROOT_CHANGED") {
                 invalidate();
-                loadBoard();
+                loadBoard({ workflows: true });
                 return;
               }
               failures = [
@@ -8347,7 +8368,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           }
           if (caught instanceof ServiceRequestError && caught.code === "ROOT_CHANGED") {
             invalidate();
-            loadBoard();
+            loadBoard({ workflows: true });
             return;
           }
           pendingSummaries = 0;
@@ -8360,7 +8381,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
             render();
             if (reconcileQueued) {
               reconcileQueued = false;
-              loadBoard(true);
+              loadBoard({ refresh: true });
             }
             applyFocus();
           }
@@ -8477,7 +8498,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       }
       if (state.error.code === "ROOT_CHANGED") {
         invalidate();
-        loadBoard();
+        loadBoard({ workflows: true });
         return true;
       }
       if (state.error.code === "CHANGE_UNAVAILABLE") {
@@ -8606,7 +8627,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       } else if (!target.reloaded) {
         if (selectedChange) closeDetail();
         focusedChange = { name: target.name, reloaded: true };
-        loadBoard(true);
+        loadBoard({ refresh: true });
       } else {
         if (selectedChange) closeDetail();
         void host2.toast({ kind: "info", message: `${target.name} isn't in this board's list.` }).catch(
@@ -8634,13 +8655,13 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       current: () => scope,
       created: (origin) => {
         if (scope?.directory === origin.directory && scope.root === origin.root && scope.planning === origin.planning)
-          loadBoard(true, true);
+          loadBoard({ refresh: true, reconcile: true });
       },
       inspect: (origin, name) => {
         if (scope?.directory !== origin.directory || scope.root !== origin.root || scope.planning !== origin.planning)
           return;
         pendingInspection = { scope, epoch, name, minOperation: boardOperation + 1 };
-        loadBoard(true, true);
+        loadBoard({ refresh: true, reconcile: true });
       }
     });
     async function openHelp() {
@@ -8717,7 +8738,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       create: () => {
         if (scope) createView.open();
       },
-      retry: () => loadBoard(true),
+      retry: () => loadBoard({ refresh: true, workflows: true }),
       search: (value) => {
         search = value;
         render();
@@ -8744,7 +8765,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         if (pendingInspection?.name === attempt.name) pendingInspection = null;
         resources.invalidateChange(attempt.scope, attempt.name);
         render();
-        loadBoard(true, true);
+        loadBoard({ refresh: true, reconcile: true });
         queueMicrotask(() => focusBoard());
       }
     });
@@ -8775,7 +8796,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         }).catch(() => {
         });
       },
-      refresh: () => loadBoard(true),
+      refresh: () => loadBoard({ refresh: true, workflows: true }),
       delete: () => {
         if (scope && selectedChange && !unavailableIds.has(selectedChange.id))
           deleteView.open({ scope, epoch, selection: selection2, name: selectedChange.id });
@@ -8881,14 +8902,14 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       sessionId = ready2.session?.id ?? null;
       if (changed) {
         invalidate();
-        loadBoard();
+        loadBoard({ workflows: true });
       } else render();
     });
     const offDirectory = host2.onDirectory((nextDirectory) => {
       if (directory === nextDirectory) return;
       directory = nextDirectory;
       invalidate();
-      loadBoard();
+      loadBoard({ workflows: true });
     });
     const offSession = host2.onSession((nextSession) => {
       sessionId = nextSession?.id ?? null;
