@@ -2851,6 +2851,18 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
 
 Report what you synced without archiving the change.`;
   }
+  function planningPrompt(change, intent) {
+    const target = `OpenSpec change "${change.id}"`;
+    const goal = change.goal?.trim() ? `
+Goal: ${change.goal}` : "";
+    if (intent === "continue")
+      return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}
+
+Write the next planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not implement code.`;
+    return `Use your skill tool to load and invoke the openspec-update-change skill for ${target}.${goal}
+
+Revise ${target}'s existing planning artefacts as I describe and keep them consistent with each other. If I have not described a revision, ask me what to change. Do not edit code.`;
+  }
 
   // src/panel/workflow.ts
   var stages = [
@@ -3240,19 +3252,27 @@ Report what you synced without archiving the change.`;
   }
   async function openBoard(current, target) {
     try {
+      if (!current()) return false;
       if (target) await client.setFocus(target.directory, target.change);
-      if (current()) await host.openSurface("plugin:openspec-board");
+      if (!current()) return false;
+      await host.openSurface("plugin:openspec-board");
+      return current();
     } catch (caught) {
       await showError(current, caught, "Could not open the OpenSpec board.");
+      return false;
     }
   }
-  async function preparePrompt(change, text, current) {
-    if (!current()) return;
-    const session = sessionId;
+  async function preparePrompt(change, text, current, session = sessionId, seed = seedTrackedChanges) {
+    if (!current()) return false;
     try {
       await host.compose({ text, mode: "replace" });
-      if (!current()) return;
-      if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
+    } catch (caught) {
+      await showError(current, caught, "The workflow prompt could not be prepared.");
+      return false;
+    }
+    if (!current()) return false;
+    const saved = session && appendTrackedChange(host, session, change, current, seed);
+    try {
       await host.toast({
         kind: "success",
         message: "Workflow prompt prepared in the open composer."
@@ -3260,6 +3280,8 @@ Report what you synced without archiving the change.`;
     } catch (caught) {
       await showError(current, caught, "The workflow prompt could not be prepared.");
     }
+    await saved;
+    return current();
   }
   function taskTitle(task) {
     return task?.description.split("\n", 1)[0] ?? "";
@@ -3301,7 +3323,11 @@ Report what you synced without archiving the change.`;
     const inline = document.createElement("div");
     inline.hidden = true;
     let change = null;
-    const nameAnchor = mountFlyout(nameButton, inline, () => change ? changeFlyout(change) : null);
+    const nameAnchor = mountFlyout(
+      nameButton,
+      inline,
+      () => change && scope && workflows ? changeFlyout(change, scope.directory, workflows) : null
+    );
     const count2 = document.createElement("span");
     heading.append(count2);
     const meter = document.createElement("progress");
@@ -3329,7 +3355,7 @@ Report what you synced without archiving the change.`;
       size: "xs",
       onClick: () => {
         if (change && chips?.primary !== "ff" && chips?.primary !== "continue")
-          void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
+          void preparePrompt(change.id, actionPrompt(change, "primary"), captureContext());
       }
     });
     const secondaryRoot = document.createElement("span");
@@ -3341,7 +3367,7 @@ Report what you synced without archiving the change.`;
       variant: "secondary",
       onClick: () => {
         if (change && chips?.secondary)
-          void preparePrompt(change, actionPrompt(change, chips.secondary), captureContext());
+          void preparePrompt(change.id, actionPrompt(change, chips.secondary), captureContext());
       }
     });
     const sync = mountButton(syncRoot, {
@@ -3349,7 +3375,7 @@ Report what you synced without archiving the change.`;
       size: "xs",
       variant: "secondary",
       onClick: () => {
-        if (change) void preparePrompt(change, syncPrompt(change), captureContext());
+        if (change) void preparePrompt(change.id, syncPrompt(change), captureContext());
       }
     });
     const validationInline = document.createElement("div");
@@ -3515,12 +3541,14 @@ Report what you synced without archiving the change.`;
     }
     return ellipsize(text, low);
   }
-  function changeFlyout(change) {
+  function changeFlyout(change, directory2, workflows2) {
     const data = {
       kind: "change",
       name: change.id,
       stage: change.stage,
-      goal: null
+      goal: null,
+      directory: directory2,
+      offerContinue: change.stage === "planning" && workflows2.has("ff") && workflows2.has("continue")
     };
     if (change.goal) {
       data.goal = fitText(change.goal, 4e3, (goal) => JSON.stringify({ ...data, goal }).length);
@@ -3574,11 +3602,18 @@ Report what you synced without archiving the change.`;
         return null;
       }
     }
-    if (value.kind !== "change" || !("name" in value) || typeof value.name !== "string" || !("goal" in value) || value.goal !== null && typeof value.goal !== "string" || !("stage" in value) || value.stage !== "planning" && value.stage !== "ready" && value.stage !== "progress" && value.stage !== "complete")
+    if (value.kind !== "change" || !("name" in value) || typeof value.name !== "string" || !("directory" in value) || typeof value.directory !== "string" || !("offerContinue" in value) || typeof value.offerContinue !== "boolean" || !("goal" in value) || value.goal !== null && typeof value.goal !== "string" || !("stage" in value) || value.stage !== "planning" && value.stage !== "ready" && value.stage !== "progress" && value.stage !== "complete")
       return null;
-    return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
+    return {
+      kind: "change",
+      name: value.name,
+      goal: value.goal,
+      stage: value.stage,
+      directory: value.directory,
+      offerContinue: value.offerContinue
+    };
   }
-  function renderFlyout(container, data, untrack, openInBoard) {
+  function renderFlyout(container, data, context) {
     container.classList.add("flyout");
     if (data.kind === "task") {
       const description = document.createElement("p");
@@ -3624,22 +3659,46 @@ Report what you synced without archiving the change.`;
       goal.textContent = data.goal;
       container.append(goal);
     }
-    const actions = [];
-    if (openInBoard)
-      actions.push(
-        mountButton(container, {
-          label: "Open in board",
-          variant: "secondary",
-          size: "xs",
-          onClick: openInBoard
-        })
-      );
-    if (untrack) {
+    const row = document.createElement("div");
+    row.className = "card-actions";
+    container.append(row);
+    const { session, current, seed, afterAction, afterUntrack } = context;
+    const actions = (data.offerContinue ? ["continue", "update"] : ["update"]).map(
+      (intent) => mountButton(row, {
+        label: intent,
+        variant: "secondary",
+        size: "xs",
+        onClick: () => {
+          void preparePrompt(
+            data.name,
+            planningPrompt({ id: data.name, goal: data.goal }, intent),
+            current,
+            session,
+            seed
+          ).then((prepared) => {
+            if (prepared) afterAction?.();
+          });
+        }
+      })
+    );
+    actions.push(
+      mountButton(row, {
+        label: "Open in board",
+        variant: "secondary",
+        size: "xs",
+        onClick: () => {
+          void openBoard(current, { directory: data.directory, change: data.name }).then((opened) => {
+            if (opened) afterAction?.();
+          });
+        }
+      })
+    );
+    if (session) {
       const button2 = mountButton(container, {
         label: "Untrack",
         variant: "secondary",
         size: "xs",
-        onClick: untrack
+        onClick: () => void untrackChange(session, data.name, current, seed, afterUntrack)
       });
       container.lastElementChild.classList.add("status-link", "untrack-link");
       actions.push(button2);
@@ -3664,18 +3723,15 @@ Report what you synced without archiving the change.`;
           button2.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
       } else {
         inline.hidden = false;
-        const session = sessionId;
-        const current = captureContext();
-        const targetDirectory = directory;
-        actions = renderFlyout(
-          inline,
-          data,
-          session && data.kind === "change" ? () => void untrackChange(session, data.name, current, seedTrackedChanges, () => {
+        actions = renderFlyout(inline, data, {
+          session: sessionId,
+          current: captureContext(),
+          seed: seedTrackedChanges,
+          afterUntrack: () => {
             closeInline();
             read();
-          }) : void 0,
-          targetDirectory && data.kind === "change" ? () => void openBoard(current, { directory: targetDirectory, change: data.name }) : void 0
-        );
+          }
+        });
         button2.setAttribute("aria-expanded", "true");
       }
     }
@@ -3953,7 +4009,7 @@ Report what you synced without archiving the change.`;
     queueContextRead();
   }
   var lastHeight = 0;
-  var popoverSession = null;
+  var popoverSession;
   var popoverActions;
   var resize = new ResizeObserver(() => {
     const height = Math.ceil(panelRoot.getBoundingClientRect().height);
@@ -3973,28 +4029,20 @@ Report what you synced without archiving the change.`;
         panelRoot.replaceChildren();
         const data = decodeFlyout(ready2.popover?.data);
         const popoverId = ready2.popover?.id;
-        const targetDirectory = ready2.directory;
-        if (data) {
-          popoverActions = renderFlyout(
-            panelRoot,
-            data,
-            nextSession && popoverId && data.kind === "change" ? () => void untrackChange(
-              nextSession,
-              data.name,
-              () => !disposed && popoverSession === nextSession,
-              () => [data.name],
-              () => void host.closePopover(popoverId).catch((caught) => {
-                console.warn("Could not close the OpenSpec flyout.", caught);
-              })
-            ) : void 0,
-            targetDirectory && data.kind === "change" ? () => void openBoard(() => !disposed && popoverSession === nextSession, {
-              directory: targetDirectory,
-              change: data.name
-            }) : void 0
-          );
+        if (data && popoverId) {
+          const close = () => void host.closePopover(popoverId).catch((caught) => {
+            console.warn("Could not close the OpenSpec flyout.", caught);
+          });
+          popoverActions = renderFlyout(panelRoot, data, {
+            session: nextSession,
+            current: () => !disposed && popoverSession === nextSession,
+            seed: () => data.kind === "change" ? [data.name] : [],
+            afterAction: close,
+            afterUntrack: close
+          });
         } else panelRoot.textContent = "OpenSpec details are unavailable.";
       } else if (nextSession !== popoverSession) {
-        popoverSession = null;
+        popoverSession = void 0;
         popoverActions?.forEach((action) => action.update({ disabled: true }));
       }
       resize.observe(panelRoot);
@@ -4012,8 +4060,8 @@ Report what you synced without archiving the change.`;
   });
   var offSession = host.onSession((next) => {
     if (!popoverFrame) updateContext(directory, next?.id ?? null);
-    else if (next?.id !== popoverSession) {
-      popoverSession = null;
+    else if ((next?.id ?? null) !== popoverSession) {
+      popoverSession = void 0;
       popoverActions?.forEach((action) => action.update({ disabled: true }));
     }
   });

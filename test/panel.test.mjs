@@ -67,7 +67,7 @@ function hostHtml(statusCase, pointer, popovers) {
     const post = (guest, type, payload) =>
       guest.postMessage({ channel: "openchamber.sdk", v: 1, type, payload }, "*");
     const readyFor = (guest) => popover && popover.frame.contentWindow === guest
-      ? { ...ready, surface: "popover", item: null, features: undefined, popover: popover.context }
+      ? { ...ready, directory: popover.directory, surface: "popover", item: null, features: undefined, popover: popover.context }
       : board && board.frame.contentWindow === guest
       ? { ...ready, surface: "panel", directory: board.directory }
       : ready;
@@ -254,6 +254,7 @@ function hostHtml(statusCase, pointer, popovers) {
     window.__holdFiles = () => { holdFiles = true; };
     window.__releaseFile = () => { const finish = pending.shift(); finish?.(); };
     window.__directory = (next) => {
+      if (next !== ready.directory) closePopover("owner");
       ready.directory = next;
       for (const guest of guests) post(guest, "directory", { directory: next });
     };
@@ -349,7 +350,8 @@ function hostHtml(statusCase, pointer, popovers) {
              sessionId: context.session.id, phase: context.session.busy ? "started" : "completed",
            });
          };
-        if (location.search.includes("hold-ready")) window.__releaseReady = show;
+        if (location.search.includes("hold-ready") && readyFor(event.source).surface !== "popover")
+          window.__releaseReady = show;
         else show();
         return;
       }
@@ -551,16 +553,21 @@ function hostHtml(statusCase, pointer, popovers) {
          frame.title = "OpenSpec test popover";
          frame.style.width = width + "px";
          frame.style.height = height + "px";
-         popover = { owner: event.source, frame, context: { id, data } };
+         popover = { owner: event.source, directory: readyFor(event.source).directory, frame, context: { id, data } };
          document.body.append(frame);
          reply();
          return;
        }
-       if (message.type === "popover-close" || message.type === "popover-anchor-active") {
+       if (message.type === "popover-close" || message.type === "popover-anchor") {
          window.__requests.push({ path: message.type, body: message.payload });
+         if (popover?.frame.contentWindow === event.source && message.payload.id !== popover.context.id) {
+           event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id,
+             ok: false, code: "HOST_REJECTED", error: "A popover may close or report activity only for itself." }, "*");
+           return;
+         }
+         reply();
          if (message.type === "popover-close" && message.payload.id === popover?.context.id)
            closePopover(message.payload.reason ?? "closed");
-         reply();
          return;
        }
        if (message.type === "status-controls") {
@@ -577,10 +584,13 @@ function hostHtml(statusCase, pointer, popovers) {
        if (["workspace-unsubscribe", "resize", "open-surface"].includes(message.type)) {
          window.__requests.push({path:message.type,body:message.payload});
          if (message.type === "open-surface" && location.search.includes("open-board") && !board)
-           __mountBoard();
+           __mountBoard(readyFor(event.source).directory);
          if (statusCase && message.type === "resize") {
            const frame = [...document.querySelectorAll("iframe")].find((frame) => frame.contentWindow === event.source);
-           if (frame) frame.style.height = Math.max(24, Math.min(480, message.payload.height)) + "px";
+           if (frame === popover?.frame)
+             frame.style.height = Math.max(48, Math.min(480, message.payload.height + (pointer === "coarse" ? 0 : 2))) + "px";
+           else if (frame && !board?.frame.isSameNode(frame))
+             frame.style.height = Math.max(24, Math.min(480, message.payload.height)) + "px";
          }
         reply();
         return;
@@ -821,6 +831,109 @@ for (const [stage, chip, count, current, percent] of [
       }
       assert.equal(await second.getByText("0/0", { exact: true }).isVisible(), true);
       assert.equal(await second.locator("details").isVisible(), false);
+    });
+  });
+}
+
+for (const popovers of [false, true]) {
+  test(`session section offers ordered change actions ${popovers ? "in a popover" : "inline"}`, async () => {
+    await withPanel(async (browser, url) => {
+      for (const [stage, workflows, labels] of [
+        ["planning", ["ff", "continue"], ["continue", "update", "Open in board"]],
+        ["planning", ["ff"], ["update", "Open in board"]],
+        ["progress", ["ff", "continue"], ["update", "Open in board"]],
+      ]) {
+        const page = await browser.newPage({ hasTouch: popovers });
+        await page.goto(
+          `${url}?status=${stage}&hold-ready${popovers ? "&popovers&pointer=coarse" : ""}`,
+        );
+        await page.waitForFunction(() => typeof window.__releaseReady === "function");
+        await page.evaluate((value) => {
+          __workflows(value);
+          __releaseReady();
+        }, workflows);
+        const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+        const name = section.getByRole("button", { name: "first-change", exact: true });
+        if (popovers) await name.tap({ timeout: 3000 });
+        else await name.click({ timeout: 3000 });
+        const flyout = popovers
+          ? page.frameLocator('iframe[title="OpenSpec test popover"]').locator("main")
+          : section.getByText("Read the proposal", { exact: true }).locator("..");
+        const untrack = flyout.getByRole("button", { name: "Untrack", exact: true });
+        await untrack.waitFor({ timeout: 3000 });
+        assert.deepEqual(await flyout.getByRole("button").allTextContents(), [
+          ...labels,
+          "Untrack",
+        ]);
+        const board = flyout.getByRole("button", { name: "Open in board", exact: true });
+        assert.ok(
+          (await untrack.boundingBox()).y >=
+            (await board.boundingBox()).y + (await board.boundingBox()).height,
+        );
+        assert.ok(
+          await untrack.evaluate(
+            (node) =>
+              node.getBoundingClientRect().right ===
+                node.closest(".flyout").querySelector(".card-actions").getBoundingClientRect()
+                  .right &&
+              parseFloat(getComputedStyle(node).fontSize) <
+                parseFloat(getComputedStyle(node.closest(".flyout")).fontSize),
+          ),
+        );
+        await page.close();
+      }
+    });
+  });
+}
+
+for (const action of ["continue", "update", "Open in board"]) {
+  test(`session section closes its host popover after ${action}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ hasTouch: true });
+      await page.goto(`${url}?status=planning&popovers&pointer=coarse&hold-ready&open-board`);
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate(() => {
+        __workflows(["ff", "continue"]);
+        __releaseReady();
+      });
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      await section
+        .getByRole("button", { name: "first-change", exact: true })
+        .tap({ timeout: 3000 });
+      const flyout = page.frameLocator('iframe[title="OpenSpec test popover"]');
+      if (action === "Open in board") await page.evaluate(() => delete window.__releaseReady);
+      await flyout.getByRole("button", { name: action, exact: true }).tap({ timeout: 3000 });
+      await page.waitForFunction(
+        () => {
+          const opened = __requests.find(({ path }) => path === "popover-open");
+          return __requests.some(
+            ({ path, body }) => path === "popover-close" && body.id === opened?.body.id,
+          );
+        },
+        null,
+        { timeout: 3000 },
+      );
+      await page
+        .locator('iframe[title="OpenSpec test popover"]')
+        .waitFor({ state: "detached", timeout: 3000 });
+      if (action === "Open in board") {
+        const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+        await page.waitForFunction(() => typeof window.__releaseReady === "function", null, {
+          timeout: 3000,
+        });
+        await page.evaluate(() => __releaseReady());
+        await board.getByRole("button", { name: "Back to changes" }).waitFor({ timeout: 3000 });
+        await board.getByRole("heading", { name: "first-change", exact: true }).waitFor();
+        assert.deepEqual(
+          await page.evaluate(() =>
+            __requests.filter(({ path }) => path === "/focus" || path === "open-surface"),
+          ),
+          [
+            { path: "/focus", body: { directory, change: "first-change" } },
+            { path: "open-surface", body: { surfaceId: "plugin:openspec-board" } },
+          ],
+        );
+      }
     });
   });
 }

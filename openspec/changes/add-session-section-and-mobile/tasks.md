@@ -179,7 +179,7 @@ One commit per task.
       `skipped`, and `validate` stays. Chip order follows the spec. A read that changes the set or
       stage updates chips in place without moving focus. Implement `cardChips` and
       `planningWorkflow` and use them in `src/status.ts`.
-- [ ] 9.4 Flyout additions. Fake host seam, popover and inline modes: add failing tests that the
+- [x] 9.4 Flyout additions. Fake host seam, popover and inline modes: add failing tests that the
       change flyout shows `update` and `Open in board`, plus `continue` first for a Planning change
       when the set has `ff` and `continue`, and `Untrack` small and right-aligned below.
       `Open in board` posts `/focus` and opens the board, so a same-project board opens the change's

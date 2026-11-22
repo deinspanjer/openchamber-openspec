@@ -12,7 +12,7 @@ import { addButtonIcon } from "./panel/button-icon.js";
 import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
-import { actionPrompt, syncPrompt } from "./panel/prompts.js";
+import { actionPrompt, planningPrompt, syncPrompt } from "./panel/prompts.js";
 import { createStatusCache, type DisplayCard } from "./panel/status-cache.js";
 import {
   appendTrackedChange,
@@ -32,7 +32,14 @@ type Card =
   | { id: string; change: DerivedChange; tasks: Task[] }
   | { id: string; message: string }
   | { id: string; display: DisplayCard; message?: string };
-type ChangeFlyout = { kind: "change"; name: string; stage: Stage; goal: string | null };
+type ChangeFlyout = {
+  kind: "change";
+  name: string;
+  stage: Stage;
+  goal: string | null;
+  directory: string;
+  offerContinue: boolean;
+};
 type TaskFlyout = { kind: "task"; id: string; description: string };
 type ValidationFlyout = {
   kind: "validation";
@@ -279,20 +286,34 @@ async function showError(current: () => boolean, caught: unknown, fallback: stri
 
 async function openBoard(current: () => boolean, target?: { directory: string; change: string }) {
   try {
+    if (!current()) return false;
     if (target) await client.setFocus(target.directory, target.change);
-    if (current()) await host.openSurface("plugin:openspec-board");
+    if (!current()) return false;
+    await host.openSurface("plugin:openspec-board");
+    return current();
   } catch (caught) {
     await showError(current, caught, "Could not open the OpenSpec board.");
+    return false;
   }
 }
 
-async function preparePrompt(change: DerivedChange, text: string, current: () => boolean) {
-  if (!current()) return;
-  const session = sessionId;
+async function preparePrompt(
+  change: string,
+  text: string,
+  current: () => boolean,
+  session = sessionId,
+  seed = seedTrackedChanges,
+) {
+  if (!current()) return false;
   try {
     await host.compose({ text, mode: "replace" });
-    if (!current()) return;
-    if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
+  } catch (caught) {
+    await showError(current, caught, "The workflow prompt could not be prepared.");
+    return false;
+  }
+  if (!current()) return false;
+  const saved = session && appendTrackedChange(host, session, change, current, seed);
+  try {
     await host.toast({
       kind: "success",
       message: "Workflow prompt prepared in the open composer.",
@@ -300,6 +321,8 @@ async function preparePrompt(change: DerivedChange, text: string, current: () =>
   } catch (caught) {
     await showError(current, caught, "The workflow prompt could not be prepared.");
   }
+  await saved;
+  return current();
 }
 
 function taskTitle(task: Task | null) {
@@ -350,7 +373,9 @@ function mountTrackedCard(id: string) {
   const inline = document.createElement("div");
   inline.hidden = true;
   let change: DerivedChange | null = null;
-  const nameAnchor = mountFlyout(nameButton, inline, () => (change ? changeFlyout(change) : null));
+  const nameAnchor = mountFlyout(nameButton, inline, () =>
+    change && scope && workflows ? changeFlyout(change, scope.directory, workflows) : null,
+  );
   const count = document.createElement("span");
   heading.append(count);
   const meter = document.createElement("progress");
@@ -378,7 +403,7 @@ function mountTrackedCard(id: string) {
     size: "xs",
     onClick: () => {
       if (change && chips?.primary !== "ff" && chips?.primary !== "continue")
-        void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
+        void preparePrompt(change.id, actionPrompt(change, "primary"), captureContext());
     },
   });
   const secondaryRoot = document.createElement("span");
@@ -390,7 +415,7 @@ function mountTrackedCard(id: string) {
     variant: "secondary",
     onClick: () => {
       if (change && chips?.secondary)
-        void preparePrompt(change, actionPrompt(change, chips.secondary), captureContext());
+        void preparePrompt(change.id, actionPrompt(change, chips.secondary), captureContext());
     },
   });
   const sync = mountButton(syncRoot, {
@@ -398,7 +423,7 @@ function mountTrackedCard(id: string) {
     size: "xs",
     variant: "secondary",
     onClick: () => {
-      if (change) void preparePrompt(change, syncPrompt(change), captureContext());
+      if (change) void preparePrompt(change.id, syncPrompt(change), captureContext());
     },
   });
   const validationInline = document.createElement("div");
@@ -573,12 +598,18 @@ function fitText(text: string, max: number, measure: (value: string) => number):
   return ellipsize(text, low);
 }
 
-function changeFlyout(change: DerivedChange): ChangeFlyout {
+function changeFlyout(
+  change: DerivedChange,
+  directory: string,
+  workflows: ReadonlySet<Workflow>,
+): ChangeFlyout {
   const data: ChangeFlyout = {
     kind: "change",
     name: change.id,
     stage: change.stage,
     goal: null,
+    directory,
+    offerContinue: change.stage === "planning" && workflows.has("ff") && workflows.has("continue"),
   };
   if (change.goal) {
     data.goal = fitText(change.goal, 4_000, (goal) => JSON.stringify({ ...data, goal }).length);
@@ -651,6 +682,10 @@ function decodeFlyout(value: unknown): Flyout | null {
     value.kind !== "change" ||
     !("name" in value) ||
     typeof value.name !== "string" ||
+    !("directory" in value) ||
+    typeof value.directory !== "string" ||
+    !("offerContinue" in value) ||
+    typeof value.offerContinue !== "boolean" ||
     !("goal" in value) ||
     (value.goal !== null && typeof value.goal !== "string") ||
     !("stage" in value) ||
@@ -660,15 +695,25 @@ function decodeFlyout(value: unknown): Flyout | null {
       value.stage !== "complete")
   )
     return null;
-  return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
+  return {
+    kind: "change",
+    name: value.name,
+    goal: value.goal,
+    stage: value.stage,
+    directory: value.directory,
+    offerContinue: value.offerContinue,
+  };
 }
 
-function renderFlyout(
-  container: HTMLElement,
-  data: Flyout,
-  untrack?: () => void,
-  openInBoard?: () => void,
-) {
+type FlyoutContext = {
+  session: string | null;
+  current: () => boolean;
+  seed: () => string[] | null;
+  afterAction?: () => void;
+  afterUntrack: () => void;
+};
+
+function renderFlyout(container: HTMLElement, data: Flyout, context: FlyoutContext) {
   container.classList.add("flyout");
   if (data.kind === "task") {
     const description = document.createElement("p");
@@ -714,22 +759,48 @@ function renderFlyout(
     goal.textContent = data.goal;
     container.append(goal);
   }
-  const actions: ReturnType<typeof mountButton>[] = [];
-  if (openInBoard)
-    actions.push(
-      mountButton(container, {
-        label: "Open in board",
-        variant: "secondary",
-        size: "xs",
-        onClick: openInBoard,
-      }),
-    );
-  if (untrack) {
+  const row = document.createElement("div");
+  row.className = "card-actions";
+  container.append(row);
+  const { session, current, seed, afterAction, afterUntrack } = context;
+  const actions = (
+    data.offerContinue ? (["continue", "update"] as const) : (["update"] as const)
+  ).map((intent) =>
+    mountButton(row, {
+      label: intent,
+      variant: "secondary",
+      size: "xs",
+      onClick: () => {
+        void preparePrompt(
+          data.name,
+          planningPrompt({ id: data.name, goal: data.goal }, intent),
+          current,
+          session,
+          seed,
+        ).then((prepared) => {
+          if (prepared) afterAction?.();
+        });
+      },
+    }),
+  );
+  actions.push(
+    mountButton(row, {
+      label: "Open in board",
+      variant: "secondary",
+      size: "xs",
+      onClick: () => {
+        void openBoard(current, { directory: data.directory, change: data.name }).then((opened) => {
+          if (opened) afterAction?.();
+        });
+      },
+    }),
+  );
+  if (session) {
     const button = mountButton(container, {
       label: "Untrack",
       variant: "secondary",
       size: "xs",
-      onClick: untrack,
+      onClick: () => void untrackChange(session, data.name, current, seed, afterUntrack),
     });
     container.lastElementChild!.classList.add("status-link", "untrack-link");
     actions.push(button);
@@ -760,23 +831,15 @@ function mountFlyout(
         button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
     } else {
       inline.hidden = false;
-      const session = sessionId;
-      const current = captureContext();
-      const targetDirectory = directory;
-      actions = renderFlyout(
-        inline,
-        data,
-        session && data.kind === "change"
-          ? () =>
-              void untrackChange(session, data.name, current, seedTrackedChanges, () => {
-                closeInline();
-                read();
-              })
-          : undefined,
-        targetDirectory && data.kind === "change"
-          ? () => void openBoard(current, { directory: targetDirectory, change: data.name })
-          : undefined,
-      );
+      actions = renderFlyout(inline, data, {
+        session: sessionId,
+        current: captureContext(),
+        seed: seedTrackedChanges,
+        afterUntrack: () => {
+          closeInline();
+          read();
+        },
+      });
       button.setAttribute("aria-expanded", "true");
     }
   }
@@ -1088,7 +1151,7 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
 }
 
 let lastHeight = 0;
-let popoverSession: string | null = null;
+let popoverSession: string | null | undefined;
 let popoverActions: ReturnType<typeof mountButton>[] | undefined;
 const resize = new ResizeObserver(() => {
   const height = Math.ceil(panelRoot.getBoundingClientRect().height);
@@ -1110,35 +1173,21 @@ const offReady = host.onReady((ready) => {
       panelRoot.replaceChildren();
       const data = decodeFlyout(ready.popover?.data);
       const popoverId = ready.popover?.id;
-      const targetDirectory = ready.directory;
-      if (data) {
-        popoverActions = renderFlyout(
-          panelRoot,
-          data,
-          nextSession && popoverId && data.kind === "change"
-            ? () =>
-                void untrackChange(
-                  nextSession,
-                  data.name,
-                  () => !disposed && popoverSession === nextSession,
-                  () => [data.name],
-                  () =>
-                    void host.closePopover(popoverId).catch((caught: unknown) => {
-                      console.warn("Could not close the OpenSpec flyout.", caught);
-                    }),
-                )
-            : undefined,
-          targetDirectory && data.kind === "change"
-            ? () =>
-                void openBoard(() => !disposed && popoverSession === nextSession, {
-                  directory: targetDirectory,
-                  change: data.name,
-                })
-            : undefined,
-        );
+      if (data && popoverId) {
+        const close = () =>
+          void host.closePopover(popoverId).catch((caught: unknown) => {
+            console.warn("Could not close the OpenSpec flyout.", caught);
+          });
+        popoverActions = renderFlyout(panelRoot, data, {
+          session: nextSession,
+          current: () => !disposed && popoverSession === nextSession,
+          seed: () => (data.kind === "change" ? [data.name] : []),
+          afterAction: close,
+          afterUntrack: close,
+        });
       } else panelRoot.textContent = "OpenSpec details are unavailable.";
     } else if (nextSession !== popoverSession) {
-      popoverSession = null;
+      popoverSession = undefined;
       popoverActions?.forEach((action) => action.update({ disabled: true }));
     }
     resize.observe(panelRoot);
@@ -1156,8 +1205,8 @@ const offDirectory = host.onDirectory((next) => {
 });
 const offSession = host.onSession((next) => {
   if (!popoverFrame) updateContext(directory, next?.id ?? null);
-  else if (next?.id !== popoverSession) {
-    popoverSession = null;
+  else if ((next?.id ?? null) !== popoverSession) {
+    popoverSession = undefined;
     popoverActions?.forEach((action) => action.update({ disabled: true }));
   }
 });
