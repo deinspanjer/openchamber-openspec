@@ -2820,11 +2820,11 @@ Report what you synced without archiving the change.`;
   function resolveSessionChanges(sessionId2, sessions2, saved, active2) {
     const candidate = sessions2?.sessions.find(({ id }) => id === sessionId2);
     const coverage = sessions2?.coverage.find(({ directory: directory2 }) => directory2 === candidate?.directory);
-    const record2 = coverage?.state === "ready" ? candidate : void 0;
+    if (saved === null && candidate && coverage?.state !== "ready") return null;
     return resolveTrackedChanges({
       saved,
-      items: record2?.items ?? [],
-      worktreeName: record2?.worktree?.name ?? null,
+      items: candidate?.items ?? [],
+      worktreeName: candidate?.worktree?.name ?? null,
       active: active2
     }).changes;
   }
@@ -2835,6 +2835,7 @@ Report what you synced without archiving the change.`;
       if (!current()) return false;
       const base = saved ?? await seed();
       if (!current()) return false;
+      if (base === null) throw new Error("The session's directory coverage is not ready.");
       const changes = update(base);
       if (saved && changes === saved) return true;
       const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));
@@ -3039,7 +3040,7 @@ Report what you synced without archiving the change.`;
             const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
             if (!current()) return;
             if (saved) read();
-            else await showError(current, null, "Could not save the tracked OpenSpec change.");
+            else await showError(current, null, "Could not track the OpenSpec change. Try again.");
           })();
         }
       });
@@ -3565,7 +3566,7 @@ Report what you synced without archiving the change.`;
         }
         const byId = new Map(listing.changes.map((item) => [item.id, item]));
         const active2 = new Set(byId.keys());
-        const changes = resolveSessionChanges(capturedSession, sessions, saved, active2);
+        const changes = resolveSessionChanges(capturedSession, sessions, saved, active2) ?? [];
         selection2 = { active: active2, saved, changes };
         const cards = await Promise.all(
           changes.map(async (id) => {
@@ -3616,7 +3617,7 @@ Report what you synced without archiving the change.`;
           if (!current()) return;
           sessions = snapshot;
           if (selection2 && !sameChanges(
-            resolveSessionChanges(sessionId, sessions, selection2.saved, selection2.active),
+            resolveSessionChanges(sessionId, sessions, selection2.saved, selection2.active) ?? [],
             selection2.changes
           )) {
             epoch++;

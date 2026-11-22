@@ -7972,11 +7972,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   function resolveSessionChanges(sessionId, sessions, saved, active2) {
     const candidate = sessions?.sessions.find(({ id }) => id === sessionId);
     const coverage = sessions?.coverage.find(({ directory }) => directory === candidate?.directory);
-    const record2 = coverage?.state === "ready" ? candidate : void 0;
+    if (saved === null && candidate && coverage?.state !== "ready") return null;
     return resolveTrackedChanges({
       saved,
-      items: record2?.items ?? [],
-      worktreeName: record2?.worktree?.name ?? null,
+      items: candidate?.items ?? [],
+      worktreeName: candidate?.worktree?.name ?? null,
       active: active2
     }).changes;
   }
@@ -7987,6 +7987,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       if (!current()) return false;
       const base = saved ?? await seed();
       if (!current()) return false;
+      if (base === null) throw new Error("The session's directory coverage is not ready.");
       const changes = update(base);
       if (saved && changes === saved) return true;
       const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));

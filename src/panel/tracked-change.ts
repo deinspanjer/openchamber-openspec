@@ -21,14 +21,14 @@ export function resolveSessionChanges(
   sessions: GuestSessionsSnapshot | null,
   saved: string[] | null,
   active: ReadonlySet<string>,
-) {
+): string[] | null {
   const candidate = sessions?.sessions.find(({ id }) => id === sessionId);
   const coverage = sessions?.coverage.find(({ directory }) => directory === candidate?.directory);
-  const record = coverage?.state === "ready" ? candidate : undefined;
+  if (saved === null && candidate && coverage?.state !== "ready") return null;
   return resolveTrackedChanges({
     saved,
-    items: record?.items ?? [],
-    worktreeName: record?.worktree?.name ?? null,
+    items: candidate?.items ?? [],
+    worktreeName: candidate?.worktree?.name ?? null,
     active,
   }).changes;
 }
@@ -37,7 +37,7 @@ export async function updateTrackedChanges(
   host: HostClient,
   sessionId: string,
   current: () => boolean,
-  seed: () => string[] | Promise<string[]>,
+  seed: () => string[] | null | Promise<string[] | null>,
   update: (changes: string[]) => string[],
 ) {
   try {
@@ -46,6 +46,7 @@ export async function updateTrackedChanges(
     if (!current()) return false;
     const base = saved ?? (await seed());
     if (!current()) return false;
+    if (base === null) throw new Error("The session's directory coverage is not ready.");
     const changes = update(base);
     if (saved && changes === saved) return true;
     const keys = (await host.storage.keys()).filter((key) => key.startsWith(prefix));
@@ -89,7 +90,7 @@ export function appendTrackedChange(
   sessionId: string,
   change: string,
   current: () => boolean,
-  seed: () => string[] | Promise<string[]>,
+  seed: () => string[] | null | Promise<string[] | null>,
 ) {
   return updateTrackedChanges(host, sessionId, current, seed, (choices) =>
     choices.includes(change) ? choices : [...choices, change],

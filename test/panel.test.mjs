@@ -474,21 +474,23 @@ function hostHtml(statusCase, pointer, popovers) {
         return;
       }
       if (message.type === "workspace-read") {
-        window.__requests.push({path:message.type,body:message.payload});
-        const query = message.payload;
-        reply(query.kind === "projects" ? {kind:"projects",state:"ready",projects} :
-          query.kind === "worktrees" ? {kind:"worktrees",projectId:query.projectId,state:"ready",worktrees} :
-           {kind:"sessions",projectId:query.projectId,state:"ready",coverage:[{ directory: statusDirectory, state: "ready" }],sessions});
+         window.__requests.push({path:message.type,body:message.payload});
+         const query = message.payload;
+         const sessionState = statusCase === "unready-tracking" ? "loading" : "ready";
+         reply(query.kind === "projects" ? {kind:"projects",state:"ready",projects} :
+           query.kind === "worktrees" ? {kind:"worktrees",projectId:query.projectId,state:"ready",worktrees} :
+           {kind:"sessions",projectId:query.projectId,state:sessionState,coverage:[{ directory: statusDirectory, state: sessionState }],sessions});
         return;
       }
       if (message.type === "workspace-subscribe") {
         window.__requests.push({path:message.type,body:message.payload});
         const { subscriptionId, query } = message.payload;
-        const coverage = [{ directory: statusDirectory, state: "ready" }];
+         const sessionState = statusCase === "unready-tracking" ? "loading" : "ready";
+         const coverage = [{ directory: statusDirectory, state: sessionState }];
         if (statusCase === "other-directory-error") coverage.push({ directory: "/tmp/other-worktree", state: "error" });
         event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "workspace",
           payload: { subscriptionId, snapshot: { kind: "sessions", projectId: query.projectId,
-            state: statusCase === "other-directory-error" ? "error" : "ready", coverage, sessions } } }, "*");
+             state: statusCase === "other-directory-error" ? "error" : sessionState, coverage, sessions } } }, "*");
         reply();
         return;
       }
@@ -918,6 +920,55 @@ test("session section isolates a failed card and refreshes each tracked change w
     await page.close();
   });
 });
+
+for (const surface of ["section", "board"]) {
+  test(`unready session coverage prevents the ${surface} from replacing a derived change`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=unready-tracking`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const track = section.getByRole("button", { name: "＋ Track a change" });
+      await track.waitFor();
+      const warned = page.waitForEvent("console", {
+        predicate: (message) =>
+          message.type() === "warning" && /tracked OpenSpec/.test(message.text()),
+        timeout: 5000,
+      });
+      if (surface === "section") {
+        await track.click();
+        await section
+          .getByRole("list", { name: "Changes" })
+          .getByRole("button", { name: "second-change" })
+          .click();
+      } else {
+        await page.evaluate(() => __mountBoard());
+        const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+        await board
+          .locator(".change-card")
+          .filter({ hasText: "second-change" })
+          .getByRole("button", { name: "apply", exact: true })
+          .click();
+        await board.getByRole("menuitem", { name: "Prepare in current chat" }).click();
+        await page.waitForFunction(() =>
+          __requests.some(({ path, body }) => path === "toast" && body.kind === "success"),
+        );
+        assert.match(
+          await page.evaluate(() => __draft()),
+          /openspec-apply-change.*"second-change"/,
+        );
+      }
+      await warned;
+      if (surface === "section")
+        await page.waitForFunction(() =>
+          __requests.some(
+            ({ path, body }) =>
+              path === "toast" && body.kind === "error" && /try again/i.test(body.message),
+          ),
+        );
+      assert.deepEqual(await page.evaluate(() => __stored()), {});
+    });
+  });
+}
 
 test("session section orders the picker by task counts and persists a choice", async () => {
   await withPanel(async (browser, url) => {

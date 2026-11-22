@@ -201,7 +201,7 @@ function updatePicker(listing: Listing, tracked: string[]) {
           const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
           if (!current()) return;
           if (saved) read();
-          else await showError(current, null, "Could not save the tracked OpenSpec change.");
+          else await showError(current, null, "Could not track the OpenSpec change. Try again.");
         })();
       },
     });
@@ -759,7 +759,7 @@ async function untrackChange(
   session: string,
   change: string,
   current: () => boolean,
-  seed: () => string[],
+  seed: () => string[] | null,
   onSaved: () => void,
 ) {
   const saved = await updateTrackedChanges(host, session, current, seed, (changes) =>
@@ -804,7 +804,7 @@ function read() {
       }
       const byId = new Map(listing.changes.map((item) => [item.id, item]));
       const active = new Set(byId.keys());
-      const changes = resolveSessionChanges(capturedSession, sessions, saved, active);
+      const changes = resolveSessionChanges(capturedSession, sessions, saved, active) ?? [];
       selection = { active, saved, changes };
       const cards = await Promise.all(
         changes.map(async (id): Promise<Card> => {
@@ -859,7 +859,7 @@ function subscribeToProject(capturedDirectory: string) {
         if (
           selection &&
           !sameChanges(
-            resolveSessionChanges(sessionId, sessions, selection.saved, selection.active),
+            resolveSessionChanges(sessionId, sessions, selection.saved, selection.active) ?? [],
             selection.changes,
           )
         ) {
