@@ -2949,6 +2949,80 @@ test("presentation page fills short boards and preserves long board and detail s
   });
 });
 
+test("board tabs retain the Changes cards, scroll and focus without reading again", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 420, height: 460 } });
+    await page.goto(`${url}?hold-ready`);
+    const panel = page.frameLocator("iframe");
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __edit("Completed");
+      for (let i = 0; i < 16; i++) __recreate(`long-board-${String(i).padStart(2, "0")}`);
+      __releaseReady();
+    });
+    const last = panel.getByRole("button", { name: "long-board-15", exact: true });
+    await last.waitFor();
+    const tabs = panel.getByRole("tablist", { name: "OpenSpec views" });
+    const changes = tabs.getByRole("tab", { name: "Changes", exact: true });
+    const archived = tabs.getByRole("tab", { name: "Archived", exact: true });
+    const specs = tabs.getByRole("tab", { name: "Specs", exact: true });
+    await changes.waitFor({ timeout: 3000 });
+    assert.equal(await changes.getAttribute("aria-selected"), "true");
+    assert.equal(await tabs.evaluate((node) => node.closest("header") === null), true);
+    const before = await page.evaluate(() => __requests.length);
+    await last.scrollIntoViewIfNeeded();
+    const scroll = await last.evaluate((node) => {
+      node.focus({ preventScroll: true });
+      window.lastChangeControl = node;
+      return window.scrollY;
+    });
+    assert.ok(scroll > 0);
+    await archived.evaluate((node) => node.click());
+    assert.equal(await archived.getAttribute("aria-selected"), "true");
+    assert.equal(await last.count(), 0);
+    await specs.evaluate((node) => node.click());
+    assert.equal(await specs.getAttribute("aria-selected"), "true");
+    assert.equal(await panel.getByRole("button", { name: "new change" }).isEnabled(), true);
+    assert.equal(await panel.getByRole("button", { name: "archive all" }).isEnabled(), true);
+    const search = panel.getByRole("searchbox", { name: "Search changes" });
+    await search.fill("long-board");
+    await changes.evaluate((node) => node.click());
+    assert.equal(await search.inputValue(), "long-board");
+    assert.equal(await panel.getByRole("button", { name: "first-change", exact: true }).count(), 0);
+    assert.deepEqual(
+      await last.evaluate((node) => ({
+        same: node === window.lastChangeControl,
+        focused: document.activeElement === node,
+        scroll: window.scrollY,
+      })),
+      { same: true, focused: true, scroll },
+    );
+    await search.fill("Recreated goal");
+    assert.equal(await last.count(), 0);
+    assert.equal(await page.evaluate(() => __requests.length), before);
+  });
+});
+
+test("coarse-pointer board tabs are touch-sized and reachable with arrow keys", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 320, height: 700 }, hasTouch: true });
+    await page.goto(`${url}?pointer=coarse`);
+    const tabs = page.frameLocator("iframe").getByRole("tablist", { name: "OpenSpec views" });
+    const changes = tabs.getByRole("tab", { name: "Changes", exact: true });
+    const archived = tabs.getByRole("tab", { name: "Archived", exact: true });
+    const specs = tabs.getByRole("tab", { name: "Specs", exact: true });
+    await changes.waitFor({ timeout: 3000 });
+    for (const tab of [changes, archived, specs]) assert.ok((await tab.boundingBox()).height >= 44);
+    await changes.press("ArrowRight");
+    assert.equal(await archived.getAttribute("aria-selected"), "true");
+    assert.equal(await archived.evaluate((node) => document.activeElement === node), true);
+    await archived.press("ArrowRight");
+    assert.equal(await specs.getAttribute("aria-selected"), "true");
+    await specs.press("ArrowLeft");
+    assert.equal(await archived.getAttribute("aria-selected"), "true");
+  });
+});
+
 test("one board load requests one listing, workflow read and summaries batch", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
@@ -5631,6 +5705,8 @@ test("board title and toolbar reflow as intact rows without moving the gutter", 
           actionsTop: actions.top,
           toolbarTop: toolbar.top,
           headerBottom: rect(".board-header").bottom,
+          tabsTop: rect(".board-tabs").top,
+          tabsBottom: rect(".board-tabs").bottom,
           bodyTop: rect(".board-body").top,
           boardTop: rect(".board").top,
           searchWidth: search.width,
@@ -5661,8 +5737,9 @@ test("board title and toolbar reflow as intact rows without moving the gutter", 
       );
       assert.ok(layout.actionsRight <= width - 15);
       assert.ok(layout.toolbarTop > layout.titleTop);
-      assert.equal(layout.bodyTop - layout.headerBottom, 24);
-      assert.equal(layout.boardTop - layout.headerBottom, 24);
+      assert.ok(layout.tabsTop >= layout.headerBottom);
+      assert.equal(layout.bodyTop - layout.tabsBottom, 24);
+      assert.equal(layout.boardTop - layout.tabsBottom, 24);
       if (width === 320) {
         assert.ok(layout.tallyTop > layout.titleTop);
         assert.ok(layout.actionsTop > layout.searchTop);
@@ -6043,9 +6120,11 @@ test("pre-removal summary cannot restore a deleted card, but a new listing can s
       __recreate("first-change");
       __releaseListing();
     });
-    await panel.getByRole("button", { name: "first-change" }).waitFor();
-    await panel.getByLabel("Search changes").fill("Recreated goal");
-    assert.equal(await panel.getByRole("button", { name: "first-change" }).count(), 1);
+    await panel.getByRole("button", { name: "first-change" }).click();
+    await panel
+      .getByRole("region", { name: "Recorded objective" })
+      .getByText("Recreated goal")
+      .waitFor();
     await page.close();
   });
 });

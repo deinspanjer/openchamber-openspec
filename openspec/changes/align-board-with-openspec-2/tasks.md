@@ -26,7 +26,7 @@ task.
 
 ## 2. Board views
 
-- [ ] 2.1 Tabs. Same seam: add failing tests that `Changes`, `Archived` and `Specs` tabs render
+- [x] 2.1 Tabs. Same seam: add failing tests that `Changes`, `Archived` and `Specs` tabs render
       below the header with `Changes` selected, and that switching back to `Changes` keeps its
       cards, scroll and focus without a read. Search filters the shown view, and `new change` and
       `archive all` stay available. Tabs are arrow-key operable and at least 44px tall on a coarse

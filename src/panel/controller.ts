@@ -3,7 +3,7 @@ import { deriveChange, type DerivedChange } from "../model.js";
 import { documentKey, type Task, type Workflow } from "../contracts.js";
 import { createClient, ServiceRequestError, type Scope } from "./client.js";
 import { createResources, type ReadState } from "./resources.js";
-import { mountBoardView } from "./board-view.js";
+import { mountBoardView, type BoardView } from "./board-view.js";
 import { mountDetailView, taskArtifact } from "./detail-view.js";
 import { mountCreateDialog } from "./create-dialog.js";
 import { mountDeleteDialog } from "./delete-dialog.js";
@@ -48,6 +48,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let settled = false;
   let errorMessage: string | null = null;
   let search = "";
+  let boardTab: BoardView = "changes";
   let selectedChange: DerivedChange | null = null;
   let selectedArtifact = "";
   let activeView: "document" | "tasks" = "document";
@@ -88,6 +89,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     detailOpening++;
     readGeneration++;
     search = "";
+    boardView.resetPositions();
     errorMessage = null;
     render();
   }
@@ -761,6 +763,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       search = value;
       render();
     },
+    select: (view) => {
+      boardTab = view;
+      render();
+    },
   });
   const detailRoot = document.createElement("div");
   appRoot.append(detailRoot);
@@ -886,6 +892,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       error: errorMessage,
       failures,
       workflows,
+      view: boardTab,
       cards: changes.map((change) => ({
         change,
         stale: staleIds.has(change.id),

@@ -1,4 +1,4 @@
-import { mountButton, mountProgress, mountSearchField } from "@openchamber/sdk/ui";
+import { mountButton, mountProgress, mountSearchField, mountTabs } from "@openchamber/sdk/ui";
 import type { Workflow } from "../contracts.js";
 import type { DerivedChange } from "../model.js";
 import { stages, workflowLabel } from "./workflow.js";
@@ -6,6 +6,13 @@ import { mountPrimaryAction, type PrimaryIntent } from "./primary-action.js";
 import { mountHelpButton } from "./help-button.js";
 import { addButtonIcon } from "./button-icon.js";
 import { mountAreaBadges } from "./area-badges.js";
+
+const views = [
+  { id: "changes", label: "Changes" },
+  { id: "archived", label: "Archived" },
+  { id: "specs", label: "Specs" },
+] as const;
+export type BoardView = (typeof views)[number]["id"];
 
 export type BoardCard = {
   change: DerivedChange;
@@ -31,6 +38,7 @@ export type BoardState = {
   failures: { id: string; error: string }[];
   cards: BoardCard[];
   workflows: ReadonlySet<Workflow>;
+  view: BoardView;
 };
 
 export function mountBoardView(
@@ -41,6 +49,7 @@ export function mountBoardView(
     retry: () => void;
     search: (value: string) => void;
     help: () => void;
+    select: (view: BoardView) => void;
   },
 ) {
   const main = document.createElement("div");
@@ -109,7 +118,46 @@ export function mountBoardView(
   header.append(heading, toolbar);
   const notices = document.createElement("div");
   notices.className = "board-notices";
-  const board = document.createElement("section");
+  const tabRoot = document.createElement("nav");
+  tabRoot.className = "board-tabs";
+  let view: BoardView = "changes";
+  const tabs = mountTabs(tabRoot, {
+    items: [...views],
+    activeId: view,
+    onChange: (id) => {
+      const next = views.find((item) => item.id === id);
+      if (next) callbacks.select(next.id);
+    },
+  });
+  const tablist = tabRoot.querySelector('[role="tablist"]')!;
+  tablist.setAttribute("aria-label", "OpenSpec views");
+  const panes = {
+    changes: document.createElement("section"),
+    archived: document.createElement("section"),
+    specs: document.createElement("section"),
+  };
+  const positions = new Map<BoardView, { scroll: number; focus: HTMLElement | null }>();
+  const syncTabs = () => {
+    for (const { id } of views) {
+      const pane = panes[id];
+      const tab = tablist.querySelector<HTMLElement>(`[data-id="${id}"]`)!;
+      tab.id = `board-tab-${id}`;
+      tab.setAttribute("aria-controls", pane.id);
+      pane.hidden = view !== id;
+    }
+  };
+  for (const { id } of views) {
+    const pane = panes[id];
+    pane.id = `board-view-${id}`;
+    pane.setAttribute("role", "tabpanel");
+    pane.setAttribute("aria-labelledby", `board-tab-${id}`);
+    pane.addEventListener("focusin", ({ target }) => {
+      if (target instanceof HTMLElement)
+        positions.set(id, { scroll: window.scrollY, focus: target });
+    });
+  }
+  syncTabs();
+  const board = panes.changes;
   board.className = "board";
   const sections = stages.map((stage) => {
     const section = document.createElement("section");
@@ -123,8 +171,8 @@ export function mountBoardView(
     board.append(section);
     return { stage, label, grid, empty };
   });
-  body.append(notices, board);
-  main.append(header, body);
+  body.append(notices, ...Object.values(panes));
+  main.append(header, tabRoot, body);
   root.append(main);
   let noticesMounted: { dispose: () => void }[] = [];
   let noticeSignature = "";
@@ -240,7 +288,18 @@ export function mountBoardView(
     setVisible(visible: boolean) {
       main.hidden = !visible;
     },
+    resetPositions() {
+      positions.clear();
+    },
     update(state: BoardState) {
+      const switched = view !== state.view;
+      const tabHadFocus = switched && tabRoot.contains(document.activeElement);
+      if (switched) {
+        positions.set(view, { scroll: window.scrollY, focus: positions.get(view)?.focus ?? null });
+        view = state.view;
+        tabs.update({ activeId: view });
+        syncTabs();
+      }
       project.textContent =
         state.directory?.split("/").filter(Boolean).at(-1) ?? "No project selected";
       newChange.update({ disabled: !state.canCreate });
@@ -300,16 +359,13 @@ export function mountBoardView(
       }
       const query = state.search.trim().toLocaleLowerCase();
       for (const entry of cards.values()) {
-        const change = entry.current.change;
-        if (!`${change.id} ${change.goal ?? ""}`.toLocaleLowerCase().includes(query))
-          entry.node.remove();
+        if (!entry.current.change.id.toLocaleLowerCase().includes(query)) entry.node.remove();
       }
       for (const { stage, label, grid, empty } of sections) {
         const matching = state.cards
           .filter(
             ({ change }) =>
-              change.stage === stage.id &&
-              `${change.id} ${change.goal ?? ""}`.toLocaleLowerCase().includes(query),
+              change.stage === stage.id && change.id.toLocaleLowerCase().includes(query),
           )
           .sort((a, b) => (a.change.id < b.change.id ? -1 : a.change.id > b.change.id ? 1 : 0));
         label.textContent = `${stage.label} ${matching.length}`;
@@ -334,6 +390,15 @@ export function mountBoardView(
           if (grid.children[index] !== node) grid.insertBefore(node, grid.children[index] ?? null);
         });
       }
+      if (switched) {
+        const position = positions.get(view);
+        const previous = position?.focus;
+        const fallback = tablist.querySelector<HTMLElement>('[aria-selected="true"]');
+        (previous?.isConnected ? previous : tabHadFocus ? fallback : null)?.focus({
+          preventScroll: true,
+        });
+        window.scrollTo(0, position?.scroll ?? 0);
+      }
     },
     dispose() {
       noticesMounted.forEach((handle) => handle.dispose());
@@ -350,6 +415,7 @@ export function mountBoardView(
       refresh.dispose();
       help.dispose();
       search.dispose();
+      tabs.dispose();
       main.remove();
     },
   };
