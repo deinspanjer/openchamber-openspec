@@ -66,3 +66,36 @@ export function deriveChange(change: ChangeSummary): DerivedChange {
 export function isChangeName(value: string): boolean {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
+
+export type TrackedSource = "saved" | "item" | "worktree";
+
+export function resolveTrackedChange({
+  saved,
+  items,
+  worktreeName,
+  active,
+}: {
+  saved: string | null;
+  items: { id: string; data?: unknown }[];
+  worktreeName: string | null;
+  active: ReadonlySet<string>;
+}): { change: string; source: TrackedSource } | { change: null; staleSaved: string | null } {
+  if (saved !== null && active.has(saved)) return { change: saved, source: "saved" };
+  for (const { data } of items) {
+    if (
+      data &&
+      typeof data === "object" &&
+      "kind" in data &&
+      data.kind === "change" &&
+      "change" in data &&
+      typeof data.change === "string" &&
+      active.has(data.change)
+    )
+      return { change: data.change, source: "item" };
+  }
+  const legacy = items.find(({ id, data }) => data === undefined && active.has(id));
+  if (legacy) return { change: legacy.id, source: "item" };
+  if (worktreeName !== null && active.has(worktreeName))
+    return { change: worktreeName, source: "worktree" };
+  return { change: null, staleSaved: saved };
+}

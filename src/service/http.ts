@@ -141,10 +141,17 @@ export function createOpenSpecService(
                         },
                         expectedPlanning,
                       )
-                    : Promise.resolve({
-                        ok: false as const,
-                        error: serviceError("NOT_FOUND", "Route not found.", 404),
-                      });
+                    : path === "/summary"
+                      ? adapter.summary(
+                          directory,
+                          requiredString(body, "change"),
+                          requiredString(body, "expectedRoot"),
+                          expectedPlanning,
+                        )
+                      : Promise.resolve({
+                          ok: false as const,
+                          error: serviceError("NOT_FOUND", "Route not found.", 404),
+                        });
       let timer: NodeJS.Timeout | undefined;
       const result = await Promise.race([
         work,

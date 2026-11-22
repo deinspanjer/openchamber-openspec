@@ -2804,6 +2804,21 @@ ${GUEST_UI_LOOK_CSS}`;
           throw new ServiceRequestError("PLANNING_CHANGED", "OpenSpec planning target changed.");
         return listing;
       },
+      summary: async (scope, change) => {
+        const value = decode(
+          await request("/summary", {
+            directory: scope.directory,
+            expectedRoot: scope.root,
+            expectedPlanning: scope.planning,
+            change
+          }),
+          decodeSummary
+        );
+        if (value.root !== scope.root)
+          throw new ServiceRequestError("ROOT_CHANGED", "OpenSpec root changed.");
+        if (value.id !== change) throw invalid();
+        return value;
+      },
       summaries: async (scope, entries2) => {
         const value = decode(
           await request("/summaries", {
@@ -7865,7 +7880,32 @@ Use your skill tool to load and invoke the openspec-archive-change skill for eac
 
 Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`;
 
-  // src/panel/worktree.ts
+  // src/panel/prompts.ts
+  function actionPrompt(change, intent) {
+    const target = `OpenSpec change "${change.id}"`;
+    const goal = change.goal?.trim() ? `
+Goal: ${change.goal}` : "";
+    if (intent === "explore")
+      return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}
+
+Investigate the goal, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation. If no goal is recorded, inspect existing context and ask the user to clarify it if necessary; do not invent a goal.`;
+    if (change.stage === "planning")
+      return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}
+
+Inspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
+    if (change.stage === "ready" || change.stage === "progress") {
+      const progress = change.stage === "progress" ? `
+${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.` : "";
+      return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress}
+
+Complete all remaining tasks in ${target}, then verify the implementation against its change artefacts. Resolve any issues found and verify again until all tasks are complete and verification passes. If blocked, report the blocker rather than marking unfinished work complete.`;
+    }
+    if (intent === "verify")
+      return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
+    return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+  }
+
+  // src/panel/project.ts
   async function ready(read, subscribe) {
     const initial = await read();
     if (initial.state === "ready") return initial;
@@ -7898,31 +7938,36 @@ Report archived, skipped and blocked changes with reasons. If none qualify, make
       off?.();
     }
   }
-  async function inspectWorktreeDestination(host2, directory, name) {
+  async function findProject(host2, directory) {
     const projects = await ready(
       () => host2.listProjects(),
       (listener) => host2.onProjects(listener)
     );
-    const owners = projects.projects.filter((project2) => project2.directory === directory);
+    const owners = projects.projects.filter((project) => project.directory === directory);
     if (!owners.length) {
       const mappings = await Promise.all(
-        projects.projects.map(async (project2) => ({
-          project: project2,
+        projects.projects.map(async (project) => ({
+          project,
           trees: await ready(
-            () => host2.listWorktrees(project2.id),
-            (listener) => host2.onWorktrees(project2.id, listener)
+            () => host2.listWorktrees(project.id),
+            (listener) => host2.onWorktrees(project.id, listener)
           )
         }))
       );
       owners.push(
-        ...mappings.filter(({ trees: trees2 }) => trees2.worktrees.some((tree) => tree.directory === directory)).map(({ project: project2 }) => project2)
+        ...mappings.filter(({ trees }) => trees.worktrees.some((tree) => tree.directory === directory)).map(({ project }) => project)
       );
     }
     if (owners.length !== 1)
       throw new Error(
         "Cannot identify the originating registered project. No worktree was requested."
       );
-    const project = owners[0];
+    return owners[0];
+  }
+
+  // src/panel/worktree.ts
+  async function inspectWorktreeDestination(host2, directory, name) {
+    const project = await findProject(host2, directory);
     const [trees, sessions] = await Promise.all([
       ready(
         () => host2.listWorktrees(project.id),
@@ -8165,29 +8210,6 @@ Report archived, skipped and blocked changes with reasons. If none qualify, make
           }
         }
       })();
-    }
-    function actionPrompt(change, intent) {
-      const target = `OpenSpec change "${change.id}"`;
-      const goal = change.goal?.trim() ? `
-Goal: ${change.goal}` : "";
-      if (intent === "explore")
-        return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}
-
-Investigate the goal, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation. If no goal is recorded, inspect existing context and ask the user to clarify it if necessary; do not invent a goal.`;
-      if (change.stage === "planning")
-        return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}
-
-Inspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
-      if (change.stage === "ready" || change.stage === "progress") {
-        const progress = change.stage === "progress" ? `
-${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.` : "";
-        return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress}
-
-Complete all remaining tasks in ${target}, then verify the implementation against its change artefacts. Resolve any issues found and verify again until all tasks are complete and verification passes. If blocked, report the blocker rather than marking unfinished work complete.`;
-      }
-      if (intent === "verify")
-        return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
-      return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
     }
     async function preparePrompt(change, captured, originatingEpoch, intent, originatingSession = sessionId) {
       const current = changes.find((item) => item.id === change.id);

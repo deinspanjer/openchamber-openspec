@@ -652,6 +652,59 @@ test("summaries accepts real CLI exit one while keeping a good change", async ()
   });
 });
 
+test("summary returns one scoped change from the real CLI", async (t) => {
+  await withProjects(async (root, other) => {
+    await fixtureChange(root, "first-change", "First goal");
+    await fixtureChange(root, "second-change", "Second goal");
+    await withService(async (url) => {
+      const post = async (path, body = {}) => {
+        const response = await fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory: root, ...body }),
+        });
+        return { status: response.status, value: await response.json() };
+      };
+      const { value: listing } = await post("/changes");
+      const scope = {
+        expectedRoot: listing.root,
+        expectedPlanning: listing.planning,
+        change: "second-change",
+      };
+      await t.test(
+        "returns the requested change in the same shape as a batch summary",
+        async () => {
+          const batch = await post("/summaries", scope);
+          const single = await post("/summary", scope);
+          assert.equal(single.status, 200);
+          assert.equal(single.value.id, "second-change");
+          assert.equal(single.value.goal, "Second goal");
+          assert.deepEqual(
+            single.value,
+            batch.value.changes.find((item) => item.id === "second-change").summary,
+          );
+        },
+      );
+      await t.test("rejects the wrong root", async () => {
+        const result = await post("/summary", {
+          ...scope,
+          expectedRoot: other,
+          expectedPlanning: undefined,
+        });
+        assert.deepEqual([result.status, result.value.error?.code], [409, "ROOT_CHANGED"]);
+      });
+      await t.test("rejects stale planning identity", async () => {
+        const result = await post("/summary", { ...scope, expectedPlanning: "stale" });
+        assert.deepEqual([result.status, result.value.error?.code], [409, "PLANNING_CHANGED"]);
+      });
+      await t.test("rejects an unknown change", async () => {
+        const result = await post("/summary", { ...scope, change: "missing" });
+        assert.deepEqual([result.status, result.value.error?.code], [404, "CHANGE_UNAVAILABLE"]);
+      });
+    });
+  });
+});
+
 test("slimmer read routes use only their working command and reconcile missing tasks", async () => {
   const root = await mockProject("openspec-slim-");
   const changeRoot = join(root, "openspec", "changes", "slim");

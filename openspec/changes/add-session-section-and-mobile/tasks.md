@@ -9,15 +9,15 @@
 
 ## 2. Shared building blocks
 
-- [ ] 2.1 At the model seam (`test/model.test.mjs`), add failing cases for `resolveTrackedChange`:
+- [x] 2.1 At the model seam (`test/model.test.mjs`), add failing cases for `resolveTrackedChange`:
       saved wins, inactive saved falls through and is reported stale, `data.kind: "change"` items,
       legacy id-only items, `archive-all` never resolves, worktree name, nothing resolves. Implement
       it in `src/model.ts`. Verify with `npm run build:model:test && node --test
       test/model.test.mjs`.
-- [ ] 2.2 Move `actionPrompt` from `src/panel/controller.ts` into `src/panel/prompts.ts` and
+- [x] 2.2 Move `actionPrompt` from `src/panel/controller.ts` into `src/panel/prompts.ts` and
       `findProject` out of `src/panel/worktree.ts`, with no output change. Verify the existing
       prompt and worktree tests in `test/panel.test.mjs` pass unchanged after `npm run build`.
-- [ ] 2.3 At the service seam (`test/service.test.mjs`), add failing tests for a `/summary` route
+- [x] 2.3 At the service seam (`test/service.test.mjs`), add failing tests for a `/summary` route
       that returns one change's summary and refuses wrong root, planning identity or unknown change
       like `/summaries`. Implement it in `src/service/http.ts` and `src/service/openspec.ts`, add
       `client.summary()` with `decodeSummary`. Verify with `npm run build && node --test

@@ -7776,6 +7776,17 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     const current = await planningScope(listing.root, expectedPlanning);
     return { ok: true, value: { directory, ...listing, planning: current.planning } };
   }
+  async function summary(directory, change, expectedRoot, expectedPlanning) {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    await validateMetadata(current, change);
+    const state = await changeState(directory, change, current);
+    if ("code" in state) return failure(state);
+    const result = await summaryFor(state, change);
+    await planningScope(expectedRoot, current.planning);
+    return result;
+  }
   async function summaries(directory, expectedRoot, expectedPlanning) {
     const current = await planningScope(expectedRoot, expectedPlanning);
     const parent = (0, import_node_path.join)(current.planningRoot, "changes");
@@ -7816,9 +7827,9 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
         }
         if (typeof status.changeRoot !== "string") throw new Error("Missing change root.");
         const changeRoot = await validatedChange(current, id, status);
-        const summary = await summaryFor({ ...current, changeRoot, status }, id);
-        if (!summary.ok) throw summary.error;
-        changes2.push({ id, summary: summary.value });
+        const summary2 = await summaryFor({ ...current, changeRoot, status }, id);
+        if (!summary2.ok) throw summary2.error;
+        changes2.push({ id, summary: summary2.value });
       } catch (caught) {
         const error = caught instanceof ServiceFault ? caught : serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec change data.", 502);
         changes2.push({ id, error: { code: error.code, message: error.message } });
@@ -8037,7 +8048,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       throw caught;
     }
   }
-  return { changes, summaries, tasks, documentFor, createChange, deleteChange };
+  return { changes, summary, summaries, tasks, documentFor, createChange, deleteChange };
 }
 
 // src/service/http.ts
@@ -8148,6 +8159,11 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
             throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
           mutationDispatched = true;
         },
+        expectedPlanning
+      ) : path === "/summary" ? adapter.summary(
+        directory,
+        requiredString(body, "change"),
+        requiredString(body, "expectedRoot"),
         expectedPlanning
       ) : Promise.resolve({
         ok: false,

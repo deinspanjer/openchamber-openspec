@@ -330,6 +330,23 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     return { ok: true, value: { directory, ...listing, planning: current.planning } };
   }
 
+  async function summary(
+    directory: string,
+    change: string,
+    expectedRoot: string,
+    expectedPlanning?: string,
+  ): Promise<CliResult> {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    await validateMetadata(current, change);
+    const state = await changeState(directory, change, current);
+    if ("code" in state) return failure(state);
+    const result = await summaryFor(state, change);
+    await planningScope(expectedRoot, current.planning);
+    return result;
+  }
+
   async function summaries(
     directory: string,
     expectedRoot: string,
@@ -660,5 +677,5 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     }
   }
 
-  return { changes, summaries, tasks, documentFor, createChange, deleteChange };
+  return { changes, summary, summaries, tasks, documentFor, createChange, deleteChange };
 }

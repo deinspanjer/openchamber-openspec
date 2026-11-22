@@ -2,7 +2,9 @@ import type { HostClient } from "@openchamber/sdk";
 import {
   decodeTaskResponse,
   decodeListing,
+  decodeSummary,
   decodeSummaries,
+  type ChangeMetadata,
   type Task,
   type ListingEntry,
 } from "../contracts.js";
@@ -87,6 +89,21 @@ export function createClient(host: HostClient) {
       if (expectedPlanning && listing.planning !== expectedPlanning)
         throw new ServiceRequestError("PLANNING_CHANGED", "OpenSpec planning target changed.");
       return listing;
+    },
+    summary: async (scope: Scope, change: string): Promise<ChangeMetadata> => {
+      const value = decode(
+        await request("/summary", {
+          directory: scope.directory,
+          expectedRoot: scope.root,
+          expectedPlanning: scope.planning,
+          change,
+        }),
+        decodeSummary,
+      );
+      if (value.root !== scope.root)
+        throw new ServiceRequestError("ROOT_CHANGED", "OpenSpec root changed.");
+      if (value.id !== change) throw invalid();
+      return value;
     },
     summaries: async (
       scope: Scope,
