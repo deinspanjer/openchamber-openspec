@@ -58,7 +58,7 @@
       tests: `completed` for the shown session re-reads once; another session's completion does
       not read; session switch re-resolves and re-reads; stale responses are dropped; header
       Refresh control when `features.statusControls` is present, body button otherwise. Implement.
-- [ ] 4.5 Update `AGENTS.md` (three generated bundles, the section's refresh rule beside the board
+- [x] 4.5 Update `AGENTS.md` (three generated bundles, the section's refresh rule beside the board
       rule) and `README.md` (the section, minimum OpenChamber 2.7.1 for section and phone support).
       Verify `npm run format:check` passes.
 

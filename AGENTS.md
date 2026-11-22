@@ -22,10 +22,10 @@
 
 ## Runtime boundaries
 
-- `src/panel.ts` applies the SDK theme before showing the panel. `src/panel/client.ts` uses the SDK
-  service bridge, never direct CLI execution or browser HTTP. `src/panel/controller.ts` owns
-  context, selection, read scheduling, and workflow actions; `src/panel/resources.ts` retains reads
-  scoped by directory/root/planning target/change.
+- `src/panel.ts` and `src/status.ts` apply the SDK theme before showing their content.
+  `src/panel/client.ts` uses the SDK service bridge, never direct CLI execution or browser HTTP.
+  `src/panel/controller.ts` owns the board's context, selection, read scheduling, and workflow
+  actions. `src/panel/resources.ts` retains reads by directory, root, planning target, and change.
 - Current-chat workflow actions prepare unsent drafts. **Run in new worktree** and confirmed
   **archive all** create sessions and submit their prompts through the SDK.
 - Views own mounted DOM and SDK UI handles. Dispose their handles; theme changes and ordinary
@@ -36,15 +36,18 @@
   processes.
 - The extension manifest is `package.json`'s `openchamber` field, not `service/package.json`. The
   latter keeps generated `service/main.js` CommonJS inside this ESM repository.
-- `panel/main.js` and `service/main.js` are generated installable bundles (ES2022 browser IIFE and
-  Node 22 CJS). Build both after private-protocol changes. Installation does not build them. To
-  activate changes, reinstall/update the extension and restart its service as below. `npm run clean`
-  removes only these two bundles, not `build/`.
+- `panel/main.js` and `panel/status.js` are generated ES2022 browser IIFEs. `service/main.js` is
+  the generated Node 22 CJS bundle. Rebuild all three after private-protocol changes. Installation
+  does not build them. To activate changes, reinstall or update the extension and restart its
+  service as below. `npm run clean` removes only these three bundles, not `build/`.
 
 ## Behaviour constraints
 
 - Load the board only on initial/context loads, explicit Refresh, and after the panel's own create
   or delete. Do not add polling, visibility revalidation, TTL, or board-wide document prefetch.
+- Load the Work Status section on mount, session or project changes, explicit Refresh, and after
+  the shown session finishes a turn. Read the listing and only the tracked change's summary and
+  tasks. Do not poll, refresh on visibility changes, or read board-wide summaries.
 - Retained reads do not authorise writes or recovery. Reconcile uncertain writes with a fresh
   listing in the original context; do not retry the mutation automatically.
 - Deletion checks the active parent and target after its final CLI context check. These checks and
