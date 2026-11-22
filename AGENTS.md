@@ -52,6 +52,10 @@
 - Load the board only on initial/context loads, explicit Refresh, after the panel's own create or
   delete, and once when a claimed focus names an unlisted change. Do not add polling, visibility
   revalidation, TTL, or board-wide document prefetch.
+- Read configured workflows on the board's initial/context loads and explicit Refresh. Reuse the
+  result for other board reloads.
+- Read Archived, the Specs list, and each spec on first open in a context. Refresh invalidates all
+  browse reads and reloads only the visible browse content. A hidden view reads on its next open.
 - Load the Work Status section on mount, session or project changes, explicit Refresh, and after the
   shown session finishes a turn. Re-read after tracking changes. Read one listing and the summary
   and tasks for each tracked change only. Keep unchanged card controls mounted across reads. Do not

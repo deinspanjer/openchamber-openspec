@@ -51,7 +51,7 @@ task.
 
 ## 3. Release
 
-- [ ] 3.1 Update `README.md` (actions follow `openspec config profile`, `verify` needs the verify
+- [x] 3.1 Update `README.md` (actions follow `openspec config profile`, `verify` needs the verify
       workflow, the Archived view needs OpenSpec 2.x) and `AGENTS.md` (the board reads configured
       workflows on initial/context loads and Refresh, and the Archived and Specs views read on first
       open and Refresh while shown). Run `npm version 1.6.0 --no-git-tag-version`, then

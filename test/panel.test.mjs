@@ -2421,12 +2421,16 @@ for (const [scenario, optional] of [
           ),
           [{ path: "open-surface", body: { surfaceId: "plugin:openspec-board" } }],
         );
+        assert.equal(
+          await page.evaluate(() => __completed.filter((path) => path === "/workflows").length),
+          2,
+        );
         await page.evaluate(() => __edit("Completed"));
         await refresh.click();
         await section.getByText("2/2", { exact: true }).waitFor();
         assert.equal(
           await page.evaluate(() => __completed.filter((path) => path === "/workflows").length),
-          2,
+          3,
         );
         assert.equal(
           await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
@@ -4579,8 +4583,7 @@ test("affected area refresh retains handles and focus, wraps labels and discards
     await panel
       .getByRole("button", { name: "refresh", exact: true })
       .evaluate((button) => button.click());
-    await page.waitForFunction((before) => __requests.length >= before + 7, before);
-    await panel.getByRole("button", { name: "refresh", exact: true }).waitFor();
+    await page.waitForFunction((before) => __requests.length >= before + 8, before);
     assert.ok(
       await panel
         .locator(".detail")
@@ -4599,8 +4602,9 @@ test("affected area refresh retains handles and focus, wraps labels and discards
       before,
     );
     assert.equal(requests.filter((path) => path === "/changes").length, 1);
+    assert.equal(requests.filter((path) => path === "/workflows").length, 1);
     assert.equal(requests.filter((path) => path === "/summaries").length, 1);
-    assert.equal(requests.length, 7);
+    assert.equal(requests.length, 8);
     await page.evaluate((id) => __areas(id, ["replacement"]), longTitle);
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     await panel
@@ -5380,7 +5384,10 @@ test("creation and detail use named dialogue, one main landmark and unique docum
     assert.equal(await panel.getByRole("main").count(), 1);
     assert.equal(await panel.locator(".detail-content details .document-content").count(), 3);
     assert.equal(await panel.locator("[id=document-content]").count(), 0);
-    assert.equal(await panel.locator("[role=tabpanel][aria-labelledby]").count(), 1);
+    assert.equal(
+      await panel.getByRole("tabpanel").and(panel.locator("[aria-labelledby]")).count(),
+      1,
+    );
     await page.close();
   });
 });
@@ -7164,7 +7171,9 @@ test("long custom tabs scroll within a 320 px panel without hiding fallback Task
       false,
     );
     assert.equal(
-      await panel.locator(".oc-sdk-tabs").evaluate((node) => node.scrollWidth > node.clientWidth),
+      await panel
+        .getByRole("tablist", { name: "Planning artefacts" })
+        .evaluate((node) => node.scrollWidth > node.clientWidth),
       true,
     );
     await custom.focus();
