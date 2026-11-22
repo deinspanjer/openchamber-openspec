@@ -14,6 +14,7 @@ import {
   type DerivedChange,
 } from "./model.js";
 import { createClient, type Listing } from "./panel/client.js";
+import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
 import { actionPrompt } from "./panel/prompts.js";
 import { readTrackedChange, saveTrackedChange } from "./panel/tracked-change.js";
@@ -403,6 +404,7 @@ const offReady = host.onReady((ready) => {
   const directoryChanged = ready.directory !== directory;
   hasStatusControls = nextStatusControls;
   applyHostReady(ready, document.documentElement);
+  applyDevice(ready.device);
   updateContext(ready.directory, ready.session?.id ?? null);
   if (statusControlsChanged && !directoryChanged) publishRefreshControl();
   resize.observe(panelRoot);

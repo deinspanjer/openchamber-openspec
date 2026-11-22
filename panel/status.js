@@ -2787,6 +2787,11 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   }
 
+  // src/panel/device.ts
+  function applyDevice(device) {
+    document.documentElement.dataset.pointer = device?.pointer ?? (matchMedia("(pointer: coarse)").matches ? "coarse" : "fine");
+  }
+
   // src/panel/project.ts
   async function ready(read2, subscribe) {
     const initial = await read2();
@@ -3260,6 +3265,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     const directoryChanged = ready2.directory !== directory;
     hasStatusControls = nextStatusControls;
     applyHostReady(ready2, document.documentElement);
+    applyDevice(ready2.device);
     updateContext(ready2.directory, ready2.session?.id ?? null);
     if (statusControlsChanged && !directoryChanged) publishRefreshControl();
     resize.observe(panelRoot);

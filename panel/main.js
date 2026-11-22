@@ -8743,12 +8743,18 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     };
   }
 
+  // src/panel/device.ts
+  function applyDevice(device) {
+    document.documentElement.dataset.pointer = device?.pointer ?? (matchMedia("(pointer: coarse)").matches ? "coarse" : "fine");
+  }
+
   // src/panel.ts
   var root = document.querySelector("#root");
   if (!root) throw new Error("Panel root is missing");
   var host = connectHost();
   var offTheme = host.onReady((ready2) => {
     applyHostReady(ready2, document.documentElement);
+    applyDevice(ready2.device);
     document.documentElement.classList.add("oc-themed");
     root.style.visibility = "visible";
   });

@@ -11,6 +11,7 @@
       main,
       .section-content {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
       }
       main {
@@ -62,6 +63,12 @@
       }
       details p {
         white-space: pre-wrap;
+      }
+      [data-pointer="coarse"] :is(button, summary) {
+        min-height: 44px;
+      }
+      [data-pointer="coarse"] summary {
+        line-height: 44px;
       }
     </style>
   </head>

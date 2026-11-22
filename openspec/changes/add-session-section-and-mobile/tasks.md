@@ -64,7 +64,7 @@
 
 ## 5. Phone and touch
 
-- [ ] 5.1 Extend the fake host's `ready` with `device`. At the fake host seam, add failing tests at
+- [x] 5.1 Extend the fake host's `ready` with `device`. At the fake host seam, add failing tests at
       320px with `pointer: "coarse"`: board, detail, dialogue and section controls are at least 44px
       tall; with `pointer: "fine"` existing sizes are unchanged. Implement `data-pointer` and the
       coarse styles in `panel/index.html` and `panel/status.html`. Verify with the focused tests.

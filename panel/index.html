@@ -584,6 +584,24 @@
         justify-content: flex-end;
         flex-wrap: wrap;
       }
+      [data-pointer="coarse"] :is(button, .oc-sdk-input, summary) {
+        min-height: 44px;
+      }
+      [data-pointer="coarse"] .oc-sdk-search-clear {
+        min-width: 44px;
+        right: 0;
+      }
+      [data-pointer="coarse"] .board-search .oc-sdk-search .oc-sdk-input {
+        padding-right: 44px;
+      }
+      [data-pointer="coarse"] :is(.detail-back button, .detail-copy button, .help-control button) {
+        min-width: 44px;
+      }
+      [data-pointer="coarse"] .document-content a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+      }
       @media (max-width: 560px) {
         .board-header .heading {
           display: grid;

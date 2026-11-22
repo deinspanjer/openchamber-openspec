@@ -43,12 +43,13 @@ const artifacts = [
   { id: "specs", status: "done", outputPath: "specs/**/*.md", requires: ["proposal"] },
   { id: "tasks", status: "done", outputPath: "tasks.md", requires: ["specs"] },
 ];
-function hostHtml(statusCase) {
+function hostHtml(statusCase, pointer) {
   const data = JSON.stringify({ directory, root, artifacts, theme: theme("dark") });
   const themes = JSON.stringify({ dark: theme("dark"), light: theme("light") });
   return `<!doctype html><script>
     const { directory, root, artifacts, theme } = ${data};
     const statusCase = ${JSON.stringify(statusCase)};
+    const pointer = ${JSON.stringify(pointer)};
     const statusDirectory = statusCase === "worktree" ? "/tmp/fixture-worktree" : directory;
     let currentRoot = root;
     let currentPlanning = "fixture-planning";
@@ -205,6 +206,8 @@ function hostHtml(statusCase) {
     const ready = { directory: statusDirectory, theme, locale: "en-AU",
       session: statusCase === "new" ? null : { id: "fixture-session" },
       surface: statusCase ? "status" : "panel", connection: { connected: true, account: "" }, settings: {}, item: null };
+    if (pointer) ready.device = { formFactor: pointer === "coarse" ? "phone" : "desktop", pointer,
+      insets: { top: 0, right: 0, bottom: 0, left: 0 }, keyboard: 0 };
     if (statusCase) {
       const worktree = statusCase === "worktree"
         ? { directory: statusDirectory, name: "second-change", branch: "second-change", status: "ready" } : null;
@@ -493,7 +496,7 @@ async function withPanel(run) {
     const { pathname: path, searchParams } = new URL(request.url, "http://127.0.0.1");
     if (path === "/") {
       response.setHeader("content-type", "text/html");
-      response.end(hostHtml(searchParams.get("status")));
+      response.end(hostHtml(searchParams.get("status"), searchParams.get("pointer")));
     } else if (path === "/panel/index.html") {
       response.setHeader("content-type", "text/html");
       response.end(html);
@@ -1052,6 +1055,71 @@ for (const [scenario, header] of [
         await page.evaluate(() => __requests.some((r) => r.path === "status-controls")),
         header,
       );
+      await page.close();
+    });
+  });
+}
+
+for (const pointer of ["coarse", "fine"]) {
+  test(`phone controls respect the host's ${pointer} pointer at 320px`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+      await page.goto(`${url}?pointer=${pointer}`);
+      const frame = page.frameLocator("iframe");
+      const card = frame.getByRole("button", { name: "first-change", exact: true });
+      const create = frame.getByRole("button", { name: "new change", exact: true });
+      await card.waitFor();
+      const search = frame.getByRole("searchbox", { name: "Search changes" });
+      const boardHeight = [
+        (await create.boundingBox()).height,
+        (await search.boundingBox()).height,
+      ];
+      await create.click();
+      const dialog = frame.getByRole("dialog", { name: "New change" });
+      const fields = dialog.getByRole("textbox");
+      const dialogHeight = (await fields.first().boundingBox()).height;
+      const cancel = dialog.getByRole("button", { name: "cancel", exact: true });
+      const cancelHeight = (await cancel.boundingBox()).height;
+      await cancel.click();
+      await card.click();
+      const back = frame.getByRole("button", { name: "Back to changes", exact: true });
+      const tab = frame.getByRole("tab").first();
+      const detailHeight = [(await back.boundingBox()).height, (await tab.boundingBox()).height];
+
+      await page.goto(`${url}?status=progress&pointer=${pointer}`);
+      const section = page.frameLocator("iframe");
+      const change = section.getByRole("button", { name: "Change…", exact: true });
+      await change.waitFor();
+      const sectionHeight = (await change.boundingBox()).height;
+      const summaryHeight = (await section.locator("details summary").boundingBox()).height;
+      await change.click();
+      const option = section.getByRole("menuitem", { name: "second-change", exact: true });
+      await option.waitFor();
+      const optionHeight = (await option.boundingBox()).height;
+      const heights = [
+        ...boardHeight,
+        dialogHeight,
+        cancelHeight,
+        ...detailHeight,
+        sectionHeight,
+        summaryHeight,
+        optionHeight,
+      ];
+      if (pointer === "coarse") {
+        for (const height of heights)
+          assert.ok(height >= 44, `Expected at least 44px, got ${height}px`);
+        assert.equal(
+          await section.locator("html").evaluate((node) => node.scrollWidth > innerWidth),
+          false,
+        );
+      } else {
+        assert.deepEqual(boardHeight, [28, 36]);
+        assert.deepEqual(detailHeight, [28, 28]);
+        assert.equal(cancelHeight, 28);
+        assert.ok(
+          dialogHeight < 44 && sectionHeight < 44 && summaryHeight < 44 && optionHeight < 44,
+        );
+      }
       await page.close();
     });
   });
