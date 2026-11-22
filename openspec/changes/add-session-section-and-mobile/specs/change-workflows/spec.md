@@ -56,9 +56,9 @@ paths. It SHALL NOT send or change files.
 ### Requirement: Board opens on a requested change
 
 When the section requests a change for the board's current project, the board SHALL show that
-change's detail, after its listing loads if it has not yet. A request for another project, or for
-a change not in the listing, SHALL leave the board at its list. A request SHALL take effect once
-and SHALL NOT trigger extra board reads.
+change's detail, after its listing loads if it has not yet. If the change is not listed, the board
+SHALL reload once before deciding whether to show its detail. A request for another project
+SHALL leave the board at its list without reloading. A request SHALL take effect once.
 
 #### Scenario: Requested change exists
 
@@ -68,4 +68,6 @@ and SHALL NOT trigger extra board reads.
 #### Scenario: Requested change missing
 
 - **WHEN** the requested change is not in the board's listing
-- **THEN** the board stays at its list
+- **THEN** the board reloads once and opens the detail if the change is now listed
+- **AND** if the change is still missing, the board stays at its list and shows a toast that names
+  the missing change

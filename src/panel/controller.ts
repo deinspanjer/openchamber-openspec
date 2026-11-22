@@ -33,7 +33,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let changes: DerivedChange[] = [];
   let listedIds: ReadonlySet<string> = new Set();
   let checkFocus = true;
-  let focusedChange: string | null = null;
+  let focusedChange: { name: string; reloaded: boolean } | null = null;
   let staleIds = new Set<string>();
   let unavailableIds = new Set<string>();
   let failures: { id: string; error: string }[] = [];
@@ -242,7 +242,6 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         }
         pendingSummaries = 0;
         render();
-        applyFocus();
       } catch (caught) {
         if (
           directory !== currentDirectory ||
@@ -275,6 +274,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             reconcileQueued = false;
             loadBoard(true);
           }
+          applyFocus();
         }
       }
     })();
@@ -590,11 +590,24 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   }
 
   function applyFocus() {
-    if (pendingSummaries || !focusedChange) return;
+    if (boardActive || !focusedChange) return;
     const target = focusedChange;
     focusedChange = null;
-    const change = changes.find(({ id }) => id === target);
-    if (change && listedIds.has(target)) openDetail(change, scope, epoch);
+    if (listedIds.has(target.name)) {
+      const change = changes.find(({ id }) => id === target.name);
+      if (change) openDetail(change, scope, epoch);
+    } else if (!target.reloaded) {
+      if (selectedChange) closeDetail();
+      focusedChange = { name: target.name, reloaded: true };
+      loadBoard(true);
+    } else {
+      if (selectedChange) closeDetail();
+      void host
+        .toast({ kind: "info", message: `${target.name} isn't in this board's list.` })
+        .catch((caught: unknown) =>
+          console.warn("Could not show the OpenSpec focus notice.", caught),
+        );
+    }
   }
 
   function claimFocus() {
@@ -609,8 +622,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       .claimFocus(captured.directory)
       .then((change) => {
         if (!change || disposed || scope !== captured || epoch !== startingEpoch) return;
-        if (!listedIds.has(change)) return;
-        focusedChange = change;
+        focusedChange = { name: change, reloaded: false };
         applyFocus();
       })
       .catch((caught: unknown) =>
@@ -795,15 +807,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       if (scope && selectedChange && !unavailableIds.has(selectedChange.id))
         deleteView.open({ scope, epoch, selection, name: selectedChange.id });
     },
-    close: () => {
-      const name = selectedChange?.id;
-      selection++;
-      detailOpening++;
-      selectedChange = null;
-      render();
-      requestAnimationFrame(() => window.scrollTo(0, boardScroll));
-      queueMicrotask(() => focusBoard(name));
-    },
+    close: closeDetail,
     selectArtifact,
     selectTasks: () => {
       selectedArtifact = taskArtifact(selectedChange!) ?? "";
@@ -819,6 +823,16 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       if (selectedChange) void preparePrompt(selectedChange, scope, epoch, intent);
     },
   });
+
+  function closeDetail() {
+    const name = selectedChange?.id;
+    selection++;
+    detailOpening++;
+    selectedChange = null;
+    render();
+    requestAnimationFrame(() => window.scrollTo(0, boardScroll));
+    queueMicrotask(() => focusBoard(name));
+  }
 
   function focusBoard(name?: string) {
     const opener = name

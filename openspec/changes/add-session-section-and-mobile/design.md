@@ -200,8 +200,8 @@ takes no target item, so the board would open at its root rather than on the cha
 (`packages/sdk/GUEST_SERVICES.md:204`). A mounted board claims on `host.onServiceEvent`; a board
 mounting later claims once after its first listing. Both use `GET /focus?directory=…`. The first
 request from the matching directory returns and clears the focus; other directories neither receive
-nor clear it. The controller calls `openDetail` only for a change in its current listing. The
-handoff never triggers an extra board load.
+nor clear it. If the claimed change is unlisted, the controller runs one explicit Refresh. It
+calls `openDetail` if the change is listed; otherwise it shows a toast and leaves the list open.
 
 ### Phone and touch
 

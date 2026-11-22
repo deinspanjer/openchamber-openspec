@@ -1248,6 +1248,51 @@ for (const mode of ["mounted", "later", "other-directory"]) {
   });
 }
 
+for (const exists of [true, false]) {
+  test(`board focus reloads an unlisted change once when it ${exists ? "appears" : "stays missing"}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=item`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+      const chip = section.getByRole("button", { name: "board", exact: true });
+      await chip.waitFor();
+      await page.evaluate(() => {
+        __remove("first-change");
+        __mountBoard();
+      });
+      const other = board.getByRole("button", { name: "second-change", exact: true });
+      await other.waitFor();
+      if (exists) await page.evaluate(() => __recreate("first-change"));
+      else {
+        await other.click();
+        await board.getByRole("button", { name: "Back to changes" }).waitFor();
+      }
+      await chip.click();
+      if (exists) {
+        await board
+          .getByRole("heading", { name: "first-change", exact: true })
+          .waitFor({ timeout: 3000 });
+      } else {
+        await page.waitForFunction(
+          () =>
+            __requests.some(
+              ({ path, body }) =>
+                path === "toast" && body.message === "first-change isn't in this board's list.",
+            ),
+          null,
+          { timeout: 3000 },
+        );
+        await other.waitFor();
+      }
+      assert.equal(
+        await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
+        3,
+      );
+    });
+  });
+}
+
 test("session section validation opens a flyout only when a validation chip is activated", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage({ hasTouch: true });

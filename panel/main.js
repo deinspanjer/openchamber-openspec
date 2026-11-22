@@ -8313,7 +8313,6 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           }
           pendingSummaries = 0;
           render();
-          applyFocus();
         } catch (caught) {
           if (directory !== currentDirectory || epoch !== startingEpoch || operation !== boardOperation)
             return;
@@ -8338,6 +8337,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
               reconcileQueued = false;
               loadBoard(true);
             }
+            applyFocus();
           }
         }
       })();
@@ -8572,11 +8572,22 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       queueMicrotask(() => appRoot.querySelector(".detail-back button")?.focus());
     }
     function applyFocus() {
-      if (pendingSummaries || !focusedChange) return;
+      if (boardActive || !focusedChange) return;
       const target = focusedChange;
       focusedChange = null;
-      const change = changes.find(({ id }) => id === target);
-      if (change && listedIds.has(target)) openDetail(change, scope, epoch);
+      if (listedIds.has(target.name)) {
+        const change = changes.find(({ id }) => id === target.name);
+        if (change) openDetail(change, scope, epoch);
+      } else if (!target.reloaded) {
+        if (selectedChange) closeDetail();
+        focusedChange = { name: target.name, reloaded: true };
+        loadBoard(true);
+      } else {
+        if (selectedChange) closeDetail();
+        void host2.toast({ kind: "info", message: `${target.name} isn't in this board's list.` }).catch(
+          (caught) => console.warn("Could not show the OpenSpec focus notice.", caught)
+        );
+      }
     }
     function claimFocus() {
       const captured = scope;
@@ -8588,8 +8599,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       checkFocus = false;
       void client.claimFocus(captured.directory).then((change) => {
         if (!change || disposed || scope !== captured || epoch !== startingEpoch) return;
-        if (!listedIds.has(change)) return;
-        focusedChange = change;
+        focusedChange = { name: change, reloaded: false };
         applyFocus();
       }).catch(
         (caught) => console.warn("Could not claim the OpenSpec board focus.", caught)
@@ -8745,15 +8755,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         if (scope && selectedChange && !unavailableIds.has(selectedChange.id))
           deleteView.open({ scope, epoch, selection: selection2, name: selectedChange.id });
       },
-      close: () => {
-        const name = selectedChange?.id;
-        selection2++;
-        detailOpening++;
-        selectedChange = null;
-        render();
-        requestAnimationFrame(() => window.scrollTo(0, boardScroll));
-        queueMicrotask(() => focusBoard(name));
-      },
+      close: closeDetail,
       selectArtifact,
       selectTasks: () => {
         selectedArtifact = taskArtifact(selectedChange) ?? "";
@@ -8769,6 +8771,15 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         if (selectedChange) void preparePrompt(selectedChange, scope, epoch, intent);
       }
     });
+    function closeDetail() {
+      const name = selectedChange?.id;
+      selection2++;
+      detailOpening++;
+      selectedChange = null;
+      render();
+      requestAnimationFrame(() => window.scrollTo(0, boardScroll));
+      queueMicrotask(() => focusBoard(name));
+    }
     function focusBoard(name) {
       const opener = name ? [...appRoot.querySelectorAll(".card-main")].find(
         (button2) => button2.textContent === name
