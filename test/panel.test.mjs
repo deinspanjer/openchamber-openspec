@@ -1480,6 +1480,121 @@ for (const [stage, chip, skill] of [
   });
 }
 
+for (const [action, stage, workflows, surface, skill, instruction] of [
+  [
+    "ff",
+    "planning",
+    ["ff"],
+    "card",
+    "openspec-ff-change",
+    /Create every remaining planning artefact/,
+  ],
+  [
+    "continue",
+    "planning",
+    ["continue"],
+    "card",
+    "openspec-continue-change",
+    /Write the next planning artefact/,
+  ],
+  [
+    "continue",
+    "planning",
+    ["ff", "continue"],
+    "popover",
+    "openspec-continue-change",
+    /Write the next planning artefact/,
+  ],
+  [
+    "update",
+    "progress",
+    [],
+    "popover",
+    "openspec-update-change",
+    /Revise .* existing planning artefacts/,
+  ],
+  ["explore", "planning", [], "card", "openspec-explore", /Investigate the goal/],
+  ["verify", "complete", ["verify"], "card", "openspec-verify-change", null],
+  [
+    "new",
+    "progress",
+    ["new"],
+    "footer",
+    "openspec-new-change",
+    /Ask me what the change is for before creating it/,
+  ],
+]) {
+  test(`session section prepares an unsent ${action} prompt from the ${surface}`, async () => {
+    await withPanel(async (browser, url) => {
+      const popover = surface === "popover";
+      const page = await browser.newPage({ hasTouch: popover });
+      await page.goto(
+        `${url}?status=${stage}&hold-ready${popover ? "&popovers&pointer=coarse" : ""}`,
+      );
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate((configured) => {
+        __workflows(configured);
+        __releaseReady();
+      }, workflows);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const first = section.getByRole("button", { name: "first-change", exact: true });
+      await first.waitFor({ timeout: 3000 });
+      await page.evaluate(() =>
+        __seedStorage([
+          ["session-change:fixture-session", { changes: ["second-change"], savedAt: 1 }],
+        ]),
+      );
+      let controls =
+        surface === "footer" ? section.locator("footer") : section.getByRole("article");
+      if (popover) {
+        await first.tap();
+        controls = page.frameLocator('iframe[title="OpenSpec test popover"]').locator("main");
+      }
+      await controls.getByRole("button", { name: action, exact: true }).click({ timeout: 3000 });
+      await page.waitForFunction((name) => __draft().includes(name), skill, { timeout: 3000 });
+      if (action !== "new") {
+        await page.waitForFunction(
+          () =>
+            __stored()["session-change:fixture-session"]?.changes.join() ===
+            "second-change,first-change",
+          null,
+          { timeout: 3000 },
+        );
+      }
+      await page.waitForFunction(() =>
+        __requests.some(({ path, body }) => path === "toast" && body.kind === "success"),
+      );
+      const text = await page.evaluate(() => __draft());
+      assert.match(text, /^Use your skill tool to load and invoke the /);
+      assert.doesNotMatch(text, /\/tmp\/|openspec\/changes\//);
+      const target = 'OpenSpec change "first-change"';
+      if (action === "new") {
+        assert.doesNotMatch(text, /\b(?:first|second)-change\b/);
+        assert.deepEqual(await page.evaluate(() => __stored()["session-change:fixture-session"]), {
+          changes: ["second-change"],
+          savedAt: 1,
+        });
+      } else {
+        assert.ok(text.includes(target));
+        if (action === "verify")
+          assert.equal(
+            text,
+            `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`,
+          );
+        else assert.match(text, /Goal: Read the proposal/);
+      }
+      if (instruction) assert.match(text, instruction);
+      assert.deepEqual(
+        await page.evaluate(() =>
+          __requests.filter(({ path }) => ["compose", "prompt", "start-session"].includes(path)),
+        ),
+        [{ path: "compose", body: { text, mode: "replace" } }],
+      );
+      await page.close();
+    });
+  });
+}
+
 test("session section discards late composition feedback and saving after a session switch", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();

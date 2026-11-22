@@ -185,7 +185,7 @@ One commit per task.
       `Open in board` posts `/focus` and opens the board, so a same-project board opens the change's
       detail (reuse the 7.6 assertions). In popover mode each action closes the popover. Implement,
       extending the flyout data with `directory` and `offerContinue`.
-- [ ] 9.5 Prompts. Fake host seam: add failing tests that `ff`, `continue`, `update`, `explore`,
+- [x] 9.5 Prompts. Fake host seam: add failing tests that `ff`, `continue`, `update`, `explore`,
       `verify` and the footer's `new` each compose their prompt unsent with `mode: "replace"`,
       naming the design's skill, change and goal, with no paths. `verify` reuses the board's
       existing prompt verbatim, without a goal. `new` names no change and leaves tracking unchanged;

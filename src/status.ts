@@ -12,7 +12,7 @@ import { addButtonIcon } from "./panel/button-icon.js";
 import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
-import { actionPrompt, planningPrompt, syncPrompt } from "./panel/prompts.js";
+import { actionPrompt, newChangePrompt, planningPrompt, syncPrompt } from "./panel/prompts.js";
 import { createStatusCache, type DisplayCard } from "./panel/status-cache.js";
 import {
   appendTrackedChange,
@@ -104,8 +104,7 @@ const newButton = mountButton(newRoot, {
   label: "new",
   size: "sm",
   variant: "secondary",
-  disabled: true,
-  onClick: () => {},
+  onClick: () => void preparePrompt(null, newChangePrompt(), captureContext()),
 });
 const boardButton = mountButton(boardRoot, {
   label: "board",
@@ -298,7 +297,7 @@ async function openBoard(current: () => boolean, target?: { directory: string; c
 }
 
 async function preparePrompt(
-  change: string,
+  change: string | null,
   text: string,
   current: () => boolean,
   session = sessionId,
@@ -312,7 +311,7 @@ async function preparePrompt(
     return false;
   }
   if (!current()) return false;
-  const saved = session && appendTrackedChange(host, session, change, current, seed);
+  const saved = session && change && appendTrackedChange(host, session, change, current, seed);
   try {
     await host.toast({
       kind: "success",
@@ -402,8 +401,12 @@ function mountTrackedCard(id: string) {
     label: "",
     size: "xs",
     onClick: () => {
-      if (change && chips?.primary !== "ff" && chips?.primary !== "continue")
-        void preparePrompt(change.id, actionPrompt(change, "primary"), captureContext());
+      if (!change || !chips) return;
+      const text =
+        chips.primary === "ff" || chips.primary === "continue"
+          ? planningPrompt(change, chips.primary)
+          : actionPrompt(change, "primary");
+      void preparePrompt(change.id, text, captureContext());
     },
   });
   const secondaryRoot = document.createElement("span");

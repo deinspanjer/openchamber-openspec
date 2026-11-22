@@ -2855,6 +2855,10 @@ Report what you synced without archiving the change.`;
     const target = `OpenSpec change "${change.id}"`;
     const goal = change.goal?.trim() ? `
 Goal: ${change.goal}` : "";
+    if (intent === "ff")
+      return `Use your skill tool to load and invoke the openspec-ff-change skill for ${target} (existing change).${goal}
+
+Create every remaining planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not create another change or implement code.`;
     if (intent === "continue")
       return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}
 
@@ -2862,6 +2866,9 @@ Write the next planning artefact for ${target}, preserving existing decisions an
     return `Use your skill tool to load and invoke the openspec-update-change skill for ${target}.${goal}
 
 Revise ${target}'s existing planning artefacts as I describe and keep them consistent with each other. If I have not described a revision, ask me what to change. Do not edit code.`;
+  }
+  function newChangePrompt() {
+    return "Use your skill tool to load and invoke the openspec-new-change skill.\n\nAsk me what the change is for before creating it.";
   }
 
   // src/panel/workflow.ts
@@ -3091,9 +3098,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     label: "new",
     size: "sm",
     variant: "secondary",
-    disabled: true,
-    onClick: () => {
-    }
+    onClick: () => void preparePrompt(null, newChangePrompt(), captureContext())
   });
   var boardButton = mountButton(boardRoot, {
     label: "board",
@@ -3271,7 +3276,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       return false;
     }
     if (!current()) return false;
-    const saved = session && appendTrackedChange(host, session, change, current, seed);
+    const saved = session && change && appendTrackedChange(host, session, change, current, seed);
     try {
       await host.toast({
         kind: "success",
@@ -3354,8 +3359,9 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       label: "",
       size: "xs",
       onClick: () => {
-        if (change && chips?.primary !== "ff" && chips?.primary !== "continue")
-          void preparePrompt(change.id, actionPrompt(change, "primary"), captureContext());
+        if (!change || !chips) return;
+        const text = chips.primary === "ff" || chips.primary === "continue" ? planningPrompt(change, chips.primary) : actionPrompt(change, "primary");
+        void preparePrompt(change.id, text, captureContext());
       }
     });
     const secondaryRoot = document.createElement("span");

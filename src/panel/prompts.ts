@@ -1,8 +1,4 @@
-import type { DerivedChange, Stage } from "../model.js";
-
-export function stageChip(stage: Stage) {
-  return stage === "planning" ? "propose" : stage === "complete" ? "archive" : "apply";
-}
+import type { DerivedChange } from "../model.js";
 
 export function actionPrompt(
   change: DerivedChange,
@@ -32,11 +28,17 @@ export function syncPrompt(change: Pick<DerivedChange, "id">): string {
 
 export function planningPrompt(
   change: Pick<DerivedChange, "id" | "goal">,
-  intent: "continue" | "update",
+  intent: "ff" | "continue" | "update",
 ): string {
   const target = `OpenSpec change "${change.id}"`;
   const goal = change.goal?.trim() ? `\nGoal: ${change.goal}` : "";
+  if (intent === "ff")
+    return `Use your skill tool to load and invoke the openspec-ff-change skill for ${target} (existing change).${goal}\n\nCreate every remaining planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not create another change or implement code.`;
   if (intent === "continue")
     return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}\n\nWrite the next planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not implement code.`;
   return `Use your skill tool to load and invoke the openspec-update-change skill for ${target}.${goal}\n\nRevise ${target}'s existing planning artefacts as I describe and keep them consistent with each other. If I have not described a revision, ask me what to change. Do not edit code.`;
+}
+
+export function newChangePrompt(): string {
+  return "Use your skill tool to load and invoke the openspec-new-change skill.\n\nAsk me what the change is for before creating it.";
 }
