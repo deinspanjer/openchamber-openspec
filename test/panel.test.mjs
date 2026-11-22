@@ -208,6 +208,10 @@ function hostHtml(statusCase, pointer) {
       surface: statusCase ? "status" : "panel", connection: { connected: true, account: "" }, settings: {}, item: null };
     if (pointer) ready.device = { formFactor: pointer === "coarse" ? "phone" : "desktop", pointer,
       insets: { top: 0, right: 0, bottom: 0, left: 0 }, keyboard: 0 };
+    window.__device = (bottom, keyboard) => {
+      ready.device = { ...ready.device, insets: { ...ready.device.insets, bottom }, keyboard };
+      __theme("light");
+    };
     if (statusCase) {
       const worktree = statusCase === "worktree"
         ? { directory: statusDirectory, name: "second-change", branch: "second-change", status: "ready" } : null;
@@ -1124,6 +1128,53 @@ for (const pointer of ["coarse", "fine"]) {
     });
   });
 }
+
+test("phone detail footer keeps its controls above a reported bottom inset", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+    await page.goto(`${url}?pointer=coarse`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("button", { name: "first-change", exact: true }).click();
+    const footer = frame.locator(".detail-footer");
+    const before = await footer.evaluate((node) =>
+      parseFloat(getComputedStyle(node).paddingBottom),
+    );
+    await page.evaluate(() => __device(26, 0));
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal(
+      await footer.evaluate((node) => parseFloat(getComputedStyle(node).paddingBottom)),
+      before + 26,
+    );
+    await page.close();
+  });
+});
+
+test("phone create dialogue keeps its field and buttons above a reported keyboard", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 320, height: 640 } });
+    await page.goto(`${url}?pointer=coarse`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("button", { name: "new change", exact: true }).click();
+    const dialog = frame.getByRole("dialog", { name: "New change" });
+    await dialog.getByRole("textbox").first().fill("phone-change");
+    await page.evaluate(() => __device(0, 300));
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    const layout = await dialog.evaluate((node) => ({
+      bottom: node.getBoundingClientRect().bottom,
+      maxBottom: innerHeight - 300,
+      controls: [...node.querySelectorAll("input, button")]
+        .filter((item) => item.getClientRects().length)
+        .map((item) => {
+          const rect = item.getBoundingClientRect();
+          return { top: rect.top, bottom: rect.bottom };
+        }),
+    }));
+    assert.ok(layout.bottom <= layout.maxBottom, "Dialogue extends behind the keyboard");
+    for (const { top, bottom } of layout.controls)
+      assert.ok(top >= 0 && bottom <= layout.maxBottom);
+    await page.close();
+  });
+});
 
 test("presentation modal backdrops dim every dialog without changing keyboard cancellation", async () => {
   await withPanel(async (browser, url) => {

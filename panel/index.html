@@ -419,6 +419,7 @@
         flex-wrap: wrap;
         gap: 6px;
         padding: 12px 16px;
+        padding-bottom: calc(12px + var(--oc-inset-bottom, 0px));
       }
       .detail-footer::before {
         content: "";
@@ -567,6 +568,15 @@
         border-radius: 10px;
         background: var(--oc-bg, #15191c);
         color: inherit;
+      }
+      [data-pointer="coarse"] dialog[open]:not(.detail) {
+        box-sizing: border-box;
+        max-height: max(
+          0px,
+          calc(100dvh - max(var(--oc-keyboard, 0px), var(--oc-inset-bottom, 0px)) - 32px)
+        );
+        inset-block-end: max(var(--oc-keyboard, 0px), var(--oc-inset-bottom, 0px));
+        overflow: auto;
       }
       dialog form {
         display: grid;

@@ -68,7 +68,7 @@
       320px with `pointer: "coarse"`: board, detail, dialogue and section controls are at least 44px
       tall; with `pointer: "fine"` existing sizes are unchanged. Implement `data-pointer` and the
       coarse styles in `panel/index.html` and `panel/status.html`. Verify with the focused tests.
-- [ ] 5.2 At the same seam, add failing tests that a reported bottom inset pads the detail footer
+- [x] 5.2 At the same seam, add failing tests that a reported bottom inset pads the detail footer
       and a reported keyboard height keeps the create dialogue's field and buttons visible.
       Implement the CSS variables.
 - [ ] 5.3 At the same seam, add failing tests that closing detail and deleting a change on a coarse

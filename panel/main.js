@@ -8745,7 +8745,10 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
 
   // src/panel/device.ts
   function applyDevice(device) {
-    document.documentElement.dataset.pointer = device?.pointer ?? (matchMedia("(pointer: coarse)").matches ? "coarse" : "fine");
+    const { dataset, style } = document.documentElement;
+    dataset.pointer = device?.pointer ?? (matchMedia("(pointer: coarse)").matches ? "coarse" : "fine");
+    style.setProperty("--oc-inset-bottom", `${device?.insets.bottom ?? 0}px`);
+    style.setProperty("--oc-keyboard", `${device?.keyboard ?? 0}px`);
   }
 
   // src/panel.ts
