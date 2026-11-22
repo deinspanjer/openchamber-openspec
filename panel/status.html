@@ -24,6 +24,37 @@
       .note {
         color: var(--oc-muted);
       }
+      .section-heading,
+      .section-progress,
+      .section-artefacts {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .section-heading,
+      .section-artefacts {
+        flex-wrap: wrap;
+      }
+      .section-progress .oc-sdk-progress {
+        flex: 1;
+      }
+      .section-progress span {
+        font-variant-numeric: tabular-nums;
+      }
+      .section-artefacts {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      summary {
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      details p {
+        white-space: pre-wrap;
+      }
     </style>
   </head>
   <body>

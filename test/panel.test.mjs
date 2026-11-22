@@ -205,6 +205,21 @@ function hostHtml(statusCase) {
         storage.set("session-change:fixture-session", { change: statusCase === "saved" ? "second-change" : "old-change", savedAt: 1 });
       if (statusCase === "stale") sessions[0].items = [];
       if (statusCase === "archive") changes.push({ id: "archive-all", goal: null, completedTasks: 0, totalTasks: 0 });
+      if (["progress", "complete", "read-error"].includes(statusCase)) {
+        changes[0].completedTasks = statusCase === "complete" ? 7 : 3;
+        changes[0].totalTasks = 7;
+        tasks = Array.from({ length: 7 }, (_, index) => ({
+          id: String(index + 1),
+          description: index === 3 ? "2.1 Add a section that tracks a change\\nKeep the whole description readable when expanded." : "Task " + (index + 1),
+          done: index < changes[0].completedTasks,
+        }));
+        failTasks = statusCase === "read-error";
+      }
+      if (statusCase === "planning") {
+        changes[0].completedTasks = changes[0].totalTasks = 0;
+        tasks = [];
+        readinessCase = "blocked-tasks";
+      }
     }
     addEventListener("message", (event) => {
       const message = event.data;
@@ -255,8 +270,9 @@ function hostHtml(statusCase) {
           if (holdSummaries) {
             pendingSummaries.push(finish);
           } else finish();
-        }
-        else if (path === "/tasks") {
+         }
+         else if (path === "/summary") respondSummary(body, send);
+         else if (path === "/tasks") {
           if (rootErrorPath === path) { rootErrorPath = ""; send({ error: { code: "ROOT_CHANGED", message: "Root changed" } }, 409); return; }
           if (unavailable) send({ error: { code: "CHANGE_UNAVAILABLE", message: "Change no longer exists." } }, 404);
            else if (failTasks) { failTasks = false; send({ error: { code: "TASKS_UNAVAILABLE", message: "Retry these tasks" } }, 503); }
@@ -547,6 +563,85 @@ for (const scenario of ["saved", "worktree", "archive", "stale", "new"]) {
     });
   });
 }
+
+for (const [scenario, count, name, progress] of [
+  ["progress", "3/7", "In Progress", 42],
+  ["planning", "0/0", "Planning", 0],
+  ["complete", "7/7", "Complete", 100],
+]) {
+  test(`session section shows ${scenario} progress without a batch read`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=${scenario}`);
+      const frame = page.frameLocator("iframe");
+      const bar = frame.getByRole("progressbar");
+      await bar.waitFor({ timeout: 3000 });
+      assert.equal(await bar.getAttribute("aria-valuenow"), String(progress));
+      assert.equal(await frame.getByText(count, { exact: true }).isVisible(), true);
+      assert.equal(await frame.getByText(name, { exact: true }).isVisible(), true);
+      assert.ok(
+        (await frame.getByText(count, { exact: true }).boundingBox()).x >
+          (await bar.boundingBox()).x,
+      );
+      const detail = frame.locator("details");
+      if (scenario === "progress") {
+        assert.equal(await detail.getAttribute("open"), null);
+        const summary = detail.locator("summary");
+        assert.match(await summary.innerText(), /^2\.1 Add a section/);
+        assert.equal(await summary.evaluate((node) => getComputedStyle(node).whiteSpace), "nowrap");
+        await summary.click();
+        await detail
+          .getByText("Keep the whole description readable when expanded.", { exact: false })
+          .last()
+          .waitFor();
+        assert.match(
+          await detail.locator("p").innerText(),
+          /2\.1 Add a section.*\nKeep the whole description readable/s,
+        );
+      } else {
+        assert.equal(await detail.count(), 0);
+      }
+      const artifacts = frame.getByRole("list", { name: "Planning artefacts" });
+      assert.deepEqual(
+        (await artifacts.getByRole("listitem").allTextContents()).map((line) =>
+          line.trim().replace(/\s+/g, " "),
+        ),
+        scenario === "planning"
+          ? ["proposal ready", "specs blocked", "tasks blocked"]
+          : ["proposal done", "specs done", "tasks done"],
+      );
+      await page.waitForFunction(() => __completed.includes("/tasks"));
+      assert.deepEqual(
+        await page.evaluate(() =>
+          __requests
+            .filter((r) => ["/changes", "/summaries", "/summary", "/tasks"].includes(r.path))
+            .map((r) => r.path),
+        ),
+        ["/changes", "/summary", "/tasks"],
+      );
+      await page.close();
+    });
+  });
+}
+
+test("session section shows no partial progress after a read failure and can refresh", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=read-error`);
+    const frame = page.frameLocator("iframe");
+    const error = frame.getByRole("alert");
+    await error.waitFor({ timeout: 3000 });
+    assert.match(await error.innerText(), /Retry these tasks/);
+    assert.equal(await frame.getByRole("progressbar").count(), 0);
+    assert.equal(await frame.getByText("3/7", { exact: true }).count(), 0);
+    await frame.getByRole("button", { name: "Refresh", exact: true }).click();
+    await frame.getByText("3/7", { exact: true }).waitFor();
+    assert.equal(await error.count(), 0);
+    await page.waitForFunction(() => __requests.filter((r) => r.path === "/tasks").length === 2);
+    assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/summaries")), false);
+    await page.close();
+  });
+});
 
 test("presentation modal backdrops dim every dialog without changing keyboard cancellation", async () => {
   await withPanel(async (browser, url) => {

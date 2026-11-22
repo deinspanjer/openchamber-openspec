@@ -46,7 +46,7 @@
       choice, worktree Apply session, archive-all session showing the picker, stale saved change
       message, new chat with disabled picker. Implement. Verify with `npm run build && node --test
       --test-name-pattern='session section' test/panel.test.mjs`.
-- [ ] 4.2 At the same seam, add failing tests for progress: bar and `3/7` text, collapsed
+- [x] 4.2 At the same seam, add failing tests for progress: bar and `3/7` text, collapsed
       current-task disclosure with the first incomplete task's name and full description on
       expand, `0/0` without disclosure in Planning, full bar without disclosure when complete,
       artefact statuses, error with Refresh and no partial progress on read failure. Implement.

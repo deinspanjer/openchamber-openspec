@@ -2220,6 +2220,80 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
+  // node_modules/@openchamber/sdk/dist/ui/badge.js
+  var applyTone = (node, tone2) => {
+    setAttr(node, "data-tone", tone2 && tone2 !== "neutral" ? tone2 : null);
+  };
+  var mountBadge = (root2, initial) => {
+    ensureStyle(UI_CSS);
+    let props = initial;
+    const node = el("span", "oc-sdk oc-sdk-badge");
+    root2.append(node);
+    const paint = () => {
+      setText(node, props.label);
+      applyTone(node, props.tone);
+    };
+    paint();
+    return {
+      update: (next) => {
+        props = { ...props, ...next };
+        paint();
+      },
+      dispose: () => {
+        node.remove();
+      }
+    };
+  };
+
+  // node_modules/@openchamber/sdk/dist/ui/progress.js
+  var clampProgress = (value) => Number.isFinite(value) ? Math.min(100, Math.max(0, Math.floor(value))) : 0;
+  var mountProgress = (root2, initial) => {
+    ensureStyle(UI_CSS);
+    let props = initial;
+    const node = el("div", "oc-sdk oc-sdk-progress");
+    const caption = el("div", "oc-sdk-progress-label");
+    const label = el("span");
+    const percent = el("span", "oc-sdk-progress-value");
+    const percentText = el("span");
+    const doneMark = icon("check", 14);
+    percent.append(doneMark, percentText);
+    caption.append(label, percent);
+    const track = el("div", "oc-sdk-progress-track");
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-valuemin", "0");
+    track.setAttribute("aria-valuemax", "100");
+    const fill = el("div", "oc-sdk-progress-fill");
+    track.append(fill);
+    node.append(caption, track);
+    root2.append(node);
+    const paint = () => {
+      const value = clampProgress(props.value);
+      applyTone(fill, props.tone);
+      fill.style.transform = `scaleX(${value / 100})`;
+      track.setAttribute("aria-valuenow", String(value));
+      if (props.label)
+        track.setAttribute("aria-label", props.label);
+      else
+        track.removeAttribute("aria-label");
+      setText(label, props.label);
+      setText(percentText, `${value}%`);
+      const done = value === 100 && (!props.tone || props.tone === "neutral");
+      setAttr(node, "data-done", done ? "true" : null);
+      doneMark.style.display = done ? "" : "none";
+      caption.hidden = !props.label;
+    };
+    paint();
+    return {
+      update: (next) => {
+        props = { ...props, ...next };
+        paint();
+      },
+      dispose: () => {
+        node.remove();
+      }
+    };
+  };
+
   // node_modules/@openchamber/sdk/dist/ui/menu.js
   var actions = (items) => items.filter((item) => !("separator" in item));
   var menuCount = 0;
@@ -2327,6 +2401,35 @@ ${GUEST_UI_LOOK_CSS}`;
   };
 
   // src/model.ts
+  function requiredArtifactIds(change) {
+    const byId = new Map(change.artifacts.map((artifact) => [artifact.id, artifact]));
+    const required = /* @__PURE__ */ new Set();
+    const visit = (id) => {
+      if (required.has(id)) return;
+      required.add(id);
+      byId.get(id)?.requires.forEach(visit);
+    };
+    change.applyRequires.forEach(visit);
+    return required;
+  }
+  function deriveChange(change) {
+    const required = requiredArtifactIds(change);
+    const applicable = change.artifacts.filter((artifact) => required.has(artifact.id));
+    const completedArtifacts = applicable.filter(
+      (artifact) => artifact.status === "done" || artifact.status === "skipped"
+    ).length;
+    const pendingCondition = applicable.some(
+      (artifact) => artifact.status !== "done" && artifact.status !== "skipped"
+    );
+    const stage = pendingCondition ? "planning" : change.totalTasks === 0 || change.completedTasks === 0 ? "ready" : change.completedTasks === change.totalTasks ? "complete" : "progress";
+    return {
+      ...change,
+      stage,
+      completedArtifacts,
+      totalArtifacts: applicable.length,
+      pendingCondition
+    };
+  }
   function isChangeName(value) {
     return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
   }
@@ -2751,6 +2854,15 @@ ${GUEST_UI_LOOK_CSS}`;
     return value && typeof value === "object" && "change" in value && typeof value.change === "string" ? value.change : null;
   }
 
+  // src/panel/workflow.ts
+  var stages = [
+    { id: "planning", label: "Planning", action: "propose" },
+    { id: "ready", label: "Ready", action: "apply" },
+    { id: "progress", label: "In Progress", action: "continue" },
+    { id: "complete", label: "Complete", action: "archive" }
+  ];
+  var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
+
   // src/status.ts
   var root = document.querySelector("#root");
   if (!root) throw new Error("Status section root is missing");
@@ -2767,16 +2879,20 @@ ${GUEST_UI_LOOK_CSS}`;
   var reading = false;
   var queued = false;
   var selection2 = null;
-  var menu;
+  var handles = [];
   function render(view) {
-    menu?.dispose();
-    menu = void 0;
+    for (const handle of handles.splice(0)) handle.dispose();
     panelRoot.replaceChildren();
     if (view.kind === "empty") return;
+    const controls = document.createElement("div");
+    handles.push(mountButton(controls, { label: "Refresh", size: "sm", onClick: refresh }));
+    if (view.kind === "loading") {
+      note("Loading OpenSpec change\u2026", "status");
+      return;
+    }
     if (view.kind === "tracked") {
-      const title = document.createElement("h1");
-      title.textContent = view.change;
-      panelRoot.append(title);
+      renderTracked(view.change, view.tasks);
+      panelRoot.append(controls);
       return;
     }
     if (view.kind === "picker") {
@@ -2784,21 +2900,68 @@ ${GUEST_UI_LOOK_CSS}`;
       if (!sessionId) note("Start a session to choose a change.");
       if (!view.listing.changes.length) {
         note("No active changes.");
-        return;
+      } else {
+        const picker = document.createElement("div");
+        panelRoot.append(picker);
+        handles.push(
+          mountMenu(picker, {
+            label: "Choose a change",
+            size: "sm",
+            items: view.listing.changes.map(({ id }) => ({ id, label: id, disabled: !sessionId })),
+            onSelect: () => {
+            }
+          })
+        );
       }
-      const picker = document.createElement("div");
-      panelRoot.append(picker);
-      menu = mountMenu(picker, {
-        label: "Choose a change",
-        size: "sm",
-        items: view.listing.changes.map(({ id }) => ({ id, label: id, disabled: !sessionId })),
-        onSelect: () => {
-        }
-      });
+      panelRoot.append(controls);
       return;
     }
     if (view.kind === "error") note(view.message, "alert");
-    else note("Loading OpenSpec change\u2026", "status");
+    panelRoot.append(controls);
+  }
+  function renderTracked(change, tasks) {
+    const heading = document.createElement("div");
+    heading.className = "section-heading";
+    const title = document.createElement("h1");
+    title.textContent = change.id;
+    heading.append(title);
+    handles.push(mountBadge(heading, { label: stageLabel(change.stage) }));
+    panelRoot.append(heading);
+    const meter = document.createElement("div");
+    meter.className = "section-progress";
+    const { completedTasks, totalTasks } = change;
+    handles.push(
+      mountProgress(meter, {
+        value: totalTasks ? 100 * completedTasks / totalTasks : 0
+      })
+    );
+    meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
+    const count2 = document.createElement("span");
+    count2.textContent = `${completedTasks}/${totalTasks}`;
+    meter.append(count2);
+    panelRoot.append(meter);
+    const next = completedTasks < totalTasks ? tasks.find((task) => !task.done) : void 0;
+    if (next) {
+      const disclosure = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = next.description;
+      const description = document.createElement("p");
+      description.textContent = next.description;
+      disclosure.append(summary, description);
+      panelRoot.append(disclosure);
+    }
+    const required = requiredArtifactIds(change);
+    const list = document.createElement("ul");
+    list.className = "section-artefacts";
+    list.setAttribute("aria-label", "Planning artefacts");
+    for (const artifact of change.artifacts) {
+      if (!required.has(artifact.id)) continue;
+      const item = document.createElement("li");
+      item.append(`${artifact.id} `);
+      handles.push(mountBadge(item, { label: artifact.status }));
+      list.append(item);
+    }
+    if (list.childElementCount) panelRoot.append(list);
   }
   function note(text, role) {
     const line = document.createElement("p");
@@ -2835,9 +2998,16 @@ ${GUEST_UI_LOOK_CSS}`;
         if (!current()) return;
         const tracked = resolve(listing, saved);
         selection2 = { listing, saved, change: tracked.change };
-        render(
-          tracked.change === null ? { kind: "picker", listing, staleSaved: tracked.staleSaved } : { kind: "tracked", change: tracked.change }
-        );
+        if (tracked.change === null) {
+          render({ kind: "picker", listing, staleSaved: tracked.staleSaved });
+        } else {
+          const entry = listing.changes.find(({ id }) => id === tracked.change);
+          const summary = await client.summary(listing, entry.id);
+          if (!current()) return;
+          const tasks = await client.tasks(listing, entry.id);
+          if (!current()) return;
+          render({ kind: "tracked", change: deriveChange({ ...summary, ...entry }), tasks });
+        }
       } catch (caught) {
         if (current())
           render({
@@ -2872,8 +3042,14 @@ ${GUEST_UI_LOOK_CSS}`;
           sessions = snapshot;
           if (snapshot.state === "error") {
             failed("Could not read project sessions.");
-          } else if (snapshot.state === "ready" && (!wasReady || selection2 && resolve(selection2.listing, selection2.saved).change !== selection2.change)) {
-            read();
+          } else if (snapshot.state === "ready") {
+            if (!wasReady) read();
+            else if (selection2 && resolve(selection2.listing, selection2.saved).change !== selection2.change) {
+              epoch++;
+              selection2 = null;
+              render({ kind: "loading" });
+              read();
+            }
           }
         });
         if (current()) offSessions = off;
@@ -2884,6 +3060,11 @@ ${GUEST_UI_LOOK_CSS}`;
         );
       }
     })();
+  }
+  function refresh() {
+    if (!directory) return;
+    if (sessions?.state === "ready") read();
+    else if (!offSessions) subscribeToProject(directory);
   }
   function updateContext(nextDirectory, nextSession) {
     const directoryChanged = nextDirectory !== directory;
@@ -2927,7 +3108,7 @@ ${GUEST_UI_LOOK_CSS}`;
       offDirectory();
       offSession();
       offSessions?.();
-      menu?.dispose();
+      for (const handle of handles.splice(0)) handle.dispose();
       host.dispose();
     },
     { once: true }

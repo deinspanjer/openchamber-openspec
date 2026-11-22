@@ -25,7 +25,7 @@ export type DerivedChange = ChangeSummary & {
   pendingCondition: boolean;
 };
 
-function requiredArtifactIds(change: ChangeSummary): Set<string> {
+export function requiredArtifactIds(change: ChangeSummary): Set<string> {
   const byId = new Map(change.artifacts.map((artifact) => [artifact.id, artifact]));
   const required = new Set<string>();
   const visit = (id: string): void => {

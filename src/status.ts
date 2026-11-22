@@ -1,15 +1,28 @@
 import { connectHost, type GuestSessionsSnapshot } from "@openchamber/sdk";
-import { applyHostReady, mountMenu } from "@openchamber/sdk/ui";
-import { resolveTrackedChange } from "./model.js";
+import {
+  applyHostReady,
+  mountBadge,
+  mountButton,
+  mountMenu,
+  mountProgress,
+} from "@openchamber/sdk/ui";
+import type { Task } from "./contracts.js";
+import {
+  deriveChange,
+  requiredArtifactIds,
+  resolveTrackedChange,
+  type DerivedChange,
+} from "./model.js";
 import { createClient, type Listing } from "./panel/client.js";
 import { findProject } from "./panel/project.js";
 import { readTrackedChange } from "./panel/tracked-change.js";
+import { stageLabel } from "./panel/workflow.js";
 
 type View =
   | { kind: "empty" | "loading" }
   | { kind: "error"; message: string }
   | { kind: "picker"; listing: Listing; staleSaved: string | null }
-  | { kind: "tracked"; change: string };
+  | { kind: "tracked"; change: DerivedChange; tasks: Task[] };
 
 const root = document.querySelector<HTMLElement>("#root");
 if (!root) throw new Error("Status section root is missing");
@@ -27,17 +40,21 @@ let disposed = false;
 let reading = false;
 let queued = false;
 let selection: { listing: Listing; saved: string | null; change: string | null } | null = null;
-let menu: ReturnType<typeof mountMenu> | undefined;
+const handles: { dispose(): void }[] = [];
 
 function render(view: View) {
-  menu?.dispose();
-  menu = undefined;
+  for (const handle of handles.splice(0)) handle.dispose();
   panelRoot.replaceChildren();
   if (view.kind === "empty") return;
+  const controls = document.createElement("div");
+  handles.push(mountButton(controls, { label: "Refresh", size: "sm", onClick: refresh }));
+  if (view.kind === "loading") {
+    note("Loading OpenSpec change…", "status");
+    return;
+  }
   if (view.kind === "tracked") {
-    const title = document.createElement("h1");
-    title.textContent = view.change;
-    panelRoot.append(title);
+    renderTracked(view.change, view.tasks);
+    panelRoot.append(controls);
     return;
   }
   if (view.kind === "picker") {
@@ -45,20 +62,71 @@ function render(view: View) {
     if (!sessionId) note("Start a session to choose a change.");
     if (!view.listing.changes.length) {
       note("No active changes.");
-      return;
+    } else {
+      const picker = document.createElement("div");
+      panelRoot.append(picker);
+      handles.push(
+        mountMenu(picker, {
+          label: "Choose a change",
+          size: "sm",
+          items: view.listing.changes.map(({ id }) => ({ id, label: id, disabled: !sessionId })),
+          onSelect: () => {},
+        }),
+      );
     }
-    const picker = document.createElement("div");
-    panelRoot.append(picker);
-    menu = mountMenu(picker, {
-      label: "Choose a change",
-      size: "sm",
-      items: view.listing.changes.map(({ id }) => ({ id, label: id, disabled: !sessionId })),
-      onSelect: () => {},
-    });
+    panelRoot.append(controls);
     return;
   }
   if (view.kind === "error") note(view.message, "alert");
-  else note("Loading OpenSpec change…", "status");
+  panelRoot.append(controls);
+}
+
+function renderTracked(change: DerivedChange, tasks: Task[]) {
+  const heading = document.createElement("div");
+  heading.className = "section-heading";
+  const title = document.createElement("h1");
+  title.textContent = change.id;
+  heading.append(title);
+  handles.push(mountBadge(heading, { label: stageLabel(change.stage) }));
+  panelRoot.append(heading);
+
+  const meter = document.createElement("div");
+  meter.className = "section-progress";
+  const { completedTasks, totalTasks } = change;
+  handles.push(
+    mountProgress(meter, {
+      value: totalTasks ? (100 * completedTasks) / totalTasks : 0,
+    }),
+  );
+  meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
+  const count = document.createElement("span");
+  count.textContent = `${completedTasks}/${totalTasks}`;
+  meter.append(count);
+  panelRoot.append(meter);
+
+  const next = completedTasks < totalTasks ? tasks.find((task) => !task.done) : undefined;
+  if (next) {
+    const disclosure = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = next.description;
+    const description = document.createElement("p");
+    description.textContent = next.description;
+    disclosure.append(summary, description);
+    panelRoot.append(disclosure);
+  }
+
+  const required = requiredArtifactIds(change);
+  const list = document.createElement("ul");
+  list.className = "section-artefacts";
+  list.setAttribute("aria-label", "Planning artefacts");
+  for (const artifact of change.artifacts) {
+    if (!required.has(artifact.id)) continue;
+    const item = document.createElement("li");
+    item.append(`${artifact.id} `);
+    handles.push(mountBadge(item, { label: artifact.status }));
+    list.append(item);
+  }
+  if (list.childElementCount) panelRoot.append(list);
 }
 
 function note(text: string, role?: string) {
@@ -98,11 +166,16 @@ function read() {
       if (!current()) return;
       const tracked = resolve(listing, saved);
       selection = { listing, saved, change: tracked.change };
-      render(
-        tracked.change === null
-          ? { kind: "picker", listing, staleSaved: tracked.staleSaved }
-          : { kind: "tracked", change: tracked.change },
-      );
+      if (tracked.change === null) {
+        render({ kind: "picker", listing, staleSaved: tracked.staleSaved });
+      } else {
+        const entry = listing.changes.find(({ id }) => id === tracked.change)!;
+        const summary = await client.summary(listing, entry.id);
+        if (!current()) return;
+        const tasks = await client.tasks(listing, entry.id);
+        if (!current()) return;
+        render({ kind: "tracked", change: deriveChange({ ...summary, ...entry }), tasks });
+      }
     } catch (caught) {
       if (current())
         render({
@@ -138,12 +211,17 @@ function subscribeToProject(capturedDirectory: string) {
         sessions = snapshot;
         if (snapshot.state === "error") {
           failed("Could not read project sessions.");
-        } else if (
-          snapshot.state === "ready" &&
-          (!wasReady ||
-            (selection && resolve(selection.listing, selection.saved).change !== selection.change))
-        ) {
-          read();
+        } else if (snapshot.state === "ready") {
+          if (!wasReady) read();
+          else if (
+            selection &&
+            resolve(selection.listing, selection.saved).change !== selection.change
+          ) {
+            epoch++;
+            selection = null;
+            render({ kind: "loading" });
+            read();
+          }
         }
       });
       if (current()) offSessions = off;
@@ -154,6 +232,12 @@ function subscribeToProject(capturedDirectory: string) {
       );
     }
   })();
+}
+
+function refresh() {
+  if (!directory) return;
+  if (sessions?.state === "ready") read();
+  else if (!offSessions) subscribeToProject(directory);
 }
 
 function updateContext(nextDirectory: string | null, nextSession: string | null) {
@@ -201,7 +285,7 @@ window.addEventListener(
     offDirectory();
     offSession();
     offSessions?.();
-    menu?.dispose();
+    for (const handle of handles.splice(0)) handle.dispose();
     host.dispose();
   },
   { once: true },
