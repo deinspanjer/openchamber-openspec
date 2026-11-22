@@ -200,7 +200,7 @@ One commit per task.
 - [x] 9.7 Icon crop. Set `viewBox="125 124 262 262"` in `assets/openspec-logo.svg`, keeping the
       paths. Render it at 16 and 24px next to another rail icon and confirm the glyph fills the box
       without uneven cells; if cells are uneven, retrace on a grid that divides 16 and 24.
-- [ ] 9.8 Release. Update `README.md` (footer, chips follow `openspec config profile`, compact
+- [x] 9.8 Release. Update `README.md` (footer, chips follow `openspec config profile`, compact
       sizing) and `AGENTS.md` (the section reads configured workflows on mount, project change and
       Refresh; `/workflows`). Run `npm version 1.5.0 --no-git-tag-version`, then `npm run check`
       and `npm run format:check`.

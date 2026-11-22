@@ -1100,9 +1100,8 @@ for (const scenario of ["saved", "worktree", "archive", "stale", "legacy-value",
         assert.equal(await frame.getByRole("heading", { name: "second-change" }).count(), 0);
       } else if (scenario === "new") {
         const track = frame.getByRole("button", { name: "＋ Track a change" });
-        await track.waitFor({ timeout: 3000 });
+        await frame.getByText("Start a session to track a change.").waitFor({ timeout: 3000 });
         assert.equal(await track.isDisabled(), true);
-        assert.equal(await frame.getByText("Start a session to track a change.").isVisible(), true);
       } else {
         await frame.getByRole("button", { name: "＋ Track a change" }).click({ timeout: 3000 });
         const option = frame.getByRole("button", { name: "first-change", exact: true });
@@ -1334,7 +1333,7 @@ for (const [width, pointer, scenario] of [
         exact: true,
       });
       const list = frame.getByRole("list", { name: "Changes", exact: true });
-      await trigger.waitFor();
+      await trigger.and(frame.locator("button:enabled")).waitFor({ timeout: 3000 });
       await page.waitForFunction(() => {
         const frame = document.querySelector("iframe");
         const resize = __requests.findLast((r) => r.path === "resize");

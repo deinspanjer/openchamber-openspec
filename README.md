@@ -44,12 +44,18 @@ change** to add another active change. To remove one, select its name and then *
 choices follow the session on devices connected to the same server.
 
 Expand **Tasks:** to see up to five tasks around the current task. Select a task title to read its
-description. The **propose**, **apply**, **archive**, and **sync** chips prepare drafts without
-sending them. **validate** runs OpenSpec validation and shows a preview of the result. For the full
-validation report, run `openspec validate <change> --type change --json`. Select **board** to open
-the change's detail if the board is in the same directory.
+description. The workflow chips follow the change's stage and the profile set by
+`openspec config profile`. Optional workflows such as **ff** and **verify** appear when configured.
+Run `openspec update` after changing the profile to install the configured skills. If the CLI cannot
+report the profile, the section uses the core workflows. Workflow chips prepare drafts without
+sending them. **validate** runs OpenSpec validation and previews the result. For the full report,
+run `openspec validate <change> --type change --json`.
 
-The section refreshes when the session finishes a turn. You can also select **Refresh**.
+The footer contains **＋ Track a change**, **new** (when configured), **board**, and **Refresh**.
+**board** opens the board without changing its current view. To open a specific change, select its
+name and then **Open in board**. The section also refreshes when the session finishes a turn. On
+touch screens, chips are 28px tall with 8px gaps, and the footer fits on one text line. The board
+keeps its 44px touch targets.
 
 The Work Status section and phone board require OpenChamber 2.7.1 or later. On a phone, open the
 board from the workspace drawer or the sessions list's **More** menu.

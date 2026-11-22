@@ -1,6 +1,6 @@
 {
   "name": "openchamber-openspec-v2",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "OpenSpec board for OpenChamber. Fork of jaythomasonprojects/openchamber-openspec by Jay Thomason.",
   "private": true,
   "type": "module",

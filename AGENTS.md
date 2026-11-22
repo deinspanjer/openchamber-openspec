@@ -38,6 +38,8 @@
 - `/validate` runs only for the Work Status **validate** chip. It uses the selected change's root
   and planning identity. The focus handoff stores one target for 30 seconds. The `focus` service
   event signals that a target is pending; only a matching directory can claim it with `GET /focus`.
+- `/workflows` reads the global profile via `openspec config list --json`, without planning scope.
+  The section falls back to core workflows if the read fails.
 - The extension manifest is `package.json`'s `openchamber` field, not `service/package.json`. The
   latter keeps generated `service/main.js` CommonJS inside this ESM repository.
 - `panel/main.js` and `panel/status.js` are generated ES2022 browser IIFEs. `service/main.js` is the
@@ -54,6 +56,8 @@
   shown session finishes a turn. Re-read after tracking changes. Read one listing and the summary
   and tasks for each tracked change only. Keep unchanged card controls mounted across reads. Do not
   poll, refresh on visibility changes, or read board-wide summaries.
+- Read configured workflows on mount, project change, and footer Refresh. Reuse the result for
+  session switches in the same directory and finished turns.
 - Retained reads do not authorise writes or recovery. Reconcile uncertain writes with a fresh
   listing in the original context; do not retry the mutation automatically.
 - Deletion checks the active parent and target after its final CLI context check. These checks and
