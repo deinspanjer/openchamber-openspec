@@ -12,7 +12,7 @@ import { addButtonIcon } from "./panel/button-icon.js";
 import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
-import { actionPrompt, syncPrompt, stageChip } from "./panel/prompts.js";
+import { actionPrompt, syncPrompt } from "./panel/prompts.js";
 import { createStatusCache, type DisplayCard } from "./panel/status-cache.js";
 import {
   appendTrackedChange,
@@ -21,7 +21,7 @@ import {
   updateTrackedChanges,
 } from "./panel/tracked-change.js";
 import { stageLabel } from "./panel/workflow.js";
-import { loadWorkflows } from "./panel/workflows.js";
+import { cardChips, loadWorkflows } from "./panel/workflows.js";
 
 type View =
   | { kind: "empty" | "loading" }
@@ -165,7 +165,7 @@ function captureContext() {
 
 function render(view: View) {
   newRoot.hidden = !workflows?.has("new");
-  const nextViewKey = JSON.stringify([epoch, view]);
+  const nextViewKey = JSON.stringify([epoch, view, workflows && [...workflows]]);
   if (viewKey === nextViewKey) return;
   viewKey = nextViewKey;
   showingLive = view.kind === "ready";
@@ -372,14 +372,28 @@ function mountTrackedCard(id: string) {
   const actions = document.createElement("div");
   actions.className = "card-actions";
   let scope: Scope | null = null;
+  let chips: ReturnType<typeof cardChips> | null = null;
   const primary = mountButton(actions, {
     label: "",
     size: "xs",
     onClick: () => {
-      if (change) void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
+      if (change && chips?.primary !== "ff" && chips?.primary !== "continue")
+        void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
     },
   });
-  const sync = mountButton(actions, {
+  const secondaryRoot = document.createElement("span");
+  const syncRoot = document.createElement("span");
+  actions.append(secondaryRoot, syncRoot);
+  const secondary = mountButton(secondaryRoot, {
+    label: "",
+    size: "xs",
+    variant: "secondary",
+    onClick: () => {
+      if (change && chips?.secondary)
+        void preparePrompt(change, actionPrompt(change, chips.secondary), captureContext());
+    },
+  });
+  const sync = mountButton(syncRoot, {
     label: "sync",
     size: "xs",
     variant: "secondary",
@@ -489,9 +503,11 @@ function mountTrackedCard(id: string) {
       }
       change = card.change;
       nameAnchor.update();
-      primary.update({
-        label: stageChip(change.stage),
-      });
+      chips = cardChips(change, workflows!);
+      primary.update({ label: chips.primary });
+      secondary.update({ label: chips.secondary ?? "" });
+      secondaryRoot.hidden = chips.secondary === null;
+      syncRoot.hidden = !chips.sync;
       updateProgress(change);
 
       const next = card.tasks.find((task) => !task.done) ?? card.tasks.at(-1) ?? null;
@@ -532,7 +548,7 @@ function mountTrackedCard(id: string) {
       validationAnchor.dispose();
       currentTask.dispose();
       for (const { title } of taskRows.values()) title.dispose();
-      for (const handle of [primary, sync, validate, retry]) handle.dispose();
+      for (const handle of [primary, secondary, sync, validate, retry]) handle.dispose();
       element.remove();
     },
   };

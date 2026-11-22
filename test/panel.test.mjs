@@ -230,6 +230,7 @@ function hostHtml(statusCase, pointer, popovers) {
     window.__longArtifact = () => { longArtifact = true; };
     window.__readiness = (mode) => { readinessCase = mode; };
     window.__proposalStatus = (status) => { artifacts[0].status = status; };
+    window.__specsStatus = (status) => { artifacts[1].status = status; };
     window.__draft = () => draft;
     window.__session = (id, busy = false) => { ready.session = id ? { id, busy } : null;
       for (const guest of guests) post(guest, "ready", readyFor(guest));
@@ -811,13 +812,105 @@ for (const [stage, chip, count, current, percent] of [
         [second, "apply"],
       ]) {
         const names = await card.getByRole("button").allTextContents();
-        assert.deepEqual(names.slice(-3), [action, "sync", "validate"]);
+        assert.deepEqual(
+          names.slice(action === "propose" ? -4 : -3),
+          action === "propose"
+            ? [action, "explore", "sync", "validate"]
+            : [action, "sync", "validate"],
+        );
       }
       assert.equal(await second.getByText("0/0", { exact: true }).isVisible(), true);
       assert.equal(await second.locator("details").isVisible(), false);
     });
   });
 }
+
+for (const [stage, workflows, chips] of [
+  ["planning", null, ["propose", "explore", "sync", "validate"]],
+  ["planning", ["continue"], ["continue", "explore", "sync", "validate"]],
+  ["planning", ["ff"], ["ff", "explore", "sync", "validate"]],
+  ["planning", ["ff", "continue"], ["ff", "explore", "sync", "validate"]],
+  ["progress", [], ["apply", "sync", "validate"]],
+  ["progress", ["ff", "verify"], ["apply", "validate"]],
+  ["complete", [], ["archive", "sync", "validate"]],
+  ["complete", ["verify"], ["archive", "verify", "sync", "validate"]],
+]) {
+  test(`session section selects ${stage} chips: ${chips.join(", ")}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=compact-${stage}&hold-ready`);
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate(
+        ({ workflows, skipSpecs }) => {
+          if (workflows !== null) __workflows(workflows);
+          if (skipSpecs) __specsStatus("skipped");
+          __releaseReady();
+        },
+        { workflows, skipSpecs: !chips.includes("sync") },
+      );
+      const frame = page.frameLocator("iframe");
+      const first = frame
+        .getByRole("article")
+        .filter({ has: frame.getByRole("heading", { name: "first-change" }) });
+      const second = frame
+        .getByRole("article")
+        .filter({ has: frame.getByRole("heading", { name: "second-change" }) });
+      await first.getByRole("button", { name: "validate", exact: true }).waitFor();
+      assert.deepEqual(
+        await first.locator(".card-actions").getByRole("button").allTextContents(),
+        chips,
+      );
+      assert.deepEqual(
+        await second.locator(".card-actions").getByRole("button").allTextContents(),
+        chips.includes("sync") ? ["apply", "sync", "validate"] : ["apply", "validate"],
+      );
+    });
+  });
+}
+
+test("session section preserves a focused chip when configured workflows or stage change", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=compact-planning`);
+    const section = page.frameLocator("iframe");
+    const card = section
+      .getByRole("article")
+      .filter({ has: section.getByRole("heading", { name: "first-change" }) });
+    const primary = card.getByRole("button", { name: "propose", exact: true });
+    await primary.waitFor();
+    await primary.evaluate((node) => {
+      window.__focusedChip = node;
+      node.focus();
+    });
+    await page.evaluate(() => __workflows(["ff"]));
+    await section
+      .locator("footer")
+      .getByRole("button", { name: "Refresh" })
+      .evaluate((node) => node.click());
+    const fastForward = card.getByRole("button", { name: "ff", exact: true });
+    await fastForward.waitFor({ timeout: 3000 });
+    assert.equal(
+      await fastForward.evaluate(
+        (node) => node === window.__focusedChip && node === document.activeElement,
+      ),
+      true,
+    );
+    await page.evaluate(() => {
+      __readiness("");
+      __lifecycle("fixture-session", "started");
+      __lifecycle("fixture-session", "completed");
+    });
+    const apply = card.getByRole("button", { name: "apply", exact: true });
+    await apply.waitFor({ timeout: 3000 });
+    assert.equal(
+      await apply.evaluate(
+        (node) => node === window.__focusedChip && node === document.activeElement,
+      ),
+      true,
+    );
+    assert.equal(await card.getByRole("button", { name: "explore", exact: true }).count(), 0);
+  });
+});
 
 test("session section expands the task window and opens a full task flyout", async () => {
   await withPanel(async (browser, url) => {

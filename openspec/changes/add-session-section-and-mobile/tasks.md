@@ -172,7 +172,7 @@ One commit per task.
       `openSurface("plugin:openspec-board")` without posting `/focus`; Refresh runs one read; cards
       have no `board` chip; the section never calls `setStatusControls`. Implement, and remove the
       header control, `onStatusControl` handler, body Refresh button and their tests (8.3, 4.4).
-- [ ] 9.3 Stage chips. Fake host seam: add failing tests for the chip table with stage fixtures and
+- [x] 9.3 Stage chips. Fake host seam: add failing tests for the chip table with stage fixtures and
       fake sets. Planning gives `propose` + `explore` (core), `continue` (continue only) and `ff`
       (ff, with or without continue). Ready and In Progress give `apply`. Complete gives `archive`,
       plus `verify` only when configured. `sync` is absent when the summary's `specs` artefact is

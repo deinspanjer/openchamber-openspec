@@ -2823,9 +2823,6 @@ ${GUEST_UI_LOOK_CSS}`;
   }
 
   // src/panel/prompts.ts
-  function stageChip(stage) {
-    return stage === "planning" ? "propose" : stage === "complete" ? "archive" : "apply";
-  }
   function actionPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
     const goal = change.goal?.trim() ? `
@@ -3016,6 +3013,16 @@ Report what you synced without archiving the change.`;
       return new Set(CORE_WORKFLOWS);
     }
   }
+  function planningWorkflow(set) {
+    return set.has("ff") ? "ff" : set.has("continue") ? "continue" : "propose";
+  }
+  function cardChips(change, set) {
+    return {
+      primary: change.stage === "planning" ? planningWorkflow(set) : change.stage === "complete" ? "archive" : "apply",
+      secondary: change.stage === "planning" ? "explore" : change.stage === "complete" && set.has("verify") ? "verify" : null,
+      sync: !change.artifacts.some(({ id, status }) => id === "specs" && status === "skipped")
+    };
+  }
 
   // src/status.ts
   var root = document.querySelector("#root");
@@ -3136,7 +3143,7 @@ Report what you synced without archiving the change.`;
   }
   function render(view) {
     newRoot.hidden = !workflows?.has("new");
-    const nextViewKey = JSON.stringify([epoch, view]);
+    const nextViewKey = JSON.stringify([epoch, view, workflows && [...workflows]]);
     if (viewKey === nextViewKey) return;
     viewKey = nextViewKey;
     showingLive = view.kind === "ready";
@@ -3316,14 +3323,28 @@ Report what you synced without archiving the change.`;
     const actions = document.createElement("div");
     actions.className = "card-actions";
     let scope = null;
+    let chips = null;
     const primary2 = mountButton(actions, {
       label: "",
       size: "xs",
       onClick: () => {
-        if (change) void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
+        if (change && chips?.primary !== "ff" && chips?.primary !== "continue")
+          void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
       }
     });
-    const sync = mountButton(actions, {
+    const secondaryRoot = document.createElement("span");
+    const syncRoot = document.createElement("span");
+    actions.append(secondaryRoot, syncRoot);
+    const secondary2 = mountButton(secondaryRoot, {
+      label: "",
+      size: "xs",
+      variant: "secondary",
+      onClick: () => {
+        if (change && chips?.secondary)
+          void preparePrompt(change, actionPrompt(change, chips.secondary), captureContext());
+      }
+    });
+    const sync = mountButton(syncRoot, {
       label: "sync",
       size: "xs",
       variant: "secondary",
@@ -3429,9 +3450,11 @@ Report what you synced without archiving the change.`;
         }
         change = card.change;
         nameAnchor.update();
-        primary2.update({
-          label: stageChip(change.stage)
-        });
+        chips = cardChips(change, workflows);
+        primary2.update({ label: chips.primary });
+        secondary2.update({ label: chips.secondary ?? "" });
+        secondaryRoot.hidden = chips.secondary === null;
+        syncRoot.hidden = !chips.sync;
         updateProgress(change);
         const next = card.tasks.find((task) => !task.done) ?? card.tasks.at(-1) ?? null;
         const nextKey = next?.id ?? null;
@@ -3471,7 +3494,7 @@ Report what you synced without archiving the change.`;
         validationAnchor.dispose();
         currentTask.dispose();
         for (const { title: title2 } of taskRows.values()) title2.dispose();
-        for (const handle of [primary2, sync, validate, retry]) handle.dispose();
+        for (const handle of [primary2, secondary2, sync, validate, retry]) handle.dispose();
         element.remove();
       }
     };
