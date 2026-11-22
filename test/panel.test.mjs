@@ -61,11 +61,28 @@ function hostHtml(statusCase, pointer, popovers) {
     window.__worktrees = value => { worktrees = value; };
     const guests = new Set();
     let popover = null;
+    let board = null;
+    let pendingFocus = null;
+    window.__focusClaims = [];
     const post = (guest, type, payload) =>
       guest.postMessage({ channel: "openchamber.sdk", v: 1, type, payload }, "*");
     const readyFor = (guest) => popover && popover.frame.contentWindow === guest
       ? { ...ready, surface: "popover", item: null, features: undefined, popover: popover.context }
+      : board && board.frame.contentWindow === guest
+      ? { ...ready, surface: "panel", directory: board.directory }
       : ready;
+    window.__mountBoard = (boardDirectory = directory) => {
+      if (board) {
+        guests.delete(board.frame.contentWindow);
+        board.frame.remove();
+      }
+      const frame = document.createElement("iframe");
+      frame.src = "/panel/index.html";
+      frame.title = "OpenSpec test board";
+      frame.style.height = "700px";
+      board = { frame, directory: boardDirectory };
+      document.body.append(frame);
+    };
     const closePopover = (reason) => {
       if (!popover) return;
       const { owner, frame, context } = popover;
@@ -303,9 +320,17 @@ function hostHtml(statusCase, pointer, popovers) {
         else show();
         return;
       }
-      if (message.type === "service-request") {
-        const path = message.payload.path;
-        const body = JSON.parse(message.payload.body);
+       if (message.type === "service-request") {
+         const path = message.payload.path;
+         if (path === "/focus" && message.payload.method === "GET") {
+           const targetDirectory = message.payload.query?.directory;
+           __focusClaims.push(targetDirectory);
+           const claim = pendingFocus?.directory === targetDirectory ? pendingFocus : null;
+           if (claim) pendingFocus = null;
+           reply({ status: 200, body: JSON.stringify(claim) });
+           return;
+         }
+         const body = JSON.parse(message.payload.body);
         window.__requests.push({ path, body });
         const send = (value, status = 200) => reply({ status, body: JSON.stringify(value && typeof value === "object" ? { planning: currentPlanning, ...value } : value) });
         if (body.expectedPlanning && body.expectedPlanning !== currentPlanning) {
@@ -341,6 +366,21 @@ function hostHtml(statusCase, pointer, popovers) {
           } else finish();
          }
          else if (path === "/summary") respondSummary(body, send);
+         else if (path === "/focus") {
+           pendingFocus = body;
+           __serviceEvent("focus");
+           send({ ok: true });
+         }
+         else if (path === "/validate") {
+           if (body.change === "first-change") send({ valid: true, issues: [] });
+           else if (statusCase === "compact-validation-budget") send({ valid: false,
+             issues: Array.from({ length: 23 }, (_, i) => ({
+               level: "ERROR", path: "specs/" + i, message: String.fromCharCode(1).repeat(400),
+             })) });
+           else send({ valid: false, issues: Array.from({ length: 23 }, (_, i) => ({
+             level: "ERROR", path: "specs/" + i, message: ("Issue " + i + " ").padEnd(400, "x"),
+           })) });
+         }
          else if (path === "/tasks") {
           if (rootErrorPath === path) { rootErrorPath = ""; send({ error: { code: "ROOT_CHANGED", message: "Root changed" } }, 409); return; }
           if (unavailable) send({ error: { code: "CHANGE_UNAVAILABLE", message: "Change no longer exists." } }, 404);
@@ -475,6 +515,8 @@ function hostHtml(statusCase, pointer, popovers) {
        }
        if (["workspace-unsubscribe", "resize", "status-controls", "open-surface"].includes(message.type)) {
          window.__requests.push({path:message.type,body:message.payload});
+         if (message.type === "open-surface" && location.search.includes("open-board") && !board)
+           __mountBoard();
          if (statusCase && message.type === "resize") {
            const frame = [...document.querySelectorAll("iframe")].find((frame) => frame.contentWindow === event.source);
            if (frame) frame.style.height = Math.max(24, Math.min(480, message.payload.height)) + "px";
@@ -1012,39 +1054,77 @@ for (const [width, pointer, scenario] of [
   });
 }
 
-test("session section apply prepares the board's unsent prompt and saves the choice", async () => {
-  await withPanel(async (browser, url) => {
-    const boardPage = await browser.newPage();
-    await boardPage.goto(url);
-    const board = boardPage.frameLocator("iframe");
-    await board
-      .locator(".change-card")
-      .filter({ hasText: "first-change" })
-      .getByRole("button", { name: "apply", exact: true })
-      .click();
-    await board.getByRole("menuitem", { name: "Prepare in current chat", exact: true }).click();
-    await boardPage.waitForFunction(() => __requests.some((r) => r.path === "compose"));
-    const expected = await boardPage.evaluate(() => __draft());
-
-    const page = await browser.newPage();
-    await page.goto(`${url}?status=item`);
-    const section = page.frameLocator("iframe");
-    await section.getByRole("button", { name: "apply", exact: true }).click({ timeout: 3000 });
-    await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
-    await page.waitForFunction(
-      () => __stored()["session-change:fixture-session"]?.changes?.join() === "first-change",
-    );
-    assert.equal(await page.evaluate(() => __draft()), expected);
-    assert.equal(
+for (const [stage, chip, skill] of [
+  ["progress", "apply", "openspec-apply-change"],
+  ["planning", "propose", "openspec-propose"],
+  ["complete", "archive", "openspec-archive-change"],
+  ["progress", "sync", "openspec-sync-specs"],
+]) {
+  test(`session section ${chip} prepares the unsent workflow draft and tracks its change`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=compact-${stage}`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const card = section
+        .getByRole("article")
+        .filter({ has: section.getByRole("heading", { name: "first-change" }) });
+      await card.getByRole("button", { name: chip, exact: true }).waitFor();
       await page.evaluate(() =>
-        __requests.some((r) => ["prompt", "start-session", "/summaries"].includes(r.path)),
-      ),
-      false,
-    );
-    await boardPage.close();
-    await page.close();
+        __seedStorage([
+          [
+            "session-change:fixture-session",
+            {
+              changes: ["second-change"],
+              savedAt: 1,
+            },
+          ],
+        ]),
+      );
+      let expected;
+      if (chip === "sync") {
+        expected =
+          /^Use your skill tool to load and invoke the openspec-sync-specs skill for OpenSpec change "first-change"\.\s+.*report what.*synced.*without archiving/is;
+      } else {
+        await page.evaluate(() => __mountBoard());
+        const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+        const boardCard = board.locator(".change-card").filter({ hasText: "first-change" });
+        const action = boardCard.getByRole("button", { name: chip, exact: true });
+        await action.click({ timeout: 3000 });
+        if (chip === "apply")
+          await board
+            .getByRole("menuitem", { name: "Prepare in current chat", exact: true })
+            .click();
+        await page.waitForFunction((skill) => __draft().includes(skill), skill);
+        expected = await page.evaluate(() => __draft());
+        await page.waitForFunction(
+          () => __stored()["session-change:fixture-session"]?.changes?.length === 2,
+        );
+        await page.evaluate(() =>
+          __seedStorage([
+            ["session-change:fixture-session", { changes: ["second-change"], savedAt: 1 }],
+          ]),
+        );
+      }
+      await card.getByRole("button", { name: chip, exact: true }).click({ timeout: 3000 });
+      await page.waitForFunction(
+        () =>
+          __stored()["session-change:fixture-session"]?.changes?.join() ===
+          "second-change,first-change",
+        null,
+        { timeout: 3000 },
+      );
+      const draft = await page.evaluate(() => __draft());
+      if (expected instanceof RegExp) assert.match(draft, expected);
+      else assert.equal(draft, expected);
+      assert.equal(
+        await page.evaluate(() =>
+          __requests.some(({ path }) => path === "prompt" || path === "start-session"),
+        ),
+        false,
+      );
+    });
   });
-});
+}
 
 test("session section discards late composition feedback and saving after a session switch", async () => {
   await withPanel(async (browser, url) => {
@@ -1074,19 +1154,144 @@ test("session section discards late composition feedback and saving after a sess
   });
 });
 
-test("session section board chip opens the extension's plugin surface", async () => {
-  await withPanel(async (browser, url) => {
-    const page = await browser.newPage();
-    await page.goto(`${url}?status=item`);
-    await page.frameLocator("iframe").getByRole("button", { name: "board", exact: true }).click({
-      timeout: 3000,
+for (const mode of ["mounted", "later", "other-directory"]) {
+  test(`session section board focus is claimed once by the ${mode} board`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=item${mode === "later" ? "&open-board" : ""}`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+      const chip = section.getByRole("button", { name: "board", exact: true });
+      await chip.waitFor();
+      if (mode !== "later") {
+        await page.evaluate(
+          (target) => __mountBoard(target),
+          mode === "mounted" ? directory : "/tmp/other-project",
+        );
+        await page.waitForFunction(() => __focusClaims.length === 1, null, { timeout: 3000 });
+      }
+      await chip.click();
+      await page.waitForFunction(
+        () => __requests.some(({ path }) => path === "open-surface"),
+        null,
+        { timeout: 3000 },
+      );
+      assert.deepEqual(
+        await page.evaluate(() =>
+          __requests.filter(({ path }) => path === "/focus" || path === "open-surface"),
+        ),
+        [
+          { path: "/focus", body: { directory, change: "first-change" } },
+          { path: "open-surface", body: { surfaceId: "plugin:openspec-board" } },
+        ],
+      );
+      if (mode === "other-directory") {
+        await page.waitForFunction(() => __focusClaims.length === 2, null, { timeout: 3000 });
+        await page.evaluate(() => __theme("light"));
+        await board.locator('html[data-oc-theme="light"]').waitFor();
+        assert.equal(await board.getByRole("button", { name: "Back to changes" }).count(), 0);
+        await page.evaluate(() => __mountBoard());
+      }
+      const back = board.getByRole("button", { name: "Back to changes" });
+      await back.waitFor({ timeout: 3000 });
+      await board.getByRole("heading", { name: "first-change" }).waitFor();
+      assert.equal(
+        await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
+        mode === "other-directory" ? 3 : 2,
+      );
+      await page.evaluate(() => __mountBoard());
+      await board.getByRole("button", { name: "first-change", exact: true }).waitFor();
+      const expectedClaims = mode === "later" ? 2 : mode === "mounted" ? 3 : 4;
+      await page.waitForFunction((count) => __focusClaims.length === count, expectedClaims);
+      const nextTheme = mode === "other-directory" ? "dark" : "light";
+      await page.evaluate((theme) => __theme(theme), nextTheme);
+      await board.locator(`html[data-oc-theme="${nextTheme}"]`).waitFor();
+      assert.equal(await back.count(), 0);
     });
-    await page.waitForFunction(() => __requests.some((r) => r.path === "open-surface"));
-    assert.deepEqual(
-      await page.evaluate(() => __requests.find((r) => r.path === "open-surface").body),
-      { surfaceId: "plugin:openspec-board" },
-    );
-    await page.close();
+  });
+}
+
+test("session section validation opens a flyout only when a validation chip is activated", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ hasTouch: true });
+    await page.goto(`${url}?status=compact-progress&popovers&pointer=coarse`);
+    const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+    const flyout = page.frameLocator('iframe[title="OpenSpec test popover"]');
+    for (const [change, valid] of [
+      ["first-change", true],
+      ["second-change", false],
+    ]) {
+      const card = section
+        .getByRole("article")
+        .filter({ has: section.getByRole("heading", { name: change }) });
+      const chip = card.getByRole("button", { name: "validate" });
+      await chip.waitFor();
+      assert.equal(
+        await page.evaluate(
+          (name) =>
+            __requests.some(({ path, body }) => path === "/validate" && body.change === name),
+          change,
+        ),
+        false,
+      );
+      await chip.tap({ timeout: 3000 });
+      await flyout
+        .getByText(valid ? "Valid · 0 issues" : "Invalid · 23 issues", { exact: true })
+        .waitFor({ timeout: 3000 });
+      if (!valid) {
+        const issues = flyout.getByRole("listitem");
+        assert.equal(await issues.count(), 20);
+        assert.match(await issues.first().innerText(), /ERROR.*specs\/0.*Issue 0 x+…/s);
+        assert.equal((await issues.first().locator("p").innerText()).length, 300);
+        await flyout
+          .getByText("+3 more issues: open the board or run openspec validate", { exact: true })
+          .waitFor();
+      }
+      const request = await page.evaluate(
+        () => __requests.filter(({ path }) => path === "/validate").at(-1).body,
+      );
+      assert.deepEqual(request, {
+        directory,
+        expectedRoot: root,
+        planning: "fixture-planning",
+        change,
+      });
+      await page.evaluate(() => __closePopover("outside"));
+    }
+  });
+});
+
+test("session section omits additional validation issues to fit JSON-escaped messages", async () => {
+  await withPanel(async (browser, url) => {
+    for (const popovers of [true, false]) {
+      const page = await browser.newPage({ hasTouch: popovers });
+      await page.goto(
+        `${url}?status=compact-validation-budget${popovers ? "&popovers&pointer=coarse" : ""}`,
+      );
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const card = section
+        .getByRole("article")
+        .filter({ has: section.getByRole("heading", { name: "second-change" }) });
+      const chip = card.getByRole("button", { name: "validate" });
+      if (popovers) await chip.tap({ timeout: 3000 });
+      else await chip.click({ timeout: 3000 });
+      const flyout = popovers ? page.frameLocator('iframe[title="OpenSpec test popover"]') : card;
+      await flyout.getByText("Invalid · 23 issues", { exact: true }).waitFor({ timeout: 3000 });
+      const count = await flyout.getByRole("listitem").count();
+      assert.ok(count > 0 && count < 20);
+      await flyout
+        .getByText(`+${23 - count} more issues: open the board or run openspec validate`, {
+          exact: true,
+        })
+        .waitFor();
+      if (popovers) {
+        const data = await page.evaluate(
+          () => __requests.find(({ path }) => path === "popover-open").body.data,
+        );
+        assert.ok(JSON.stringify(data).length <= 15_000);
+      }
+      await page.close();
+    }
   });
 });
 

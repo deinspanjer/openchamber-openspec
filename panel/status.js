@@ -2362,6 +2362,18 @@ ${GUEST_UI_LOOK_CSS}`;
     if (!Array.isArray(value)) throw new Error("Invalid dependency list.");
     return value.map(string);
   }
+  function decodeValidation(value) {
+    const { valid, issues } = record(value);
+    if (typeof valid !== "boolean" || !Array.isArray(issues))
+      throw new Error("Invalid validation result.");
+    return {
+      valid,
+      issues: issues.map((value2) => {
+        const { level, path, message } = record(value2);
+        return { level: string(level), path: string(path), message: string(message) };
+      })
+    };
+  }
   function decodeListingEntry(value, key = "id") {
     const item = record(value);
     const id = string(item[key]);
@@ -2495,7 +2507,10 @@ ${GUEST_UI_LOOK_CSS}`;
   }
   function createClient(host2) {
     async function request(path, body) {
-      const result = await host2.serviceRequest({ method: "POST", path, body: JSON.stringify(body) });
+      return send({ method: "POST", path, body: JSON.stringify(body) });
+    }
+    async function send(payload) {
+      const result = await host2.serviceRequest(payload);
       let value;
       try {
         value = JSON.parse(result.body);
@@ -2553,6 +2568,26 @@ ${GUEST_UI_LOOK_CSS}`;
           throw new ServiceRequestError("ROOT_CHANGED", "OpenSpec root changed.");
         if (value.id !== change) throw invalid();
         return value;
+      },
+      validate: async (scope, change) => decode(
+        await request("/validate", {
+          directory: scope.directory,
+          expectedRoot: scope.root,
+          planning: scope.planning,
+          change
+        }),
+        decodeValidation
+      ),
+      setFocus: async (directory2, change) => {
+        if (record2(await request("/focus", { directory: directory2, change })).ok !== true) throw invalid();
+      },
+      claimFocus: async (directory2) => {
+        const value = await send({ method: "GET", path: "/focus", query: { directory: directory2 } });
+        if (value === null) return null;
+        const { directory: target, change } = record2(value);
+        if (target !== directory2 || typeof change !== "string" || !isChangeName(change))
+          throw invalid();
+        return change;
       },
       summaries: async (scope, entries) => {
         const value = decode(
@@ -2739,6 +2774,9 @@ ${GUEST_UI_LOOK_CSS}`;
   }
 
   // src/panel/prompts.ts
+  function stageChip(stage) {
+    return stage === "planning" ? "propose" : stage === "complete" ? "archive" : "apply";
+  }
   function actionPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
     const goal = change.goal?.trim() ? `
@@ -2761,6 +2799,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     if (intent === "verify")
       return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
     return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+  }
+  function syncPrompt(change) {
+    return `Use your skill tool to load and invoke the openspec-sync-specs skill for OpenSpec change "${change.id}".
+
+Report what you synced without archiving the change.`;
   }
 
   // src/panel/tracked-change.ts
@@ -2944,7 +2987,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       }
       const previous = content.children.item(index);
       if (previous !== mounted.element) content.insertBefore(mounted.element, previous);
-      mounted.update(card);
+      mounted.update(card, view.kind === "ready" ? view.listing : null);
     }
     notes.replaceChildren();
     if (view.kind === "ready") {
@@ -3016,11 +3059,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       message: caught instanceof HostRequestError ? caught.message : fallback
     }).catch((error) => console.warn("Could not show the OpenSpec error.", error));
   }
-  async function preparePrompt(change, current) {
+  async function preparePrompt(change, text, current) {
     if (!current()) return;
     const session = sessionId;
     try {
-      await host.compose({ text: actionPrompt(change, "primary"), mode: "replace" });
+      await host.compose({ text, mode: "replace" });
       if (!current()) return;
       if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
       await host.toast({
@@ -3089,43 +3132,82 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     let taskRows = /* @__PURE__ */ new Map();
     const actions = document.createElement("div");
     actions.className = "card-actions";
+    let scope = null;
     const primary2 = mountButton(actions, {
       label: "",
       size: "sm",
       onClick: () => {
-        if (change) void preparePrompt(change, captureContext());
+        if (change) void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
       }
     });
     const sync = mountButton(actions, {
       label: "sync",
       size: "sm",
       variant: "secondary",
-      disabled: true,
       onClick: () => {
+        if (change) void preparePrompt(change, syncPrompt(change), captureContext());
       }
     });
-    const validate = mountButton(actions, {
+    const validationInline = document.createElement("div");
+    validationInline.hidden = true;
+    const validateRoot = document.createElement("span");
+    actions.append(validateRoot);
+    let validationData = null;
+    let validating = false;
+    let disposedCard = false;
+    const validate = mountButton(validateRoot, {
       label: "validate",
       size: "sm",
       variant: "secondary",
-      disabled: true,
       onClick: () => {
+        if (!change || !scope || validating) return;
+        if (!validationInline.hidden) {
+          validationAnchor.reset();
+          validationData = null;
+          return;
+        }
+        const captured = captureContext();
+        const current = () => captured() && !disposedCard && change !== null;
+        const plan = scope;
+        validating = true;
+        validationAnchor.reset();
+        validationData = null;
+        void client.validate(plan, id).then((result) => {
+          if (!current()) return;
+          validationData = validationFlyout(id, result);
+          validationAnchor.update();
+          validationAnchor.open();
+        }).catch(
+          (caught) => showError(current, caught, "Could not validate the OpenSpec change.")
+        ).finally(() => {
+          validating = false;
+        });
       }
     });
+    const validationAnchor = mountFlyout(
+      validateRoot.querySelector("button"),
+      validationInline,
+      () => validationData,
+      false
+    );
     const board = mountButton(actions, {
       label: "board",
       size: "sm",
       variant: "secondary",
       onClick: () => {
+        const targetDirectory = directory;
+        if (!targetDirectory || !change) return;
         const current = captureContext();
-        void host.openSurface("plugin:openspec-board").catch(
+        void client.setFocus(targetDirectory, id).then(() => {
+          if (current()) return host.openSurface("plugin:openspec-board");
+        }).catch(
           (caught) => showError(current, caught, "Could not open the OpenSpec board.")
         );
       }
     });
     const details = document.createElement("div");
     details.className = "section-content";
-    details.append(heading, inline, meter, disclosure, currentTask.inline, actions);
+    details.append(heading, inline, meter, disclosure, currentTask.inline, actions, validationInline);
     const error = document.createElement("p");
     error.setAttribute("role", "alert");
     element.append(details, error);
@@ -3133,10 +3215,12 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       element,
       refreshAnchor() {
         nameAnchor.update();
+        if (validationAnchor.isOpen()) validationAnchor.update();
         if (taskKey !== null) currentTask.refreshAnchor();
         for (const { title: title2 } of taskRows.values()) title2.refreshAnchor();
       },
-      update(card) {
+      update(card, listing) {
+        scope = listing;
         details.hidden = "message" in card;
         error.hidden = !details.hidden;
         if ("message" in card) {
@@ -3147,7 +3231,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         change = card.change;
         nameAnchor.update();
         primary2.update({
-          label: change.stage === "planning" ? "propose" : change.stage === "complete" ? "archive" : "apply"
+          label: stageChip(change.stage)
         });
         const { completedTasks, totalTasks } = change;
         const percentage = totalTasks ? 100 * completedTasks / totalTasks : 0;
@@ -3187,7 +3271,9 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         taskRows = rows;
       },
       dispose() {
+        disposedCard = true;
         nameAnchor.dispose();
+        validationAnchor.dispose();
         currentTask.dispose();
         for (const { title: title2 } of taskRows.values()) title2.dispose();
         for (const handle of [primary2, sync, validate, board]) handle.dispose();
@@ -3237,10 +3323,39 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     );
     return data;
   }
+  function validationFlyout(change, validation) {
+    const data = {
+      kind: "validation",
+      change,
+      result: { valid: validation.valid, total: validation.issues.length, issues: [] }
+    };
+    for (const issue of validation.issues.slice(0, 20)) {
+      data.result.issues.push({ ...issue, message: ellipsize(issue.message, 300) });
+      if (JSON.stringify(data).length <= FLYOUT_DATA_LIMIT) continue;
+      data.result.issues.pop();
+      break;
+    }
+    return data;
+  }
   function decodeFlyout(value) {
     if (!value || typeof value !== "object" || !("kind" in value)) return null;
     if (value.kind === "task")
       return "id" in value && typeof value.id === "string" && "description" in value && typeof value.description === "string" ? { kind: "task", id: value.id, description: value.description } : null;
+    if (value.kind === "validation" && "change" in value && typeof value.change === "string") {
+      try {
+        if (!("result" in value) || !value.result || typeof value.result !== "object" || !("total" in value.result) || typeof value.result.total !== "number" || !Number.isSafeInteger(value.result.total))
+          return null;
+        const result = decodeValidation(value.result);
+        if (value.result.total < result.issues.length) return null;
+        return {
+          kind: "validation",
+          change: value.change,
+          result: { ...result, total: value.result.total }
+        };
+      } catch {
+        return null;
+      }
+    }
     if (value.kind !== "change" || !("name" in value) || typeof value.name !== "string" || !("goal" in value) || value.goal !== null && typeof value.goal !== "string" || !("stage" in value) || value.stage !== "planning" && value.stage !== "ready" && value.stage !== "progress" && value.stage !== "complete")
       return null;
     return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
@@ -3255,6 +3370,33 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     const heading = document.createElement(container === panelRoot ? "h1" : "p");
     heading.className = "flyout-heading";
+    if (data.kind === "validation") {
+      const { valid, issues, total } = data.result;
+      heading.textContent = data.change;
+      const result = document.createElement("p");
+      result.textContent = `${valid ? "Valid" : "Invalid"} \xB7 ${total} ${total === 1 ? "issue" : "issues"}`;
+      container.replaceChildren(heading, result);
+      if (issues.length) {
+        const list = document.createElement("ul");
+        list.className = "validation-issues";
+        for (const issue of issues) {
+          const item = document.createElement("li");
+          const location = document.createElement("strong");
+          location.textContent = `${issue.level} \xB7 ${issue.path}`;
+          const message = document.createElement("p");
+          message.textContent = issue.message;
+          item.append(location, message);
+          list.append(item);
+        }
+        container.append(list);
+      }
+      if (total > issues.length) {
+        const omitted = document.createElement("p");
+        omitted.textContent = `+${total - issues.length} more issues: open the board or run openspec validate`;
+        container.append(omitted);
+      }
+      return;
+    }
     heading.textContent = data.name;
     const stage = document.createElement("p");
     stage.textContent = stageLabel(data.stage);
@@ -3272,8 +3414,9 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         onClick: untrack
       });
   }
-  function mountFlyout(button2, inline, getData) {
+  function mountFlyout(button2, inline, getData, activateOnClick = true) {
     let anchor;
+    let openedId = null;
     let action;
     function closeInline() {
       action?.dispose();
@@ -3281,15 +3424,13 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       inline.hidden = true;
       if (!anchor) button2.setAttribute("aria-expanded", "false");
     }
-    function onClick(event) {
+    function open() {
       const data = getData();
       if (!data) return;
-      event.preventDefault();
       if (anchor) {
         if (button2.getAttribute("aria-expanded") !== "true")
           button2.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
       } else {
-        if (!inline.hidden) return closeInline();
         inline.hidden = false;
         const session = sessionId;
         const current = captureContext();
@@ -3304,13 +3445,28 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         button2.setAttribute("aria-expanded", "true");
       }
     }
-    button2.addEventListener("click", onClick);
+    function onClick(event) {
+      event.preventDefault();
+      if (!inline.hidden) closeInline();
+      else open();
+    }
+    function reset() {
+      openedId = null;
+      anchor?.dispose();
+      anchor = void 0;
+      closeInline();
+    }
+    const offClosed = activateOnClick ? void 0 : host.onPopoverClosed(({ id }) => {
+      if (id === openedId)
+        queueMicrotask(() => {
+          if (id === openedId) reset();
+        });
+    });
+    if (activateOnClick) button2.addEventListener("click", onClick);
     return {
-      reset() {
-        anchor?.dispose();
-        anchor = void 0;
-        closeInline();
-      },
+      open,
+      reset,
+      isOpen: () => button2.getAttribute("aria-expanded") === "true",
       update() {
         if (anchor && !hasPopovers) {
           anchor.dispose();
@@ -3322,7 +3478,13 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           closeInline();
           button2.removeAttribute("aria-expanded");
           anchor = mountPopoverAnchor(button2, {
-            host,
+            host: activateOnClick ? host : {
+              ...host,
+              openPopover: (request) => {
+                openedId = request.id;
+                return host.openPopover(request);
+              }
+            },
             getData: () => {
               const data = getData();
               if (!data || JSON.stringify(data).length > FLYOUT_DATA_LIMIT)
@@ -3336,9 +3498,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         }
       },
       dispose() {
-        anchor?.dispose();
-        anchor = void 0;
-        closeInline();
+        offClosed?.();
+        reset();
         button2.removeEventListener("click", onClick);
       }
     };

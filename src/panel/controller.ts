@@ -32,6 +32,8 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   } | null = null;
   let changes: DerivedChange[] = [];
   let listedIds: ReadonlySet<string> = new Set();
+  let checkFocus = true;
+  let focusedChange: string | null = null;
   let staleIds = new Set<string>();
   let unavailableIds = new Set<string>();
   let failures: { id: string; error: string }[] = [];
@@ -68,6 +70,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     resources.setContext(null);
     changes = [];
     listedIds = new Set();
+    focusedChange = null;
     staleIds = new Set();
     unavailableIds = new Set();
     failures = [];
@@ -165,6 +168,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         pendingSummaries = listedCount;
         settled = true;
         render();
+        if (checkFocus) claimFocus();
         const summaries = await client.summaries(current, listing.changes);
         if (epoch !== startingEpoch || scope !== current || operation !== boardOperation) return;
         for (const entry of summaries) {
@@ -237,6 +241,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         }
         pendingSummaries = 0;
         render();
+        applyFocus();
       } catch (caught) {
         if (
           directory !== currentDirectory ||
@@ -583,6 +588,35 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     queueMicrotask(() => appRoot.querySelector<HTMLElement>(".detail-back button")?.focus());
   }
 
+  function applyFocus() {
+    if (pendingSummaries || !focusedChange) return;
+    const target = focusedChange;
+    focusedChange = null;
+    const change = changes.find(({ id }) => id === target);
+    if (change && listedIds.has(target)) openDetail(change, scope, epoch);
+  }
+
+  function claimFocus() {
+    const captured = scope;
+    const startingEpoch = epoch;
+    if (!captured) {
+      checkFocus = true;
+      return;
+    }
+    checkFocus = false;
+    void client
+      .claimFocus(captured.directory)
+      .then((change) => {
+        if (!change || disposed || scope !== captured || epoch !== startingEpoch) return;
+        if (!listedIds.has(change)) return;
+        focusedChange = change;
+        applyFocus();
+      })
+      .catch((caught: unknown) =>
+        console.warn("Could not claim the OpenSpec board focus.", caught),
+      );
+  }
+
   const createView = mountCreateDialog(client, {
     current: () => scope,
     created: (origin) => {
@@ -866,6 +900,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     );
   }
 
+  const offServiceEvent = host.onServiceEvent(({ topic }) => {
+    if (topic === "focus") claimFocus();
+  });
   const offReady = host.onReady((ready) => {
     const changed = directory !== ready.directory;
     directory = ready.directory;
@@ -893,6 +930,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     offReady();
     offDirectory();
     offSession();
+    offServiceEvent();
     resources.dispose();
     boardView.dispose();
     detailView.dispose();

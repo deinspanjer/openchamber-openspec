@@ -62,7 +62,7 @@ export function createOpenSpecService(
   options: {
     timeoutMs?: number;
     remove?: typeof rm;
-    emit?: (topic: "focus", data: Focus) => Promise<unknown>;
+    emit?: (topic: "focus") => Promise<unknown>;
   } = {},
 ) {
   const emit = options.emit ?? createServiceHost({ env: process.env }).emit;
@@ -76,10 +76,20 @@ export function createOpenSpecService(
     }
     if (request.method === "GET" && request.url === "/health")
       return send(response, 200, { ok: true });
-    if (request.method === "GET" && request.url === "/focus") {
+    if (
+      request.method === "GET" &&
+      (request.url === "/focus" || request.url?.startsWith("/focus?"))
+    ) {
+      const directory = new URL(request.url, "http://localhost").searchParams.get("directory");
+      if (!directory || !isAbsolute(directory))
+        return send(response, 400, {
+          error: serviceError("BAD_DIRECTORY", "Directory must be absolute."),
+        });
       const pending = pendingFocus;
-      pendingFocus = null;
-      return send(response, 200, pending && Date.now() < pending.expiresAt ? pending.target : null);
+      if (pending && Date.now() >= pending.expiresAt) pendingFocus = null;
+      const target = pendingFocus?.target.directory === directory ? pendingFocus.target : null;
+      if (target) pendingFocus = null;
+      return send(response, 200, target);
     }
     if (request.method !== "POST" || !request.url)
       return send(response, 404, { error: serviceError("NOT_FOUND", "Route not found.", 404) });
@@ -118,7 +128,7 @@ export function createOpenSpecService(
         if (!isChangeName(change)) throw serviceError("BAD_CHANGE", "Change name is invalid.");
         const target = { directory, change };
         pendingFocus = { target, expiresAt: Date.now() + FOCUS_TTL_MS };
-        await emit("focus", target);
+        await emit("focus");
         return send(response, 200, { ok: true });
       }
       const expectedRoot =

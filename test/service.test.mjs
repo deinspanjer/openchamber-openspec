@@ -801,7 +801,7 @@ test("validate does not report partial results from malformed CLI output", async
   }
 });
 
-test("focus emits the latest target and retains it for one read within 30 seconds", async (t) => {
+test("focus signals without sharing its target and only a matching directory claims it", async (t) => {
   const emitted = [];
   let now = Date.now();
   t.mock.method(Date, "now", () => now);
@@ -810,8 +810,10 @@ test("focus emits the latest target and retains it for one read within 30 second
       const first = { directory: "/project", change: "first-change" };
       const second = { directory: "/other-project", change: "second-change" };
       const headers = { authorization: "Bearer test-token" };
-      const readFocus = () =>
-        fetch(`${url}/focus`, { headers }).then((response) => response.json());
+      const readFocus = (directory) =>
+        fetch(`${url}/focus?${new URLSearchParams({ directory })}`, { headers }).then((response) =>
+          response.json(),
+        );
       const setFocus = async (body) => {
         const response = await fetch(`${url}/focus`, {
           method: "POST",
@@ -821,22 +823,20 @@ test("focus emits the latest target and retains it for one read within 30 second
         assert.equal(response.status, 200);
         await response.json();
       };
-      assert.equal(await readFocus(), null);
+      assert.equal(await readFocus(first.directory), null);
       await setFocus(first);
       await setFocus(second);
-      assert.deepEqual(emitted, [
-        ["focus", first],
-        ["focus", second],
-      ]);
+      assert.deepEqual(emitted, [["focus"], ["focus"]]);
       now += 29_999;
-      assert.deepEqual(await readFocus(), second);
-      assert.equal(await readFocus(), null);
+      assert.equal(await readFocus(first.directory), null);
+      assert.deepEqual(await readFocus(second.directory), second);
+      assert.equal(await readFocus(second.directory), null);
       await setFocus(first);
       now += 30_000;
-      assert.equal(await readFocus(), null);
+      assert.equal(await readFocus(first.directory), null);
     },
     undefined,
-    { emit: async (topic, data) => emitted.push([topic, data]) },
+    { emit: async (...event) => emitted.push(event) },
   );
 });
 

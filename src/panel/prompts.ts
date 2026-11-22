@@ -1,4 +1,8 @@
-import type { DerivedChange } from "../model.js";
+import type { DerivedChange, Stage } from "../model.js";
+
+export function stageChip(stage: Stage) {
+  return stage === "planning" ? "propose" : stage === "complete" ? "archive" : "apply";
+}
 
 export function actionPrompt(
   change: DerivedChange,
@@ -20,4 +24,8 @@ export function actionPrompt(
   if (intent === "verify")
     return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
   return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+}
+
+export function syncPrompt(change: Pick<DerivedChange, "id">): string {
+  return `Use your skill tool to load and invoke the openspec-sync-specs skill for OpenSpec change "${change.id}".\n\nReport what you synced without archiving the change.`;
 }

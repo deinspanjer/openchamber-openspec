@@ -1,14 +1,15 @@
-import type { HostClient } from "@openchamber/sdk";
+import type { GuestRequest, HostClient } from "@openchamber/sdk";
 import {
   decodeTaskResponse,
   decodeListing,
   decodeSummary,
   decodeSummaries,
+  decodeValidation,
   type ChangeMetadata,
   type Task,
   type ListingEntry,
 } from "../contracts.js";
-import type { ChangeSummary } from "../model.js";
+import { isChangeName, type ChangeSummary } from "../model.js";
 
 export class ServiceRequestError extends Error {
   constructor(
@@ -32,7 +33,11 @@ function invalid(): ServiceRequestError {
 
 export function createClient(host: HostClient) {
   async function request(path: string, body: Record<string, unknown>): Promise<unknown> {
-    const result = await host.serviceRequest({ method: "POST", path, body: JSON.stringify(body) });
+    return send({ method: "POST", path, body: JSON.stringify(body) });
+  }
+
+  async function send(payload: GuestRequest): Promise<unknown> {
+    const result = await host.serviceRequest(payload);
     let value: unknown;
     try {
       value = JSON.parse(result.body);
@@ -104,6 +109,27 @@ export function createClient(host: HostClient) {
         throw new ServiceRequestError("ROOT_CHANGED", "OpenSpec root changed.");
       if (value.id !== change) throw invalid();
       return value;
+    },
+    validate: async (scope: Scope, change: string) =>
+      decode(
+        await request("/validate", {
+          directory: scope.directory,
+          expectedRoot: scope.root,
+          planning: scope.planning,
+          change,
+        }),
+        decodeValidation,
+      ),
+    setFocus: async (directory: string, change: string) => {
+      if (record(await request("/focus", { directory, change })).ok !== true) throw invalid();
+    },
+    claimFocus: async (directory: string) => {
+      const value = await send({ method: "GET", path: "/focus", query: { directory } });
+      if (value === null) return null;
+      const { directory: target, change } = record(value);
+      if (target !== directory || typeof change !== "string" || !isChangeName(change))
+        throw invalid();
+      return change;
     },
     summaries: async (
       scope: Scope,

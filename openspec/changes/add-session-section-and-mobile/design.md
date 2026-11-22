@@ -196,12 +196,12 @@ takes no target item, so the board would open at its root rather than on the cha
 
 **Focus handoff:** `board` first posts `/focus` `{ directory, change }` to the service, then calls
 `openSurface`. The service keeps one pending focus in memory for 30 s and calls
-`createServiceHost({ env: process.env }).emit("focus", { directory, change })`. `emit` needs no
-capability (`packages/sdk/GUEST_SERVICES.md:204`). A mounted board hears it via
-`host.onServiceEvent`. A board that mounts later asks `GET /focus` once after its first listing,
-which returns and clears the pending focus. The controller applies a focus only when `directory`
-equals its current directory and the change is in its listing, by calling its existing
-`openDetail`. It never triggers an extra board load.
+`createServiceHost({ env: process.env }).emit("focus")` without a target. `emit` needs no capability
+(`packages/sdk/GUEST_SERVICES.md:204`). A mounted board claims on `host.onServiceEvent`; a board
+mounting later claims once after its first listing. Both use `GET /focus?directory=…`. The first
+request from the matching directory returns and clears the focus; other directories neither receive
+nor clear it. The controller calls `openDetail` only for a change in its current listing. The
+handoff never triggers an extra board load.
 
 ### Phone and touch
 

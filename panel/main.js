@@ -2644,6 +2644,18 @@ ${GUEST_UI_LOOK_CSS}`;
     if (!Array.isArray(value)) throw new Error("Invalid dependency list.");
     return value.map(string);
   }
+  function decodeValidation(value) {
+    const { valid, issues } = record(value);
+    if (typeof valid !== "boolean" || !Array.isArray(issues))
+      throw new Error("Invalid validation result.");
+    return {
+      valid,
+      issues: issues.map((value2) => {
+        const { level, path, message } = record(value2);
+        return { level: string(level), path: string(path), message: string(message) };
+      })
+    };
+  }
   function decodeListingEntry(value, key = "id") {
     const item = record(value);
     const id = string(item[key]);
@@ -2777,7 +2789,10 @@ ${GUEST_UI_LOOK_CSS}`;
   }
   function createClient(host2) {
     async function request(path, body) {
-      const result = await host2.serviceRequest({ method: "POST", path, body: JSON.stringify(body) });
+      return send({ method: "POST", path, body: JSON.stringify(body) });
+    }
+    async function send(payload) {
+      const result = await host2.serviceRequest(payload);
       let value;
       try {
         value = JSON.parse(result.body);
@@ -2835,6 +2850,26 @@ ${GUEST_UI_LOOK_CSS}`;
           throw new ServiceRequestError("ROOT_CHANGED", "OpenSpec root changed.");
         if (value.id !== change) throw invalid();
         return value;
+      },
+      validate: async (scope, change) => decode(
+        await request("/validate", {
+          directory: scope.directory,
+          expectedRoot: scope.root,
+          planning: scope.planning,
+          change
+        }),
+        decodeValidation
+      ),
+      setFocus: async (directory, change) => {
+        if (record2(await request("/focus", { directory, change })).ok !== true) throw invalid();
+      },
+      claimFocus: async (directory) => {
+        const value = await send({ method: "GET", path: "/focus", query: { directory } });
+        if (value === null) return null;
+        const { directory: target, change } = record2(value);
+        if (target !== directory || typeof change !== "string" || !isChangeName(change))
+          throw invalid();
+        return change;
       },
       summaries: async (scope, entries2) => {
         const value = decode(
@@ -8092,6 +8127,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     let pendingInspection = null;
     let changes = [];
     let listedIds = /* @__PURE__ */ new Set();
+    let checkFocus = true;
+    let focusedChange = null;
     let staleIds = /* @__PURE__ */ new Set();
     let unavailableIds = /* @__PURE__ */ new Set();
     let failures = [];
@@ -8126,6 +8163,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       resources.setContext(null);
       changes = [];
       listedIds = /* @__PURE__ */ new Set();
+      focusedChange = null;
       staleIds = /* @__PURE__ */ new Set();
       unavailableIds = /* @__PURE__ */ new Set();
       failures = [];
@@ -8209,6 +8247,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           pendingSummaries = listedCount;
           settled = true;
           render();
+          if (checkFocus) claimFocus();
           const summaries = await client.summaries(current, listing.changes);
           if (epoch !== startingEpoch || scope !== current || operation !== boardOperation) return;
           for (const entry of summaries) {
@@ -8273,6 +8312,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           }
           pendingSummaries = 0;
           render();
+          applyFocus();
         } catch (caught) {
           if (directory !== currentDirectory || epoch !== startingEpoch || operation !== boardOperation)
             return;
@@ -8530,6 +8570,30 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       startContent(change);
       queueMicrotask(() => appRoot.querySelector(".detail-back button")?.focus());
     }
+    function applyFocus() {
+      if (pendingSummaries || !focusedChange) return;
+      const target = focusedChange;
+      focusedChange = null;
+      const change = changes.find(({ id }) => id === target);
+      if (change && listedIds.has(target)) openDetail(change, scope, epoch);
+    }
+    function claimFocus() {
+      const captured = scope;
+      const startingEpoch = epoch;
+      if (!captured) {
+        checkFocus = true;
+        return;
+      }
+      checkFocus = false;
+      void client.claimFocus(captured.directory).then((change) => {
+        if (!change || disposed || scope !== captured || epoch !== startingEpoch) return;
+        if (!listedIds.has(change)) return;
+        focusedChange = change;
+        applyFocus();
+      }).catch(
+        (caught) => console.warn("Could not claim the OpenSpec board focus.", caught)
+      );
+    }
     const createView = mountCreateDialog(client, {
       current: () => scope,
       created: (origin) => {
@@ -8771,6 +8835,9 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         } : null
       );
     }
+    const offServiceEvent = host2.onServiceEvent(({ topic }) => {
+      if (topic === "focus") claimFocus();
+    });
     const offReady = host2.onReady((ready2) => {
       const changed = directory !== ready2.directory;
       directory = ready2.directory;
@@ -8798,6 +8865,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       offReady();
       offDirectory();
       offSession();
+      offServiceEvent();
       resources.dispose();
       boardView.dispose();
       detailView.dispose();

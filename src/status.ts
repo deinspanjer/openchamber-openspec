@@ -1,11 +1,16 @@
 import { connectHost, HostRequestError, type GuestSessionsSnapshot } from "@openchamber/sdk";
 import { applyHostReady, mountButton, mountPopoverAnchor } from "@openchamber/sdk/ui";
-import type { ListingEntry, Task } from "./contracts.js";
+import {
+  decodeValidation,
+  type ListingEntry,
+  type Task,
+  type ValidationResult,
+} from "./contracts.js";
 import { deriveChange, taskWindow, type DerivedChange, type Stage } from "./model.js";
-import { createClient, type Listing } from "./panel/client.js";
+import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
-import { actionPrompt } from "./panel/prompts.js";
+import { actionPrompt, syncPrompt, stageChip } from "./panel/prompts.js";
 import {
   appendTrackedChange,
   readTrackedChanges,
@@ -21,7 +26,12 @@ type View =
 type Card = { id: string; change: DerivedChange; tasks: Task[] } | { id: string; message: string };
 type ChangeFlyout = { kind: "change"; name: string; stage: Stage; goal: string | null };
 type TaskFlyout = { kind: "task"; id: string; description: string };
-type Flyout = ChangeFlyout | TaskFlyout;
+type ValidationFlyout = {
+  kind: "validation";
+  change: string;
+  result: ValidationResult & { total: number };
+};
+type Flyout = ChangeFlyout | TaskFlyout | ValidationFlyout;
 
 const root = document.querySelector<HTMLElement>("#root");
 if (!root) throw new Error("Status section root is missing");
@@ -132,7 +142,7 @@ function render(view: View) {
     }
     const previous = content.children.item(index);
     if (previous !== mounted.element) content.insertBefore(mounted.element, previous);
-    mounted.update(card);
+    mounted.update(card, view.kind === "ready" ? view.listing : null);
   }
   notes.replaceChildren();
   if (view.kind === "ready") {
@@ -216,11 +226,11 @@ async function showError(current: () => boolean, caught: unknown, fallback: stri
     .catch((error: unknown) => console.warn("Could not show the OpenSpec error.", error));
 }
 
-async function preparePrompt(change: DerivedChange, current: () => boolean) {
+async function preparePrompt(change: DerivedChange, text: string, current: () => boolean) {
   if (!current()) return;
   const session = sessionId;
   try {
-    await host.compose({ text: actionPrompt(change, "primary"), mode: "replace" });
+    await host.compose({ text, mode: "replace" });
     if (!current()) return;
     if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
     await host.toast({
@@ -297,35 +307,81 @@ function mountTrackedCard(id: string) {
   let taskRows = new Map<string, TaskRow>();
   const actions = document.createElement("div");
   actions.className = "card-actions";
+  let scope: Scope | null = null;
   const primary = mountButton(actions, {
     label: "",
     size: "sm",
     onClick: () => {
-      if (change) void preparePrompt(change, captureContext());
+      if (change) void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
     },
   });
   const sync = mountButton(actions, {
     label: "sync",
     size: "sm",
     variant: "secondary",
-    disabled: true,
-    onClick: () => {},
+    onClick: () => {
+      if (change) void preparePrompt(change, syncPrompt(change), captureContext());
+    },
   });
-  const validate = mountButton(actions, {
+  const validationInline = document.createElement("div");
+  validationInline.hidden = true;
+  const validateRoot = document.createElement("span");
+  actions.append(validateRoot);
+  let validationData: ValidationFlyout | null = null;
+  let validating = false;
+  let disposedCard = false;
+  const validate = mountButton(validateRoot, {
     label: "validate",
     size: "sm",
     variant: "secondary",
-    disabled: true,
-    onClick: () => {},
+    onClick: () => {
+      if (!change || !scope || validating) return;
+      if (!validationInline.hidden) {
+        validationAnchor.reset();
+        validationData = null;
+        return;
+      }
+      const captured = captureContext();
+      const current = () => captured() && !disposedCard && change !== null;
+      const plan = scope;
+      validating = true;
+      validationAnchor.reset();
+      validationData = null;
+      void client
+        .validate(plan, id)
+        .then((result) => {
+          if (!current()) return;
+          validationData = validationFlyout(id, result);
+          validationAnchor.update();
+          validationAnchor.open();
+        })
+        .catch((caught: unknown) =>
+          showError(current, caught, "Could not validate the OpenSpec change."),
+        )
+        .finally(() => {
+          validating = false;
+        });
+    },
   });
+  const validationAnchor = mountFlyout(
+    validateRoot.querySelector("button")!,
+    validationInline,
+    () => validationData,
+    false,
+  );
   const board = mountButton(actions, {
     label: "board",
     size: "sm",
     variant: "secondary",
     onClick: () => {
+      const targetDirectory = directory;
+      if (!targetDirectory || !change) return;
       const current = captureContext();
-      void host
-        .openSurface("plugin:openspec-board")
+      void client
+        .setFocus(targetDirectory, id)
+        .then(() => {
+          if (current()) return host.openSurface("plugin:openspec-board");
+        })
         .catch((caught: unknown) =>
           showError(current, caught, "Could not open the OpenSpec board."),
         );
@@ -333,7 +389,7 @@ function mountTrackedCard(id: string) {
   });
   const details = document.createElement("div");
   details.className = "section-content";
-  details.append(heading, inline, meter, disclosure, currentTask.inline, actions);
+  details.append(heading, inline, meter, disclosure, currentTask.inline, actions, validationInline);
   const error = document.createElement("p");
   error.setAttribute("role", "alert");
   element.append(details, error);
@@ -341,10 +397,12 @@ function mountTrackedCard(id: string) {
     element,
     refreshAnchor() {
       nameAnchor.update();
+      if (validationAnchor.isOpen()) validationAnchor.update();
       if (taskKey !== null) currentTask.refreshAnchor();
       for (const { title } of taskRows.values()) title.refreshAnchor();
     },
-    update(card: Card) {
+    update(card: Card, listing: Scope | null) {
+      scope = listing;
       details.hidden = "message" in card;
       error.hidden = !details.hidden;
       if ("message" in card) {
@@ -355,12 +413,7 @@ function mountTrackedCard(id: string) {
       change = card.change;
       nameAnchor.update();
       primary.update({
-        label:
-          change.stage === "planning"
-            ? "propose"
-            : change.stage === "complete"
-              ? "archive"
-              : "apply",
+        label: stageChip(change.stage),
       });
       const { completedTasks, totalTasks } = change;
       const percentage = totalTasks ? (100 * completedTasks) / totalTasks : 0;
@@ -401,7 +454,9 @@ function mountTrackedCard(id: string) {
       taskRows = rows;
     },
     dispose() {
+      disposedCard = true;
       nameAnchor.dispose();
+      validationAnchor.dispose();
       currentTask.dispose();
       for (const { title } of taskRows.values()) title.dispose();
       for (const handle of [primary, sync, validate, board]) handle.dispose();
@@ -457,6 +512,21 @@ function taskFlyout(task: Task): TaskFlyout {
   return data;
 }
 
+function validationFlyout(change: string, validation: ValidationResult): ValidationFlyout {
+  const data: ValidationFlyout = {
+    kind: "validation",
+    change,
+    result: { valid: validation.valid, total: validation.issues.length, issues: [] },
+  };
+  for (const issue of validation.issues.slice(0, 20)) {
+    data.result.issues.push({ ...issue, message: ellipsize(issue.message, 300) });
+    if (JSON.stringify(data).length <= FLYOUT_DATA_LIMIT) continue;
+    data.result.issues.pop();
+    break;
+  }
+  return data;
+}
+
 function decodeFlyout(value: unknown): Flyout | null {
   if (!value || typeof value !== "object" || !("kind" in value)) return null;
   if (value.kind === "task")
@@ -466,6 +536,28 @@ function decodeFlyout(value: unknown): Flyout | null {
       typeof value.description === "string"
       ? { kind: "task", id: value.id, description: value.description }
       : null;
+  if (value.kind === "validation" && "change" in value && typeof value.change === "string") {
+    try {
+      if (
+        !("result" in value) ||
+        !value.result ||
+        typeof value.result !== "object" ||
+        !("total" in value.result) ||
+        typeof value.result.total !== "number" ||
+        !Number.isSafeInteger(value.result.total)
+      )
+        return null;
+      const result = decodeValidation(value.result);
+      if (value.result.total < result.issues.length) return null;
+      return {
+        kind: "validation",
+        change: value.change,
+        result: { ...result, total: value.result.total },
+      };
+    } catch {
+      return null;
+    }
+  }
   if (
     value.kind !== "change" ||
     !("name" in value) ||
@@ -492,6 +584,33 @@ function renderFlyout(container: HTMLElement, data: Flyout, untrack?: () => void
   }
   const heading = document.createElement(container === panelRoot ? "h1" : "p");
   heading.className = "flyout-heading";
+  if (data.kind === "validation") {
+    const { valid, issues, total } = data.result;
+    heading.textContent = data.change;
+    const result = document.createElement("p");
+    result.textContent = `${valid ? "Valid" : "Invalid"} · ${total} ${total === 1 ? "issue" : "issues"}`;
+    container.replaceChildren(heading, result);
+    if (issues.length) {
+      const list = document.createElement("ul");
+      list.className = "validation-issues";
+      for (const issue of issues) {
+        const item = document.createElement("li");
+        const location = document.createElement("strong");
+        location.textContent = `${issue.level} · ${issue.path}`;
+        const message = document.createElement("p");
+        message.textContent = issue.message;
+        item.append(location, message);
+        list.append(item);
+      }
+      container.append(list);
+    }
+    if (total > issues.length) {
+      const omitted = document.createElement("p");
+      omitted.textContent = `+${total - issues.length} more issues: open the board or run openspec validate`;
+      container.append(omitted);
+    }
+    return;
+  }
   heading.textContent = data.name;
   const stage = document.createElement("p");
   stage.textContent = stageLabel(data.stage);
@@ -510,8 +629,14 @@ function renderFlyout(container: HTMLElement, data: Flyout, untrack?: () => void
     });
 }
 
-function mountFlyout(button: HTMLButtonElement, inline: HTMLElement, getData: () => Flyout | null) {
+function mountFlyout(
+  button: HTMLButtonElement,
+  inline: HTMLElement,
+  getData: () => Flyout | null,
+  activateOnClick = true,
+) {
   let anchor: ReturnType<typeof mountPopoverAnchor> | undefined;
+  let openedId: string | null = null;
   let action: ReturnType<typeof mountButton> | undefined;
   function closeInline() {
     action?.dispose();
@@ -519,15 +644,13 @@ function mountFlyout(button: HTMLButtonElement, inline: HTMLElement, getData: ()
     inline.hidden = true;
     if (!anchor) button.setAttribute("aria-expanded", "false");
   }
-  function onClick(event: MouseEvent) {
+  function open() {
     const data = getData();
     if (!data) return;
-    event.preventDefault();
     if (anchor) {
       if (button.getAttribute("aria-expanded") !== "true")
         button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
     } else {
-      if (!inline.hidden) return closeInline();
       inline.hidden = false;
       const session = sessionId;
       const current = captureContext();
@@ -545,13 +668,30 @@ function mountFlyout(button: HTMLButtonElement, inline: HTMLElement, getData: ()
       button.setAttribute("aria-expanded", "true");
     }
   }
-  button.addEventListener("click", onClick);
+  function onClick(event: MouseEvent) {
+    event.preventDefault();
+    if (!inline.hidden) closeInline();
+    else open();
+  }
+  function reset() {
+    openedId = null;
+    anchor?.dispose();
+    anchor = undefined;
+    closeInline();
+  }
+  const offClosed = activateOnClick
+    ? undefined
+    : host.onPopoverClosed(({ id }) => {
+        if (id === openedId)
+          queueMicrotask(() => {
+            if (id === openedId) reset();
+          });
+      });
+  if (activateOnClick) button.addEventListener("click", onClick);
   return {
-    reset() {
-      anchor?.dispose();
-      anchor = undefined;
-      closeInline();
-    },
+    open,
+    reset,
+    isOpen: () => button.getAttribute("aria-expanded") === "true",
     update() {
       if (anchor && !hasPopovers) {
         anchor.dispose();
@@ -563,7 +703,15 @@ function mountFlyout(button: HTMLButtonElement, inline: HTMLElement, getData: ()
         closeInline();
         button.removeAttribute("aria-expanded");
         anchor = mountPopoverAnchor(button, {
-          host,
+          host: activateOnClick
+            ? host
+            : {
+                ...host,
+                openPopover: (request) => {
+                  openedId = request.id;
+                  return host.openPopover(request);
+                },
+              },
           getData: () => {
             const data = getData();
             if (!data || JSON.stringify(data).length > FLYOUT_DATA_LIMIT)
@@ -577,9 +725,8 @@ function mountFlyout(button: HTMLButtonElement, inline: HTMLElement, getData: ()
       }
     },
     dispose() {
-      anchor?.dispose();
-      anchor = undefined;
-      closeInline();
+      offClosed?.();
+      reset();
       button.removeEventListener("click", onClick);
     },
   };

@@ -111,7 +111,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       flyouts, chips in order with the stage chip per stage (`propose` / `apply` / `archive`), and
       `0/0` without the Tasks line. Remove the 1.3.x bar, disclosure, badges and buttons, and their
       tests.
-- [ ] 7.6 Same seam: chip behaviour. `apply` / `propose` / `archive` compose the board's prompts
+- [x] 7.6 Same seam: chip behaviour. `apply` / `propose` / `archive` compose the board's prompts
       unsent and append tracking; `sync` composes the sync prompt; `validate` shows valid and
       invalid results in a flyout; `board` posts the focus, calls
       `openSurface("plugin:openspec-board")`, and a board on the same project (mounted, or mounted
