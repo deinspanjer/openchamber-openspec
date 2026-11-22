@@ -47,40 +47,63 @@ repository):
 
 ### A separate status entry, not the panel page
 
-Declare `contributes.statusSection: { entry: "panel/status.html", title: "OpenSpec change",
+Declare `contributes.statusSection: { entry: "panel/status.html", title: "OpenSpec",
 height: 160, requiresProject: true }`, built from `src/status.ts` to `panel/status.js` by a new
 `build:status` script included in `build` and `clean`. A separate entry keeps the section's frame
 small and avoids branching the board controller on `ready.surface`. Reusing `panel.entry`
 (`statusSection: true`) was rejected: every section frame would load the board's code and DOM.
 
-The section uses `@openchamber/sdk/ui` mounts (`mountProgress`, `mountButton`, `mountMenu`,
-`mountBadge`) and a native `<details>` for the current task, whose `<summary>` is clamped to one
-line with ellipsis. It reports height with `setHeight` from a `ResizeObserver`. Refresh is a header
-control through `setStatusControls` when `ready.features.statusControls` is present, otherwise a
-body button.
+The section reports height with `setHeight` from a `ResizeObserver`. Refresh is a header control
+through `setStatusControls` when `ready.features.statusControls` is present, otherwise a body
+button.
+
+### Compact cards (redesign after first live use, 2026-11-21)
+
+The first build (1.3.x) used a large progress bar, a current-task `<details>`, an artefact badge
+list and `Open board` / stage / `Change…` buttons. The user found it too tall and asked for the
+layout below. Each tracked change is a card:
+
+- Line 1: name (a button opening the change flyout), then `completed/total`.
+- A 3px bar. It's the section's own element, not `mountProgress`, which draws a caption and a
+  checkmark.
+- When tasks exist: a `<details>` whose `<summary>` is `▸ Tasks:` (underlined) and the current
+  task's title clamped to one line. The title is its own button opening the task flyout. Expanded,
+  it lists the five-task window from `taskWindow` (below). Each row is a read-only checkbox and a
+  title button opening that task's flyout.
+- Chips: stage chip (`propose` | `apply` | `archive`, from `deriveChange`'s stage; `ready` and
+  `progress` both map to `apply`), `sync`, `validate`, `board`, as small `mountButton`s with the
+  stage chip in the primary style.
+- `＋ Track a change` after the last card opens the inline list (kept from 1.3.1, now excluding
+  changes already tracked).
+
+`taskWindow(tasks, size = 5)` is a pure function in `src/model.ts`. It centres on the first
+incomplete task (or the last task when all are done) and clamps to the list's ends. The board's
+verify action stays on the board only.
 
 **Upstream cause, host-drawn section rejected:** a `source` section's request carries only
 `directory` and `locale` (`packages/ui/src/lib/guests/status-view.ts:36`), so it cannot be
 session-scoped, and it re-reads on an interval that would run the CLI continuously.
 
-### Resolve the tracked change with a pure function
+### Resolve the tracked changes with a pure function
 
-Add to `src/model.ts`:
+Replace `resolveTrackedChange` in `src/model.ts` with:
 
 ```ts
-type TrackedSource = "saved" | "item" | "worktree";
-resolveTrackedChange(input: {
-  saved: string | null;
+type TrackedSource = "saved" | "item" | "worktree" | "none";
+resolveTrackedChanges(input: {
+  saved: string[] | null; // null = nothing saved for this session
   items: { id: string; data?: unknown }[];
   worktreeName: string | null;
   active: ReadonlySet<string>;
-}): { change: string; source: TrackedSource } | { change: null; staleSaved: string | null };
+}): { changes: string[]; source: TrackedSource };
 ```
 
-Order: `saved` if active; then the first item whose `data` is `{ kind: "change", change }` with an
-active `change`; then, for sessions created before this change, an item without `data` whose `id`
-is an active change name; then `worktreeName` if active. Items with `data.kind === "archive-all"`
-never resolve. Keeping it in `src/model.ts` uses the existing model test bundle.
+A non-null `saved` is authoritative. It returns its active members in saved order, with source
+`saved`, even when the result is empty. Otherwise it derives at most one change: the first item
+whose `data` is `{ kind: "change", change }` with an active `change`; then an item without `data`
+whose `id` is an active change name (sessions started by the board before item data existed); then
+`worktreeName` if active. Items with `data.kind === "archive-all"` never resolve. Keeping it in
+`src/model.ts` uses the existing model test bundle.
 
 ### Session context from the host's session list
 
@@ -92,10 +115,14 @@ changed. Directory change releases and replaces the subscription.
 
 ### Saved choices in instance storage
 
-Key `session-change:<sessionId>`, value `{ change, savedAt }`, in `host.storage` default instance
-scope, so every device on the same server sees it. The board's `preparePrompt` writes it after a
-successful compose when `sessionId` is non-null and the context is still current; failures are
-swallowed after a console warning. Before writing, if `keys()` holds 1,900 or more
+Key `session-change:<sessionId>`, value `{ changes: string[], savedAt }`, in `host.storage`
+default instance scope, so every device on the same server sees it. A stored value without a
+`changes` array (the 1.3.x `{ change }` shape, used on one session) counts as nothing saved; there
+is no migration. Track and Untrack write the whole list. The board's `preparePrompt` appends the
+change, if absent, after a successful compose when `sessionId` is non-null and the context is still
+current. When nothing is saved yet, the first write seeds the list with the session's derived
+change, so tracking a second change keeps the first. Failures are swallowed after a console
+warning. Before writing, if `keys()` holds 1,900 or more
 `session-change:` keys, delete the 100 with the oldest `savedAt` to stay under the 2,000-key limit.
 
 **Upstream cause, `sessionLink` rejected:** it attaches a visible linked item to the session, works
@@ -111,9 +138,21 @@ duplicate-worktree check (`session.items.some(item => item.id === name)`) keeps 
 
 Add `/summary` to the service: `{ directory, root, planning, change }` → the same summary shape as
 one `/summaries` entry, using `summaryFor` with the existing scope and planning-identity checks,
-and `client.summary()` with `decodeSummary`. A section read is `list` → `summary` → `tasks` for the
-resolved change; stage comes from `deriveChange` with the listing's counts. The private protocol is
-internal, so no compatibility shim.
+and `client.summary()` with `decodeSummary`. A section read is one `list`, then `summary` and
+`tasks` for each shown change, with the changes run in parallel. A failure marks only that card.
+Stage comes from `deriveChange` with the listing's counts. The private protocol is internal, so no
+compatibility shim.
+
+### Validate route
+
+Add `/validate`: `{ directory, expectedRoot, planning, change }` → runs `openspec validate <change>
+--type change --json` inside the same scope and planning checks as `/summary`, and returns
+`{ valid: boolean, issues: { level, path, message }[] }` decoded from the CLI's `items[0].valid`
+and `items[0].issues`. The JSON was checked on 2.1.0 for a valid change; confirm the issue fields
+against an invalid fixture before decoding them. A non-zero
+exit with parseable JSON is a result (invalid), not an error. It runs only when `validate` is
+activated, never on refresh, and needs no new permission (`exec: ["openspec"]` already covers it).
+Decode only the fields shown. Unexpected output fails that request.
 
 The picker orders by listing task counts because exact stage ordering would read every change's status.
 
@@ -127,9 +166,24 @@ or directory. The AGENTS.md board rule stays as is; the section has its own rule
 ### Shared prompts
 
 Move `actionPrompt` and the stage-to-intent mapping from `controller.ts` into
-`src/panel/prompts.ts`, unchanged in output. The section composes with
-`host.compose({ text, mode: "replace" })` and toasts like the board, then saves the tracked change
-through the same helper.
+`src/panel/prompts.ts`, unchanged in output. Add `syncPrompt(change)`: "Use your skill tool to load
+and invoke the openspec-sync-specs skill for OpenSpec change "<name>"." plus one sentence asking it
+to report what it synced, without archiving. The section composes with
+`host.compose({ text, mode: "replace" })` and toasts like the board, then appends the change to the
+session's tracked list through the same helper.
+
+### Flyouts
+
+Use `host.openPopover` when `ready.features.popovers` is set. The popover loads `panel/status.html`
+again with `surface: "popover"` and `ready.popover.data` set to `{ kind: "change", name, stage,
+goal }`, `{ kind: "task", id, description }` or `{ kind: "validation", change, result }`. In that
+mode `src/status.ts` renders only the flyout card and sizes it with `setHeight`. `Untrack` in a
+change flyout writes storage itself (popover frames share the extension's grants), then closes. The
+section re-resolves on its next read, or at once when the popover's `onPopoverClosed` fires with
+reason `closed`. Anchors use `mountPopoverAnchor` so a tap on a phone opens the bottom sheet.
+Without `features.popovers`, the same card renders inline under its anchor as a toggled element.
+Data stays under the 16,000-character popover limit; a task description is cut at 4,000 characters
+with an ellipsis.
 
 ### `Open board`
 
@@ -137,7 +191,16 @@ through the same helper.
 on a phone once the panel opts in. The 2.7.3 host checks the surface ID in
 `packages/ui/src/lib/guests/host-bridge.ts:299-304`; extension modes require the `plugin:` prefix
 (`packages/ui/src/lib/surfaces/modes.ts:21-30`, tag `v2.7.3`). **Upstream cause:** `openSurface`
-takes no target item, so the board opens at its root rather than on the change.
+takes no target item, so the board would open at its root rather than on the change.
+
+**Focus handoff:** `board` first posts `/focus` `{ directory, change }` to the service, then calls
+`openSurface`. The service keeps one pending focus in memory for 30 s and calls
+`createServiceHost({ env: process.env }).emit("focus", { directory, change })`. `emit` needs no
+capability (`packages/sdk/GUEST_SERVICES.md:204`). A mounted board hears it via
+`host.onServiceEvent`. A board that mounts later asks `GET /focus` once after its first listing,
+which returns and clears the pending focus. The controller applies a focus only when `directory`
+equals its current directory and the change is in its listing, by calling its existing
+`openDetail`. It never triggers an extra board load.
 
 ### Phone and touch
 
@@ -152,8 +215,14 @@ pointer is coarse.
 
 ### Test seams
 
-- Model seam (`test/model.test.mjs`): `resolveTrackedChange` order, staleness, archive-all, legacy
-  items.
+- Model seam (`test/model.test.mjs`): `resolveTrackedChanges` (saved list authoritative incl.
+  empty, inactive members dropped, derived fallback, archive-all) and `taskWindow` (centre, both
+  ends, fewer than five, all done).
+- Redesign additions at the fake host seam: `openPopover` loading the status entry with
+  `surface: "popover"` and `ready.popover.data`, `onPopoverClosed`, the `features.popovers` toggle
+  for the inline fallback, `onServiceEvent` delivery for focus, and `setHeight` applied to the frame
+  with the real 24–480 clamp. Service seam: `/validate` (valid, invalid, bad output) and `/focus`
+  (set, read-once, 30 s expiry).
 - Fake SDK host seam (`test/panel.test.mjs`): extend the fake host to serve `panel/status.html`,
   push `onSessionLifecycle`, answer `storage`, `setStatusControls`, `setHeight`, `openSurface`,
   `listProjects`/`onSessions`, and include `device` in `ready`. Section and board-saving behaviour
@@ -170,7 +239,10 @@ No new test files or helpers.
 - Insets may already be applied by the host around the frame, doubling padding → verify on a phone
   during the live check and drop the inset padding if the host already applies it.
 - Reads after every finished turn cost a few CLI calls → only while the section is expanded and
-  only for the shown session; the README's telemetry-off advice reduces CLI latency.
+  only for the shown session; the README's telemetry-off advice reduces CLI latency. With N tracked
+  changes a read is 1 + 2N calls; tracking is deliberate, so N stays small.
+- Popover frames load the status bundle again per opening → the status bundle stays small (no board
+  code), and the inline fallback covers hosts without popovers.
 - Storage is per server; a saved choice does not follow a session to another server → acceptable,
   sessions are per server too.
 - Older hosts ignore the section and phone opt-in, and `engines.openchamber` cannot express 2.7.1 →

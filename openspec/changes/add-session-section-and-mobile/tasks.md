@@ -84,13 +84,55 @@
       temporary loader-hook run gave WebKit 214/218, with all 4 failures (dialog keyboard focus,
       theme colour) also failing on `23d2503`; Firefox would not launch on this machine. Proper
       cross-browser support is a follow-up change.
-- [ ] 6.2 Live-host check per `AGENTS.md`: disable and enable the extension, confirm Enabled, and
-      inspect the section in Work Status for a session with a saved choice, then finish a turn and
-      watch the count update. Ask the user before any check that creates sessions or worktrees.
-- [ ] 6.3 Phone check, with the user's go-ahead: open the Status tab and the board page from the
-      More menu on a phone connected to this server; confirm touch sizes, insets and keyboard
-      behaviour, and drop inset padding if the host already applies it. Report anything not
-      verified.
+## 7. Compact multi-change redesign
+
+Spec: `specs/session-change-section`, `specs/change-workflows`; design: "Compact cards", "Flyouts",
+"Validate route", "Focus handoff". Tests fail first at the named seam. Inline waits for fake-host
+delivery in both directions. No new test files or shared helpers. One commit per task.
+
+- [ ] 7.1 Model seam: replace `resolveTrackedChange` with `resolveTrackedChanges` and add
+      `taskWindow`, with failing cases first (see design's test seams). Update callers so
+      `npm run typecheck` passes. Verify with `npm run build:model:test && node --test
+      test/model.test.mjs`.
+- [ ] 7.2 Service seam: add `/validate` and `/focus` (set, read-once, 30 s expiry, `emit`). Check
+      the CLI's issue JSON against an invalid fixture first. Verify with `npm run build && node
+      --test test/service.test.mjs`.
+- [ ] 7.3 Fake host seam: model `openPopover` (loads the status entry with `surface: "popover"` and
+      `ready.popover.data`), `onPopoverClosed`, a `features.popovers` toggle and `onServiceEvent`,
+      and apply `setHeight` to the frame with the 24–480 clamp. Add a failing test that a flyout
+      opens as a popover when supported and inline otherwise, then implement popover mode in
+      `src/status.ts`.
+- [ ] 7.4 Same seam: saved tracked lists. Track adds (seeding the derived change first), Untrack
+      removes, an empty saved list shows nothing even for a worktree session, a value without
+      `changes` counts as unsaved, and the board's current-chat compose appends. Update the
+      existing tracked-change tests to the list shape.
+- [ ] 7.5 Same seam: compact cards for two tracked changes. Name and `n/m`, the thin bar, the
+      `▸ Tasks:` line with the current task, the five-task window on expand, task and name
+      flyouts, chips in order with the stage chip per stage (`propose` / `apply` / `archive`), and
+      `0/0` without the Tasks line. Remove the 1.3.x bar, disclosure, badges and buttons, and their
+      tests.
+- [ ] 7.6 Same seam: chip behaviour. `apply` / `propose` / `archive` compose the board's prompts
+      unsent and append tracking; `sync` composes the sync prompt; `validate` shows valid and
+      invalid results in a flyout; `board` posts the focus, calls
+      `openSurface("plugin:openspec-board")`, and a board on the same project (mounted, or mounted
+      later) opens that change's detail while another project's board stays at its list.
+- [ ] 7.7 Same seam: read and interaction behaviour with two changes. One listing plus summary and
+      tasks per change; a failure on one card leaves the other; an expanded `Tasks:` and focus
+      survive an unchanged finished-turn read; no `/summaries`. Coarse pointer at 320px: 44px
+      targets and no horizontal overflow; fine pointer stays compact.
+- [ ] 7.8 Update README and AGENTS.md for the multi-change section, `/validate` and the focus
+      handoff. Bump the version to 1.4.0 with `npm version 1.4.0 --no-git-tag-version`. Verify
+      with `npm run check` and `npm run format:check`.
+
+## 8. Live checks
+
+- [ ] 8.1 Live-host check per `AGENTS.md` on the released 1.4.0: update, then disable and enable,
+      confirm Enabled. Track two changes in a session, expand Tasks, open each flyout, validate,
+      open the board from a card, and finish a turn to watch a count update. Ask the user before
+      any check that creates sessions or worktrees.
+- [ ] 8.2 Phone check with the user: the Status tab and the board page from the More menu. Confirm
+      touch sizes, bottom-sheet flyouts, insets and keyboard behaviour, and drop inset padding if
+      the host already applies it. Report anything not verified.
 
 ## Workflow follow-up
 

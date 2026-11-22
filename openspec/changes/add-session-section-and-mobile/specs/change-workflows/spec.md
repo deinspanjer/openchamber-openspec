@@ -2,18 +2,18 @@
 
 ## ADDED Requirements
 
-### Requirement: Current-chat composition saves the session's tracked change
+### Requirement: Current-chat composition tracks the change in the session
 
 When a current-chat workflow action composes a prompt and the chat has a session, the extension
-SHALL save that change as the session's tracked change, replacing any earlier choice. It SHALL save
-only after composition succeeds in a still-current context. A fresh-chat draft without a session
-SHALL save nothing. Saving SHALL NOT send, link items visibly on the session, or change OpenSpec
-files, and a save failure SHALL NOT undo or fail the composition.
+SHALL add that change to the session's saved tracked-change list, keeping changes already in it. It
+SHALL save only after composition succeeds in a still-current context. A fresh-chat draft without
+a session SHALL save nothing. Saving SHALL NOT send, link items visibly on the session, or change
+OpenSpec files, and a save failure SHALL NOT undo or fail the composition.
 
 #### Scenario: Prepare apply in an existing session
 
-- **WHEN** the user prepares apply for `add-login` in the current chat of session S
-- **THEN** the composer holds the unsent Apply prompt and S's tracked change is `add-login`
+- **WHEN** session S tracks `fix-cache` and the user prepares apply for `add-login` in S
+- **THEN** the composer holds the unsent Apply prompt and S tracks `fix-cache` and `add-login`
 
 #### Scenario: Prepare in a fresh chat
 
@@ -28,15 +28,44 @@ files, and a save failure SHALL NOT undo or fail the composition.
 ### Requirement: New-worktree Apply records its change on the created session
 
 New-worktree Apply SHALL record the change it applies on the session it creates, so that the
-session resolves that change as its tracked change without a saved choice. Bulk archive sessions
-SHALL be recorded so that they never resolve as a change.
+session shows that change as tracked without a saved list. Bulk archive sessions SHALL be recorded
+so that they never resolve as a change.
 
 #### Scenario: Apply in a new worktree
 
 - **WHEN** new-worktree Apply creates session S for `add-login`
-- **THEN** S resolves `add-login` as its tracked change
+- **THEN** S shows `add-login` as tracked
 
 #### Scenario: Archive all
 
 - **WHEN** archive all creates session S
 - **THEN** S does not resolve any change from its recorded item
+
+### Requirement: Sync prepares a spec-sync prompt
+
+The section's `sync` chip SHALL replace the open composer's text with an unsent prompt asking the
+agent to load and invoke the `openspec-sync-specs` skill for that change, naming the change without
+paths. It SHALL NOT send or change files.
+
+#### Scenario: Prepare sync
+
+- **WHEN** the user activates `sync` on `add-login`
+- **THEN** the composer holds an unsent prompt requesting `openspec-sync-specs` for OpenSpec change
+  `add-login`
+
+### Requirement: Board opens on a requested change
+
+When the section requests a change for the board's current project, the board SHALL show that
+change's detail, after its listing loads if it has not yet. A request for another project, or for
+a change not in the listing, SHALL leave the board at its list. A request SHALL take effect once
+and SHALL NOT trigger extra board reads.
+
+#### Scenario: Requested change exists
+
+- **WHEN** the section requests `add-login` and the board's listing contains it
+- **THEN** the board shows `add-login`'s detail
+
+#### Scenario: Requested change missing
+
+- **WHEN** the requested change is not in the board's listing
+- **THEN** the board stays at its list

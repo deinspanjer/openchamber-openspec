@@ -9,19 +9,21 @@ there.
 
 ## What Changes
 
-- Add an `OpenSpec change` section to the chat's Work Status panel. It follows the session open in
-  the chat and shows that session's tracked change: name, stage, a completion bar followed by
-  `completed/total`, the current task as a disclosure, and planning artefact status.
-- Resolve the tracked change in a fixed order: the user's choice saved for that session, the
-  extension's own item on the session, a worktree named after an active change, otherwise a picker
-  of active changes. Never infer it from the transcript.
-- Offer the stage's workflow action from the section, prepared unsent in the session's composer
-  with the board's existing prompt; also `Change…` and `Open board`.
+- Add an `OpenSpec` section to the chat's Work Status panel. It follows the session open in the
+  chat and shows each change the session tracks as a compact card: name and `completed/total`, a
+  thin bar, a `Tasks:` disclosure with the current task (expanding to a five-task window), and
+  chips for the stage action (`propose` / `apply` / `archive`), `sync`, `validate` and `board`.
+  Names and tasks open flyouts with detail. (Redesigned on 2026-11-21 after the 1.3.x layout proved
+  too tall in live use.)
+- A session tracks the changes the user saved for it, or else one derived from the extension's item
+  on the session or a worktree named after a change. Never infer changes from the transcript.
+- Stage and `sync` chips prepare prompts unsent in the session's composer. `validate` runs
+  OpenSpec validation on request. `board` opens the board on that change.
 - Refresh the section when it loads, when the session or project changes, on explicit Refresh, and
-  when the shown session finishes a turn. This is the first event-driven read trigger; it reads one
-  change, never the whole board.
-- Current-chat workflow actions on the board also save the prepared change as that session's
-  tracked change when a session exists.
+  when the shown session finishes a turn. This is the first event-driven read trigger; it reads only
+  the tracked changes, never the whole board.
+- Current-chat workflow actions on the board also add the prepared change to the session's tracked
+  changes when a session exists.
 - Opt the panel and full-screen page into OpenChamber's phone clients, with touch-sized controls on
   coarse pointers, room for device insets and the on-screen keyboard, and no automatic focus moves
   that raise the keyboard on touch devices.
@@ -35,13 +37,14 @@ are not asked to re-approve. Sidebar marks are deferred because they would.
 
 ### New Capabilities
 
-- `session-change-section`: the session-scoped Work Status section — tracked-change resolution,
-  what it shows, its actions and when it refreshes.
+- `session-change-section`: the session-scoped Work Status section — tracked changes, what it
+  shows, its actions and when it refreshes.
 
 ### Modified Capabilities
 
-- `change-workflows`: current-chat composition also saves the session's tracked change; new-worktree
-  Apply records the change on the session it creates.
+- `change-workflows`: current-chat composition adds the change to the session's tracked changes;
+  new-worktree Apply records the change on the session it creates; `sync` prepares a spec-sync
+  prompt; the board opens on a change the section requests.
 - `change-presentation`: the board and detail are available on phones and sized for touch.
 
 ## Impact
