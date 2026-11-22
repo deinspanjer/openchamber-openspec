@@ -3030,9 +3030,9 @@ ${GUEST_UI_LOOK_CSS}`;
         );
       },
       invalidateChange(scope, change) {
-        const prefix = JSON.stringify([scope.directory, scope.root, scope.planning, change]).slice(0, -1) + ",";
+        const prefix2 = JSON.stringify([scope.directory, scope.root, scope.planning, change]).slice(0, -1) + ",";
         for (const [key, entry] of cache)
-          if (key.startsWith(prefix)) {
+          if (key.startsWith(prefix2)) {
             bytes -= entry.bytes;
             cache.delete(key);
           }
@@ -7905,6 +7905,37 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
   }
 
+  // src/panel/tracked-change.ts
+  var prefix = "session-change:";
+  var readBatchSize = 32;
+  async function saveTrackedChange(host2, sessionId, change, current) {
+    try {
+      const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));
+      if (keys.length >= 1900) {
+        const choices = [];
+        for (let i = 0; i < keys.length; i += readBatchSize) {
+          if (!current()) return;
+          const batch = keys.slice(i, i + readBatchSize);
+          const values = await Promise.all(
+            batch.map(async (key) => ({ key, value: await host2.storage.get(key) }))
+          );
+          for (const { key, value } of values) {
+            if (value && typeof value === "object" && "savedAt" in value && typeof value.savedAt === "number" && Number.isFinite(value.savedAt))
+              choices.push({ key, savedAt: value.savedAt });
+          }
+        }
+        choices.sort((left, right) => left.savedAt - right.savedAt);
+        for (const { key } of choices.slice(0, 100)) {
+          if (!current()) return;
+          await host2.storage.delete(key);
+        }
+      }
+      if (current()) await host2.storage.set(`${prefix}${sessionId}`, { change, savedAt: Date.now() });
+    } catch (caught) {
+      console.warn("Could not save the tracked OpenSpec change.", caught);
+    }
+  }
+
   // src/panel/project.ts
   async function ready(read, subscribe) {
     const initial = await read();
@@ -8221,15 +8252,18 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         return;
       }
       const expectedSession = sessionId;
+      const currentContext = () => scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
       try {
         await host2.compose({ text: actionPrompt(change, intent), mode: "replace" });
-        if (scope !== captured || epoch !== originatingEpoch || sessionId !== expectedSession) return;
+        if (!currentContext()) return;
+        if (expectedSession !== null)
+          void saveTrackedChange(host2, expectedSession, change.id, currentContext);
         await host2.toast({
           kind: "success",
           message: "Workflow prompt prepared in the open composer."
         });
       } catch (caught) {
-        if (scope !== captured || epoch !== originatingEpoch || sessionId !== expectedSession) return;
+        if (!currentContext()) return;
         await host2.toast({
           kind: "error",
           message: caught instanceof HostRequestError ? caught.message : "The workflow prompt could not be prepared."
@@ -8257,6 +8291,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         const result = await host2.startSession({
           providerId: "openspec-board",
           id: change.id,
+          data: { kind: "change", change: change.id },
           title: `Apply ${change.id}`,
           url: "https://openspec.dev/docs/quickstart",
           projectId: project.id,
@@ -8465,6 +8500,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         const result = await host2.startSession({
           providerId: "openspec-board",
           id: "archive-all",
+          data: { kind: "archive-all" },
           title: "Archive completed OpenSpec changes",
           url: "https://openspec.dev/docs/quickstart",
           navigation: "preserve",

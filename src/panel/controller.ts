@@ -10,6 +10,7 @@ import { mountDeleteDialog } from "./delete-dialog.js";
 import { mountArchiveDialog } from "./archive-dialog.js";
 import { archiveAllPrompt } from "./archive-prompt.js";
 import { actionPrompt } from "./prompts.js";
+import { saveTrackedChange } from "./tracked-change.js";
 import { inspectWorktreeDestination } from "./worktree.js";
 
 export function mountController(host: HostClient, appRoot: HTMLElement): () => void {
@@ -295,15 +296,19 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       return;
     }
     const expectedSession = sessionId;
+    const currentContext = () =>
+      scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
     try {
       await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
-      if (scope !== captured || epoch !== originatingEpoch || sessionId !== expectedSession) return;
+      if (!currentContext()) return;
+      if (expectedSession !== null)
+        void saveTrackedChange(host, expectedSession, change.id, currentContext);
       await host.toast({
         kind: "success",
         message: "Workflow prompt prepared in the open composer.",
       });
     } catch (caught) {
-      if (scope !== captured || epoch !== originatingEpoch || sessionId !== expectedSession) return;
+      if (!currentContext()) return;
       await host.toast({
         kind: "error",
         message:
@@ -341,6 +346,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       const result = await host.startSession({
         providerId: "openspec-board",
         id: change.id,
+        data: { kind: "change", change: change.id },
         title: `Apply ${change.id}`,
         url: "https://openspec.dev/docs/quickstart",
         projectId: project.id,
@@ -616,6 +622,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       const result = await host.startSession({
         providerId: "openspec-board",
         id: "archive-all",
+        data: { kind: "archive-all" },
         title: "Archive completed OpenSpec changes",
         url: "https://openspec.dev/docs/quickstart",
         navigation: "preserve",

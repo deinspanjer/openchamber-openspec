@@ -101,6 +101,11 @@ function hostHtml() {
     let draft = "Earlier draft";
     let holdCompose = false;
     let failCompose = false;
+    const storage = new Map();
+    let failStorage = false;
+    window.__stored = () => Object.fromEntries(storage);
+    window.__seedStorage = (entries) => { for (const [key, value] of entries) storage.set(key, value); };
+    window.__failStorage = () => { failStorage = true; };
     let failOpenUrl = false;
     let holdClipboard = false;
     let failClipboard = false;
@@ -293,6 +298,25 @@ function hostHtml() {
           else { draft = message.payload.mode === "replace" ? message.payload.text : draft + message.payload.text; reply(); }
         };
         if (holdCompose) pendingCompose.push(finish); else finish();
+        return;
+      }
+      if (message.type === "storage") {
+        const { op, key, value, scope } = message.payload;
+        window.__requests.push({ path: "storage", body: message.payload });
+        if (failStorage || (scope !== undefined && scope !== "instance")) {
+          event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result",
+            id: message.id, ok: false, code: "HOST_REJECTED", error: "Storage unavailable" }, "*");
+          return;
+        }
+        if (op === "get") reply(storage.has(key)
+          ? { storage: true, op, found: true, value: storage.get(key) }
+          : { storage: true, op, found: false });
+        else if (op === "keys") reply({ storage: true, op, keys: [...storage.keys()].sort() });
+        else if (op === "set" || op === "delete") {
+          if (op === "set") storage.set(key, value);
+          else storage.delete(key);
+          reply({ storage: true, op });
+        }
         return;
       }
       if (message.type === "start-session") {
@@ -765,6 +789,7 @@ test("new-worktree Apply delegates a path-free first message and opens only afte
     const requests = await page.evaluate(() => __requests);
     const start = requests.find((r) => r.path === "start-session").body;
     assert.equal(start.projectId, "origin-project");
+    assert.deepEqual(start.data, { kind: "change", change: "first-change" });
     assert.deepEqual(start.worktree, { kind: "new", name: "first-change" });
     assert.equal(start.navigation, "preserve");
     assert.match(
@@ -1441,6 +1466,7 @@ test("archive all submits one completed-only prompt and preserves rail/page fres
       assert.equal(launch.body.worktree, undefined);
       assert.equal(launch.body.projectId, undefined);
       assert.equal(launch.body.providerId, "openspec-board");
+      assert.deepEqual(launch.body.data, { kind: "archive-all" });
       assert.ok(launch.body.text.length < 16000);
       for (const pattern of [
         /openspec list --json/,
@@ -2718,6 +2744,137 @@ test("a fresh-chat draft receives replacement composition without sending or sta
   });
 });
 
+test("preparing an unsent draft saves the tracked change for the open session", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    const startedAt = Date.now();
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "first-change" })
+      .getByRole("button", { name: "apply", exact: true })
+      .click();
+    await panel.getByRole("menuitem", { name: "Prepare in current chat", exact: true }).click();
+    await page.waitForFunction(() =>
+      __requests.some((r) => r.path === "toast" && r.body.kind === "success"),
+    );
+    await page.waitForFunction(() => Object.keys(__stored()).length > 0, null, { timeout: 3000 });
+    const { stored, draft, requests } = await page.evaluate(() => ({
+      stored: __stored(),
+      draft: __draft(),
+      requests: __requests.map((r) => r.path),
+    }));
+    const saved = stored["session-change:fixture-session"];
+    assert.deepEqual(stored, {
+      "session-change:fixture-session": { change: "first-change", savedAt: saved?.savedAt },
+    });
+    assert.ok(Number.isInteger(saved.savedAt) && saved.savedAt >= startedAt);
+    assert.match(draft, /openspec-apply-change.*"first-change"/);
+    assert.equal(
+      requests.some((path) => path === "prompt" || path === "start-session"),
+      false,
+    );
+    await page.close();
+  });
+});
+
+for (const scenario of ["fresh chat", "rejected composition", "replaced context"]) {
+  test(`${scenario} does not save a tracked change`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(url);
+      const panel = page.frameLocator("iframe");
+      const action = panel
+        .locator(".change-card")
+        .filter({ hasText: "first-change" })
+        .getByRole("button", { name: "apply", exact: true });
+      await action.waitFor();
+      await page.evaluate((scenario) => {
+        if (scenario === "fresh chat") __session(null);
+        if (scenario === "rejected composition") __failCompose();
+        if (scenario === "replaced context") __holdCompose();
+      }, scenario);
+      await action.click();
+      await panel.getByRole("menuitem", { name: "Prepare in current chat", exact: true }).click();
+      await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
+
+      if (scenario === "replaced context") {
+        await page.evaluate(() => {
+          __directory("/tmp/other-project");
+          __releaseCompose();
+        });
+        await panel.getByRole("heading", { name: "other-project" }).waitFor();
+      } else {
+        await page.waitForFunction(
+          (kind) => __requests.some((r) => r.path === "toast" && r.body.kind === kind),
+          scenario === "fresh chat" ? "success" : "error",
+        );
+      }
+      assert.deepEqual(await page.evaluate(() => __stored()), {});
+      assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "storage")), false);
+      await page.close();
+    });
+  });
+}
+
+test("a tracked change storage failure leaves composition successful", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await page.evaluate(() => __failStorage());
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "first-change" })
+      .getByRole("button", { name: "apply", exact: true })
+      .click();
+    await panel.getByRole("menuitem", { name: "Prepare in current chat", exact: true }).click();
+    await page.waitForFunction(() => __requests.some((r) => r.path === "storage"), null, {
+      timeout: 3000,
+    });
+    await page.waitForFunction(() =>
+      __requests.some((r) => r.path === "toast" && r.body.kind === "success"),
+    );
+    assert.match(await page.evaluate(() => __draft()), /openspec-apply-change.*"first-change"/);
+    assert.equal(
+      await page.evaluate(() =>
+        __requests.some((r) => r.path === "toast" && r.body.kind === "error"),
+      ),
+      false,
+    );
+    await page.close();
+  });
+});
+
+test("saving a tracked change prunes the 100 oldest choices at 1,900 keys", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    const entries = Array.from({ length: 1900 }, (_, index) => [
+      `session-change:seed-${String(index).padStart(4, "0")}`,
+      { change: "seed-change", savedAt: 1900 - index },
+    ]);
+    const unrelated = ["other-preference", { savedAt: 0 }];
+    await page.evaluate((entries) => __seedStorage(entries), [...entries, unrelated]);
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "first-change" })
+      .getByRole("button", { name: "apply", exact: true })
+      .click();
+    await panel.getByRole("menuitem", { name: "Prepare in current chat", exact: true }).click();
+    await page.waitForFunction(() => __stored()["session-change:fixture-session"], null, {
+      timeout: 5000,
+    });
+    const stored = await page.evaluate(() => __stored());
+    assert.equal(stored["session-change:fixture-session"].change, "first-change");
+    delete stored["session-change:fixture-session"];
+    assert.deepEqual(stored, Object.fromEntries([...entries.slice(0, 1800), unrelated]));
+    await page.close();
+  });
+});
+
 test("composer rejection reports failure; stale session and directory replies do not replay", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
@@ -2953,7 +3110,7 @@ test("propose preserves goals and conditionally records a missing goal without s
           (before) =>
             __requests
               .slice(before)
-              .filter((r) => r.path !== "toast")
+              .filter((r) => r.path !== "toast" && r.path !== "storage")
               .map((r) => r.path),
           before,
         ),

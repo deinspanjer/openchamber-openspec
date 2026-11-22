@@ -25,16 +25,16 @@
 
 ## 3. Board records tracked changes
 
-- [ ] 3.1 At the fake SDK host seam (`test/panel.test.mjs`), extend the fake host with `storage`
+- [x] 3.1 At the fake SDK host seam (`test/panel.test.mjs`), extend the fake host with `storage`
       and add failing tests: current-chat composition in a session saves the change; a fresh-chat
       draft, a rejected composition and a replaced context save nothing; a storage failure leaves
       composition successful. Implement the save helper and call it from `preparePrompt`. Verify
       with `npm run build && node --test --test-name-pattern='tracked change' test/panel.test.mjs`.
-- [ ] 3.2 At the same seam, extend the existing new-worktree Apply and archive-all assertions to
+- [x] 3.2 At the same seam, extend the existing new-worktree Apply and archive-all assertions to
       require `data: { kind: "change", change }` and `data: { kind: "archive-all" }` on
       `startSession`, then add them in `controller.ts`. Verify the worktree and archive tests in
       `test/panel.test.mjs`.
-- [ ] 3.3 Add the 1,900-key pruning to the save helper with a fake-host test that seeds 1,900
+- [x] 3.3 Add the 1,900-key pruning to the save helper with a fake-host test that seeds 1,900
       `session-change:` keys and asserts the 100 oldest are removed. Verify with the focused test.
 
 ## 4. Session section
