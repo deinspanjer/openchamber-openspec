@@ -109,8 +109,9 @@ Add `/specs`: `{ directory, expectedRoot, expectedPlanning? }` → `{ specs: [{ 
 }] }` from `list --specs`. Add `/spec`: the same plus `spec` → `{ id, content }`, the raw text of
 `<planning root>/specs/<spec>/spec.md`. `spec` must match
 `^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$` and contain no `..` segment, or the
-route returns `BAD_SPEC`. The route also requires `spec` to appear in a fresh `list --specs` for the
-same scope, so only specs the CLI knows are read. The file read reuses the document reader's
+route returns `BAD_SPEC`. The route requires `spec` to appear in a fresh `list --specs` for the same
+scope. A listing miss returns `404 SPEC_UNAVAILABLE` without calling `show` or reading the
+requested file. The file read reuses the document reader's
 safeguards: `realpath` must stay inside `<planning root>/specs`, the same size bound and UTF-8
 decoding apply, and a symlink out of the tree is `BAD_SPEC_PATH`. Both routes use `checked` with
 strict root checks.
@@ -124,15 +125,16 @@ change-document reads.
 ### Retained reads
 
 `resources.ts` gains `archived`, `specs` and `spec(id)` entries in its existing context-keyed cache.
-They are read on a view's first open, or a spec's first open, in a context. The board's `refresh`
-already clears the cache, then re-reads only what the shown view needs. A context change clears
-them with the rest. `AGENTS.md`'s board rule gains this trigger.
+They are read on a view's first open, or a spec's first open, in a context. Refresh invalidates all
+retained browse data and reads only what the shown view needs. A hidden view reads again the next
+time it is shown. A context change clears browse data with the rest.
 
 ### Test seams
 
 - Service seam (`test/service.test.mjs`), real CLI on disposable roots: `/archived` with two dated
   archive directories and one active change; `/specs` and `/spec` with two main specs, one nested
-  one level. Fake runner: malformed output, duplicate archived names, a bad `spec` id, root change.
+  one level. Fake runner: malformed output, duplicate archived names, a bad `spec` id, a listing
+  miss, and root change.
 - Fake host seam (`test/panel.test.mjs`): the fake service answers `/workflows`, `/archived`,
   `/specs` and `/spec`. It pins workflow reads per load reason, Planning labels and prompts, verify
   gating, both archive-all prompts, the tabs, search per view, the archived order, spec rendering

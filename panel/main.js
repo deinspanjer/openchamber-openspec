@@ -2704,6 +2704,17 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Duplicate archived change.");
     return archived;
   }
+  function decodeSpecs(value) {
+    const { specs } = record(value);
+    if (!Array.isArray(specs)) throw new Error("Invalid spec listing.");
+    const entries2 = specs.map((value2) => {
+      const { id, requirementCount } = record(value2);
+      return { id: string(id), requirementCount: count(requirementCount) };
+    });
+    if (new Set(entries2.map(({ id }) => id)).size !== entries2.length)
+      throw new Error("Duplicate spec.");
+    return entries2;
+  }
   function decodeListing(value) {
     const input = record(value);
     const directory = string(input.directory);
@@ -2866,6 +2877,17 @@ ${GUEST_UI_LOOK_CSS}`;
         await request("/archived", { directory, expectedRoot: root2, expectedPlanning: planning }),
         decodeArchived
       ),
+      specs: async ({ directory, root: root2, planning }) => decode(
+        await request("/specs", { directory, expectedRoot: root2, expectedPlanning: planning }),
+        decodeSpecs
+      ),
+      spec: async ({ directory, root: root2, planning }, spec) => {
+        const value = record2(
+          await request("/spec", { directory, expectedRoot: root2, expectedPlanning: planning, spec })
+        );
+        if (value.id !== spec || typeof value.content !== "string") throw invalid();
+        return value.content;
+      },
       workflows: async (directory) => decode(await request("/workflows", { directory }), decodeWorkflows),
       list: async (directory, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {
@@ -3121,6 +3143,12 @@ ${GUEST_UI_LOOK_CSS}`;
       },
       archived(scope) {
         return read(scope, keyFor(scope, "", "archived"), () => client.archived(scope));
+      },
+      specs(scope) {
+        return read(scope, keyFor(scope, "", "specs"), () => client.specs(scope));
+      },
+      spec(scope, id, retry = false) {
+        return read(scope, keyFor(scope, "", "spec", id), () => client.spec(scope, id), retry);
       },
       taskState(scope, change) {
         const entry = cache.get(keyFor(scope, change, "tasks"));
@@ -3485,6 +3513,50 @@ ${GUEST_UI_LOOK_CSS}`;
       archivedRetryRoot.hidden = !state?.error;
       archivedMessage.textContent = state?.error?.message ?? (state?.pending ? "Loading archived changes\u2026" : state?.value?.length ? "No matching archived changes." : "No changes are archived.");
     }
+    const specsStatus = document.createElement("div");
+    specsStatus.className = "notice browse-status";
+    const specsMessage = document.createElement("span");
+    const specsRetryRoot = document.createElement("span");
+    const specsRetry = mountButton(specsRetryRoot, {
+      label: "refresh",
+      variant: "secondary",
+      size: "sm",
+      onClick: callbacks.retry
+    });
+    const specsList = document.createElement("ul");
+    specsList.className = "browse-list spec-list";
+    specsStatus.append(specsMessage, specsRetryRoot);
+    panes.specs.append(specsStatus, specsList);
+    let lastSpecs;
+    let lastSpecQuery;
+    function updateSpecs(state, query) {
+      if (lastSpecs === state && lastSpecQuery === query) return;
+      lastSpecs = state;
+      lastSpecQuery = query;
+      const rows = (state?.value ?? []).filter(({ id }) => id.toLocaleLowerCase().includes(query));
+      specsList.replaceChildren(
+        ...rows.map(({ id, requirementCount }) => {
+          const row = document.createElement("li");
+          const button2 = document.createElement("button");
+          button2.type = "button";
+          button2.dataset.spec = id;
+          button2.className = "spec-row";
+          const name = document.createElement("span");
+          name.textContent = id;
+          const count2 = document.createElement("span");
+          count2.textContent = `${requirementCount} ${requirementCount === 1 ? "requirement" : "requirements"}`;
+          count2.className = "browse-meta";
+          button2.append(name, count2);
+          button2.addEventListener("click", () => callbacks.openSpec(id));
+          row.append(button2);
+          return row;
+        })
+      );
+      specsStatus.hidden = !state || rows.length > 0;
+      specsStatus.classList.toggle("error", !!state?.error);
+      specsRetryRoot.hidden = !state?.error;
+      specsMessage.textContent = state?.error?.message ?? (state?.pending ? "Loading specs\u2026" : state?.value?.length ? "No matching specs." : "No specs exist yet.");
+    }
     const board = panes.changes;
     board.className = "board";
     const sections = stages.map((stage) => {
@@ -3602,6 +3674,15 @@ ${GUEST_UI_LOOK_CSS}`;
       resetPositions() {
         positions.clear();
       },
+      scrollForChanges() {
+        return view === "changes" ? window.scrollY : positions.get("changes")?.scroll ?? 0;
+      },
+      focusSpec(id) {
+        const button2 = specsList.querySelector(`[data-spec="${CSS.escape(id)}"]`);
+        (button2 ?? tablist.querySelector("#board-tab-specs"))?.focus({
+          preventScroll: true
+        });
+      },
       update(state) {
         const switched = view !== state.view;
         const tabHadFocus = switched && tabRoot.contains(document.activeElement);
@@ -3668,6 +3749,7 @@ ${GUEST_UI_LOOK_CSS}`;
         }
         const query = state.search.trim().toLocaleLowerCase();
         updateArchived(state.archived, query);
+        updateSpecs(state.specs, query);
         for (const entry of cards.values()) {
           if (!entry.current.change.id.toLocaleLowerCase().includes(query)) entry.node.remove();
         }
@@ -3716,6 +3798,7 @@ ${GUEST_UI_LOOK_CSS}`;
         search.dispose();
         tabs.dispose();
         archivedRetry.dispose();
+        specsRetry.dispose();
         main.remove();
       }
     };
@@ -7629,6 +7712,69 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     };
   }
 
+  // src/panel/spec-view.ts
+  function mountSpecView(root2, callbacks) {
+    const pane = document.createElement("section");
+    pane.className = "detail spec-detail";
+    const header = document.createElement("header");
+    header.className = "detail-header";
+    const controls = document.createElement("div");
+    controls.className = "spec-header";
+    const back = mountButton(controls, {
+      label: "Back to specs",
+      variant: "ghost",
+      size: "sm",
+      onClick: callbacks.close
+    });
+    const refresh = mountButton(controls, {
+      label: "refresh",
+      variant: "ghost",
+      size: "sm",
+      onClick: callbacks.refresh
+    });
+    const title = document.createElement("h1");
+    title.id = "spec-detail-title";
+    pane.setAttribute("aria-labelledby", title.id);
+    header.append(controls, title);
+    const content = document.createElement("div");
+    content.className = "detail-content";
+    content.tabIndex = 0;
+    content.setAttribute("role", "region");
+    content.setAttribute("aria-label", "Spec document");
+    const doc = mountDocumentView(content, { openUrl: callbacks.openUrl });
+    pane.append(header, content);
+    root2.append(pane);
+    return {
+      update(id, state, loading, error) {
+        if (id !== title.textContent) {
+          title.textContent = id;
+          content.scrollTop = 0;
+        }
+        refresh.update({ loading });
+        const text2 = state?.value ?? null;
+        const issue = state?.error?.message ?? error;
+        doc.update({
+          text: text2 ?? "",
+          format: "markdown",
+          hasContent: text2 !== null,
+          status: text2 === null && !issue ? "Loading spec\u2026" : null,
+          error: issue,
+          retry: callbacks.retry,
+          canRetry: !loading && !state?.pending
+        });
+      },
+      focusBack() {
+        controls.querySelector("button")?.focus({ preventScroll: true });
+      },
+      dispose() {
+        doc.dispose();
+        back.dispose();
+        refresh.dispose();
+        pane.remove();
+      }
+    };
+  }
+
   // src/panel/create-dialog.ts
   function mountCreateDialog(client, callbacks) {
     const dialog = document.createElement("dialog");
@@ -8354,6 +8500,11 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     let search = "";
     let boardTab = "changes";
     let archivedState = null;
+    let specsState = null;
+    let specState = null;
+    let selectedSpec = null;
+    let specListScroll = 0;
+    let returningToSpec = null;
     let selectedChange = null;
     let selectedArtifact = "";
     let activeView = "document";
@@ -8375,7 +8526,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       pendingInspection = null;
       scope = null;
       resources.setContext(null);
-      archivedState = null;
+      clearBrowse(true);
       changes = [];
       workflows = new Set(CORE_WORKFLOWS);
       listedIds = /* @__PURE__ */ new Set();
@@ -8421,7 +8572,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       if (refresh) {
         if (readWorkflows) {
           resources.refresh();
-          archivedState = null;
+          clearBrowse(false);
         } else resources.refreshChanges();
         readGeneration++;
         detailOpening++;
@@ -8452,8 +8603,8 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           scope = scope?.root === listing.root && scope.planning === listing.planning ? scope : { directory: currentDirectory, root: listing.root, planning: listing.planning };
           const current = scope;
           resources.setContext(current);
-          if (current !== previousScope) archivedState = null;
-          if (boardTab === "archived" && !archivedState) readArchived(current);
+          if (current !== previousScope) clearBrowse(true);
+          readBrowse();
           const listed = new Set(listing.changes.map((entry) => entry.id));
           listedIds = listed;
           if (selectedChange && !listed.has(selectedChange.id)) {
@@ -8573,13 +8724,52 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         }
       })();
     }
+    function clearBrowse(resetSelection) {
+      archivedState = specsState = specState = null;
+      returningToSpec = null;
+      if (resetSelection) {
+        selectedSpec = null;
+        specListScroll = 0;
+      }
+    }
+    function readBrowse() {
+      if (!scope || selectedChange) return;
+      if (boardTab === "archived" && !archivedState) readArchived(scope);
+      else if (boardTab === "specs") {
+        if (selectedSpec) {
+          if (!specState) readSpec(scope, selectedSpec);
+        } else if (!specsState) readSpecs(scope);
+      }
+    }
     function readArchived(captured) {
       const read = resources.archived(captured);
       archivedState = read.state;
       if (read.completion)
         void read.completion.then((state) => {
-          if (scope !== captured || archivedState !== read.state) return;
+          if (disposed || scope !== captured || archivedState !== read.state) return;
           archivedState = state;
+          render();
+        });
+    }
+    function readSpecs(captured) {
+      const read = resources.specs(captured);
+      specsState = read.state;
+      if (read.completion)
+        void read.completion.then((state) => {
+          if (disposed || scope !== captured || specsState !== read.state) return;
+          specsState = state;
+          render();
+          restoreSpecList();
+        });
+    }
+    function readSpec(captured, id, retry = false) {
+      const read = resources.spec(captured, id, retry);
+      specState = read.state;
+      if (read.completion)
+        void read.completion.then((state) => {
+          if (disposed || scope !== captured || selectedSpec !== id || specState !== read.state)
+            return;
+          specState = state;
           render();
         });
     }
@@ -8802,8 +8992,10 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     function openDetail(change, captured, originatingEpoch) {
       if (!captured || scope !== captured || epoch !== originatingEpoch || unavailableIds.has(change.id) || !changes.some((item) => item.id === change.id))
         return;
+      selectedSpec = null;
+      boardTab = "changes";
       selectedChange = change;
-      boardScroll = window.scrollY;
+      boardScroll = boardView.scrollForChanges();
       selectedArtifact = "";
       render();
       const first = change.artifacts.find(
@@ -8941,12 +9133,43 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       },
       select: (view) => {
         boardTab = view;
-        if (view === "archived" && scope && !archivedState) readArchived(scope);
+        returningToSpec = null;
+        readBrowse();
         render();
+      },
+      openSpec: (id) => {
+        if (!scope || boardTab !== "specs" || !specsState?.value?.some((item) => item.id === id))
+          return;
+        specListScroll = window.scrollY;
+        selectedSpec = id;
+        readSpec(scope, id);
+        render();
+        specView?.focusBack();
       }
     });
     const detailRoot = document.createElement("div");
     appRoot.append(detailRoot);
+    let specView = null;
+    const specCallbacks = {
+      close: () => {
+        returningToSpec = selectedSpec;
+        selectedSpec = null;
+        specState = null;
+        readBrowse();
+        render();
+        restoreSpecList();
+      },
+      refresh: () => loadBoard({ refresh: true, workflows: true }),
+      retry: () => {
+        if (!scope || !selectedSpec) return;
+        if (!specState && errorMessage) loadBoard({ refresh: true, workflows: true });
+        else {
+          readSpec(scope, selectedSpec, true);
+          render();
+        }
+      },
+      openUrl: openDocumentLink
+    };
     const deleteView = mountDeleteDialog(appRoot, client, {
       current: () => selectedChange && scope ? { scope, epoch, selection: selection2, name: selectedChange.id } : null,
       removed: (attempt) => {
@@ -8988,15 +9211,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         })().catch(() => {
         });
       },
-      openUrl: (url) => {
-        void host2.openUrl(url).catch(async (caught) => {
-          await host2.toast({
-            kind: "error",
-            message: caught instanceof HostRequestError ? caught.message : "Cannot open document link"
-          });
-        }).catch(() => {
-        });
-      },
+      openUrl: openDocumentLink,
       refresh: () => loadBoard({ refresh: true, workflows: true }),
       delete: () => {
         if (scope && selectedChange && !unavailableIds.has(selectedChange.id))
@@ -9018,6 +9233,23 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         if (selectedChange) void preparePrompt(selectedChange, scope, epoch, intent);
       }
     });
+    function openDocumentLink(url) {
+      void host2.openUrl(url).catch(async (caught) => {
+        await host2.toast({
+          kind: "error",
+          message: caught instanceof HostRequestError ? caught.message : "Cannot open document link"
+        });
+      }).catch(() => {
+      });
+    }
+    function restoreSpecList() {
+      const id = returningToSpec;
+      if (!id || specsState?.pending || boardTab !== "specs" || selectedSpec || selectedChange)
+        return;
+      returningToSpec = null;
+      boardView.focusSpec(id);
+      window.scrollTo(0, specListScroll);
+    }
     function closeDetail() {
       const name = selectedChange?.id;
       selection2++;
@@ -9059,6 +9291,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         workflows,
         view: boardTab,
         archived: archivedState,
+        specs: specsState,
         cards: changes.map((change) => ({
           change,
           stale: staleIds.has(change.id),
@@ -9072,7 +9305,14 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           action: (intent) => void preparePrompt(change, captured, originatingEpoch, intent, originatingSession)
         }))
       });
-      boardView.setVisible(!selectedChange);
+      boardView.setVisible(!selectedChange && !selectedSpec);
+      if (selectedSpec) {
+        specView ??= mountSpecView(appRoot, specCallbacks);
+        specView.update(selectedSpec, specState, loading, errorMessage);
+      } else if (specView) {
+        specView.dispose();
+        specView = null;
+      }
       detailView.update(
         selectedChange ? {
           change: selectedChange,
@@ -9131,6 +9371,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       offServiceEvent();
       resources.dispose();
       boardView.dispose();
+      specView?.dispose();
       detailView.dispose();
       deleteView.dispose();
       createView.dispose();

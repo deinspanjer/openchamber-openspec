@@ -139,6 +139,10 @@ function hostHtml(statusCase, pointer, popovers) {
     window.__workflows = (value) => { workflows = value; };
     let archivedChanges = [];
     window.__archived = (changes) => { archivedChanges = changes; };
+    let mainSpecs = [];
+    const mainSpecContent = new Map();
+    window.__specs = (specs) => { mainSpecs = specs; };
+    window.__spec = (id, content) => { mainSpecContent.set(id, content); };
     let holdWorkflows = false;
     const pendingWorkflows = [];
     window.__holdWorkflows = () => { holdWorkflows = true; };
@@ -401,6 +405,17 @@ function hostHtml(statusCase, pointer, popovers) {
            if (archivedChanges === null)
              send({ error: { code: "OPENSPEC_ERROR", message: "Cannot list archived changes" } }, 422);
            else send({ changes: archivedChanges });
+         }
+         else if (path === "/specs") {
+           if (mainSpecs === null)
+             send({ error: { code: "OPENSPEC_ERROR", message: "Cannot list specs" } }, 422);
+           else send({ specs: mainSpecs });
+         }
+         else if (path === "/spec") {
+           const content = mainSpecContent.get(body.spec);
+           if (typeof content !== "string")
+             send({ error: { code: "SPEC_UNAVAILABLE", message: "Spec is no longer listed." } }, 404);
+           else reply({ status: 200, body: JSON.stringify({ id: body.spec, content }) });
          }
          else if (path === "/summaries") {
           if (body.directory !== directory) { send({ root: body.directory + "/openspec", changes: [] }); return; }
@@ -3127,6 +3142,182 @@ test("Archived shows the CLI error without rows and refresh retries the shown vi
     assert.equal(
       await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
       2,
+    );
+  });
+});
+
+test("Specs lists ids in CLI order, pluralizes counts and searches by id", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() =>
+      __specs([
+        { id: "team/nested", requirementCount: 5 },
+        { id: "public-api", requirementCount: 1 },
+      ]),
+    );
+    assert.equal(
+      await page.evaluate(() => __requests.some((r) => ["/specs", "/spec"].includes(r.path))),
+      false,
+    );
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    const list = panel.getByRole("tabpanel", { name: "Specs" });
+    await list.getByText("5 requirements", { exact: true }).waitFor({ timeout: 3000 });
+    const rows = list.getByRole("listitem");
+    const labels = await rows.allTextContents();
+    assert.match(labels[0], /team\/nested.*5 requirements/);
+    assert.match(labels[1], /public-api.*1 requirement$/);
+    await panel.getByRole("searchbox", { name: "Search changes" }).fill("API");
+    assert.deepEqual(await rows.allTextContents(), [labels[1]]);
+  });
+});
+
+test("Specs renders the entire file safely and Back preserves the scrolled list without rereading", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 420, height: 460 } });
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => {
+      __specs(Array.from({ length: 40 }, (_, n) => ({ id: `readable-${n}`, requirementCount: 1 })));
+      __spec(
+        "readable-39",
+        "# Main spec\n\n## Purpose\n\nA real document.\n\n## Extra notes\n\n- As written\n\n" +
+          '<button id="untrusted">Raw HTML</button>\n\n[Unsafe link](mailto:inert@example.com)',
+      );
+    });
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    const last = panel.getByRole("button", { name: /readable-39/ });
+    await last.waitFor({ timeout: 3000 });
+    await last.scrollIntoViewIfNeeded();
+    const listScroll = await last.evaluate(() => window.scrollY);
+    assert.ok(listScroll > 0);
+    await last.click();
+    const doc = panel.locator(".document-content:visible");
+    await doc.getByRole("heading", { name: "Extra notes" }).waitFor({ timeout: 3000 });
+    assert.equal(await doc.getByRole("listitem").filter({ hasText: "As written" }).count(), 1);
+    await doc.getByText('<button id="untrusted">Raw HTML</button>', { exact: true }).waitFor();
+    assert.equal(await doc.getByRole("button", { name: "Raw HTML" }).count(), 0);
+    assert.equal(await doc.getByRole("link", { name: "Unsafe link" }).count(), 0);
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    assert.equal(await last.evaluate(() => window.scrollY), listScroll);
+    await last.click();
+    await doc.getByRole("heading", { name: "Extra notes" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec"],
+    );
+  });
+});
+
+test("Specs retains the list and documents across tabs until a Refresh elsewhere", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    const specs = panel.getByRole("tab", { name: "Specs", exact: true });
+    const changes = panel.getByRole("tab", { name: "Changes", exact: true });
+    await page.evaluate(() => {
+      __specs([{ id: "example", requirementCount: 1 }]);
+      __spec("example", "# Before Refresh");
+    });
+    await specs.click();
+    await panel.getByRole("button", { name: /example/ }).click({ timeout: 3000 });
+    await panel.getByRole("heading", { name: "Before Refresh" }).waitFor();
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    await changes.click();
+    await page.evaluate(() => {
+      __specs([{ id: "example", requirementCount: 5 }]);
+      __spec("example", "# After Refresh");
+    });
+    await specs.click();
+    await panel.getByText("1 requirement", { exact: true }).waitFor();
+    await panel.getByRole("button", { name: /example/ }).click();
+    await panel.getByRole("heading", { name: "Before Refresh" }).waitFor();
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    await changes.click();
+    await page.evaluate(() => __recreate("loaded-on-refresh"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "loaded-on-refresh", exact: true }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec"],
+    );
+    await specs.click();
+    await panel.getByText("5 requirements", { exact: true }).waitFor();
+    await panel.getByRole("button", { name: /example/ }).click();
+    await panel.getByRole("heading", { name: "After Refresh" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec", "/specs", "/spec"],
+    );
+  });
+});
+
+test("a failed spec read offers a retry without showing partial content", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => __specs([{ id: "example", requirementCount: 1 }]));
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    await panel.getByRole("button", { name: /example/ }).click({ timeout: 3000 });
+    await panel.getByText("Spec is no longer listed.").waitFor({ timeout: 3000 });
+    assert.equal(await panel.locator(".document-content:visible").count(), 0);
+    await page.evaluate(() => __spec("example", "# Recovered spec"));
+    await panel.getByRole("button", { name: "Retry document", exact: true }).click();
+    await panel.getByRole("heading", { name: "Recovered spec" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec", "/spec"],
+    );
+  });
+});
+
+test("Refresh reads the shown spec without prefetching the hidden list", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    await panel.getByText("No specs exist yet.").waitFor();
+    await page.evaluate(() => {
+      __specs([{ id: "example", requirementCount: 1 }]);
+      __spec("example", "# First spec version");
+    });
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: /example/ }).click();
+    await panel.getByRole("heading", { name: "First spec version" }).waitFor();
+    await page.evaluate(() => __spec("example", "# Refreshed spec version"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("heading", { name: "Refreshed spec version" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/specs", "/spec", "/spec"],
+    );
+    await page.evaluate(() => __specs([]));
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    await panel.getByText("No specs exist yet.").waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/specs", "/spec", "/spec", "/specs"],
     );
   });
 });

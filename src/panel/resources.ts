@@ -11,7 +11,7 @@ type Entry<T> = {
 };
 
 export function createResources(
-  client: Pick<Client, "tasks" | "document" | "archived">,
+  client: Pick<Client, "tasks" | "document" | "archived" | "specs" | "spec">,
   options: { maxBytes?: number } = {},
 ) {
   const maxBytes = options.maxBytes ?? 4 * 1024 * 1024;
@@ -103,6 +103,12 @@ export function createResources(
     },
     archived(scope: Scope) {
       return read(scope, keyFor(scope, "", "archived"), () => client.archived(scope));
+    },
+    specs(scope: Scope) {
+      return read(scope, keyFor(scope, "", "specs"), () => client.specs(scope));
+    },
+    spec(scope: Scope, id: string, retry = false) {
+      return read(scope, keyFor(scope, "", "spec", id), () => client.spec(scope, id), retry);
     },
     taskState(scope: Scope, change: string): ReadState<Task[]> | null {
       const entry = cache.get(keyFor(scope, change, "tasks")) as Entry<Task[]> | undefined;

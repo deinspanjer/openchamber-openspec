@@ -5,6 +5,7 @@ import {
   decodeListing,
   decodeSummary,
   decodeSummaries,
+  decodeSpecs,
   decodeValidation,
   decodeWorkflows,
   type ChangeMetadata,
@@ -85,6 +86,18 @@ export function createClient(host: HostClient) {
         await request("/archived", { directory, expectedRoot: root, expectedPlanning: planning }),
         decodeArchived,
       ),
+    specs: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/specs", { directory, expectedRoot: root, expectedPlanning: planning }),
+        decodeSpecs,
+      ),
+    spec: async ({ directory, root, planning }: Scope, spec: string): Promise<string> => {
+      const value = record(
+        await request("/spec", { directory, expectedRoot: root, expectedPlanning: planning, spec }),
+      );
+      if (value.id !== spec || typeof value.content !== "string") throw invalid();
+      return value.content;
+    },
     workflows: async (directory: string) =>
       decode(await request("/workflows", { directory }), decodeWorkflows),
     list: async (

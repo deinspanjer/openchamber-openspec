@@ -7610,6 +7610,20 @@ function decodeArchived(value) {
     throw new Error("Duplicate archived change.");
   return archived;
 }
+function isSpecId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/.exec(value)?.[0] === value;
+}
+function decodeSpecs(value) {
+  const { specs } = record(value);
+  if (!Array.isArray(specs)) throw new Error("Invalid spec listing.");
+  const entries = specs.map((value2) => {
+    const { id, requirementCount } = record(value2);
+    return { id: string(id), requirementCount: count(requirementCount) };
+  });
+  if (new Set(entries.map(({ id }) => id)).size !== entries.length)
+    throw new Error("Duplicate spec.");
+  return entries;
+}
 function decodeArtifacts(value, requires) {
   if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
   const artifacts = value.map((value2) => {
@@ -7771,6 +7785,23 @@ async function runOpenSpec(directory, args, remainingMs = COMMAND_TIMEOUT_MS, op
 // src/service/openspec.ts
 var failure = (error) => ({ ok: false, error });
 var inside = (path, parent) => path === parent || path.startsWith(`${parent}${import_node_path.sep}`);
+async function readDocumentText(path) {
+  const file = await (0, import_promises.open)(path, "r");
+  try {
+    const buffer = Buffer.alloc(MAX_RESPONSE_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    if (length > MAX_RESPONSE_BYTES)
+      throw serviceError("DOCUMENT_TOO_LARGE", "Document is too large to display.", 413);
+    return buffer.toString("utf8", 0, length);
+  } finally {
+    await file.close();
+  }
+}
 function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
   async function planningScope(root, expectedPlanning) {
     try {
@@ -8041,6 +8072,42 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec archived listing.", 502));
     }
   }
+  async function listSpecs(directory, current) {
+    const result = await checked(directory, ["list", "--specs"], current, true, true);
+    if (!result.ok) return result.error;
+    await planningScope(current.root, current.planning);
+    try {
+      return decodeSpecs(result.value);
+    } catch {
+      return serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec spec listing.", 502);
+    }
+  }
+  async function specs(directory, expectedRoot, expectedPlanning) {
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const entries = await listSpecs(directory, current);
+    return Array.isArray(entries) ? { ok: true, value: { specs: entries } } : failure(entries);
+  }
+  async function spec(directory, id, expectedRoot, expectedPlanning) {
+    if (!isSpecId(id)) return failure(serviceError("BAD_SPEC", "Spec id is invalid."));
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const entries = await listSpecs(directory, current);
+    if (!Array.isArray(entries)) return failure(entries);
+    if (!entries.some((entry) => entry.id === id))
+      return failure(serviceError("SPEC_UNAVAILABLE", "Spec is no longer listed.", 404));
+    const specsRoot = (0, import_node_path.join)(current.planningRoot, "specs");
+    try {
+      const path = await (0, import_promises.realpath)((0, import_node_path.join)(specsRoot, id, "spec.md"));
+      if (!inside(path, specsRoot) || path === specsRoot)
+        return failure(serviceError("BAD_SPEC_PATH", "Spec path is outside the specs tree.", 502));
+      const content = await readDocumentText(path);
+      await planningScope(expectedRoot, current.planning);
+      return { ok: true, value: { id, content } };
+    } catch (caught) {
+      if (caught.code === "ENOENT")
+        return failure(serviceError("SPEC_UNAVAILABLE", "Spec is no longer available.", 404));
+      throw caught;
+    }
+  }
   async function summary(directory, change, expectedRoot, expectedPlanning) {
     if (!isChangeName(change))
       return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
@@ -8162,30 +8229,14 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       return failure(
         serviceError("BAD_DOCUMENT_PATH", "Document path is outside the selected change.", 502)
       );
-    const file = await (0, import_promises.open)(path, "r");
-    try {
-      const buffer = Buffer.alloc(240001);
-      let length = 0;
-      while (length < buffer.length) {
-        const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
-        if (bytesRead === 0) break;
-        length += bytesRead;
+    return {
+      ok: true,
+      value: {
+        artifactId: selected.artifactId,
+        selector: selected.selector,
+        content: await readDocumentText(path)
       }
-      if (length > 24e4)
-        return failure(
-          serviceError("DOCUMENT_TOO_LARGE", "Document is too large to display.", 413)
-        );
-      return {
-        ok: true,
-        value: {
-          artifactId: selected.artifactId,
-          selector: selected.selector,
-          content: buffer.toString("utf8", 0, length)
-        }
-      };
-    } finally {
-      await file.close();
-    }
+    };
   }
   async function tasks(directory, change, expectedRoot, expectedPlanning) {
     if (!isChangeName(change))
@@ -8340,6 +8391,8 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
   }
   return {
     archived,
+    specs,
+    spec,
     changes,
     workflows,
     summary,
@@ -8501,6 +8554,15 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         expectedPlanning
       ) : path === "/workflows" ? adapter.workflows(directory) : path === "/archived" ? adapter.archived(
         directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/specs" ? adapter.specs(
+        directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/spec" ? adapter.spec(
+        directory,
+        body.spec,
         requiredString(body, "expectedRoot"),
         expectedPlanning
       ) : Promise.resolve({

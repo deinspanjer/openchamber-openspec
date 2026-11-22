@@ -43,11 +43,19 @@ and a retry in the spec view, without partial content.
 
 ### Requirement: Read specs only on demand
 
-The board SHALL read the spec list when the `Specs` view first opens in a context and on explicit
-Refresh while it shows, and SHALL read a spec when the user opens it. It SHALL keep each result
-until Refresh or a context change, and SHALL verify the OpenSpec root as other board reads do.
+The board SHALL read the spec list when the `Specs` view first opens in a context and read a spec
+when the user opens it. It SHALL retain each result until Refresh or a context change. After
+Refresh, the next showing SHALL read again; if the list or a spec is already shown, the board
+SHALL read what is shown immediately. Reads SHALL verify the OpenSpec root as other board reads do.
 
 #### Scenario: Reopen a spec
 
-- **WHEN** the user returns to the list and opens the same spec again in the same context
+- **WHEN** the user returns to the list and opens the same spec again in the same context without
+  Refresh
 - **THEN** the spec shows without a new read
+
+#### Scenario: Refresh while Specs is hidden
+
+- **WHEN** the user refreshes another view after reading `Specs` and opening a spec
+- **THEN** the board reads the list again when the user returns to `Specs`, and does not read the
+  spec until the user opens it again

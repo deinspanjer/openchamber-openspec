@@ -81,6 +81,38 @@
         color: var(--oc-muted);
         font-variant-numeric: tabular-nums;
       }
+      .spec-list > li {
+        padding: 0;
+      }
+      .spec-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 16px;
+        justify-content: space-between;
+        background: transparent;
+        color: var(--oc-foreground);
+        border: 0;
+        cursor: pointer;
+        padding: 8px;
+        text-align: start;
+        width: 100%;
+        overflow-wrap: anywhere;
+      }
+      .spec-row:hover {
+        background: var(--oc-hover);
+      }
+      .spec-row:focus-visible {
+        outline: 2px solid var(--oc-focus);
+        outline-offset: -2px;
+      }
+      .spec-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .spec-detail h1 {
+        overflow-wrap: anywhere;
+      }
       .heading,
       .detail-title-row {
         flex-wrap: wrap;

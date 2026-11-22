@@ -1,10 +1,17 @@
 import { HostRequestError, type HostClient } from "@openchamber/sdk";
 import { deriveChange, type DerivedChange } from "../model.js";
-import { documentKey, type ArchivedChange, type Task, type Workflow } from "../contracts.js";
+import {
+  documentKey,
+  type ArchivedChange,
+  type SpecEntry,
+  type Task,
+  type Workflow,
+} from "../contracts.js";
 import { createClient, ServiceRequestError, type Scope } from "./client.js";
 import { createResources, type ReadState } from "./resources.js";
 import { mountBoardView, type BoardView } from "./board-view.js";
 import { mountDetailView, taskArtifact } from "./detail-view.js";
+import { mountSpecView } from "./spec-view.js";
 import { mountCreateDialog } from "./create-dialog.js";
 import { mountDeleteDialog } from "./delete-dialog.js";
 import { mountArchiveDialog } from "./archive-dialog.js";
@@ -50,6 +57,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let search = "";
   let boardTab: BoardView = "changes";
   let archivedState: ReadState<ArchivedChange[]> | null = null;
+  let specsState: ReadState<SpecEntry[]> | null = null;
+  let specState: ReadState<string> | null = null;
+  let selectedSpec: string | null = null;
+  let specListScroll = 0;
+  let returningToSpec: string | null = null;
   let selectedChange: DerivedChange | null = null;
   let selectedArtifact = "";
   let activeView: "document" | "tasks" = "document";
@@ -73,7 +85,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     pendingInspection = null;
     scope = null;
     resources.setContext(null);
-    archivedState = null;
+    clearBrowse(true);
     changes = [];
     workflows = new Set(CORE_WORKFLOWS);
     listedIds = new Set();
@@ -121,7 +133,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     if (refresh) {
       if (readWorkflows) {
         resources.refresh();
-        archivedState = null;
+        clearBrowse(false);
       } else resources.refreshChanges();
       readGeneration++;
       detailOpening++;
@@ -159,8 +171,8 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             : { directory: currentDirectory, root: listing.root, planning: listing.planning };
         const current = scope;
         resources.setContext(current);
-        if (current !== previousScope) archivedState = null;
-        if (boardTab === "archived" && !archivedState) readArchived(current);
+        if (current !== previousScope) clearBrowse(true);
+        readBrowse();
         const listed = new Set(listing.changes.map((entry) => entry.id));
         listedIds = listed;
         if (selectedChange && !listed.has(selectedChange.id)) {
@@ -302,13 +314,56 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     })();
   }
 
+  function clearBrowse(resetSelection: boolean) {
+    archivedState = specsState = specState = null;
+    returningToSpec = null;
+    if (resetSelection) {
+      selectedSpec = null;
+      specListScroll = 0;
+    }
+  }
+
+  function readBrowse() {
+    if (!scope || selectedChange) return;
+    if (boardTab === "archived" && !archivedState) readArchived(scope);
+    else if (boardTab === "specs") {
+      if (selectedSpec) {
+        if (!specState) readSpec(scope, selectedSpec);
+      } else if (!specsState) readSpecs(scope);
+    }
+  }
+
   function readArchived(captured: Scope) {
     const read = resources.archived(captured);
     archivedState = read.state;
     if (read.completion)
       void read.completion.then((state) => {
-        if (scope !== captured || archivedState !== read.state) return;
+        if (disposed || scope !== captured || archivedState !== read.state) return;
         archivedState = state;
+        render();
+      });
+  }
+
+  function readSpecs(captured: Scope) {
+    const read = resources.specs(captured);
+    specsState = read.state;
+    if (read.completion)
+      void read.completion.then((state) => {
+        if (disposed || scope !== captured || specsState !== read.state) return;
+        specsState = state;
+        render();
+        restoreSpecList();
+      });
+  }
+
+  function readSpec(captured: Scope, id: string, retry = false) {
+    const read = resources.spec(captured, id, retry);
+    specState = read.state;
+    if (read.completion)
+      void read.completion.then((state) => {
+        if (disposed || scope !== captured || selectedSpec !== id || specState !== read.state)
+          return;
+        specState = state;
         render();
       });
   }
@@ -612,8 +667,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       !changes.some((item) => item.id === change.id)
     )
       return;
+    selectedSpec = null;
+    boardTab = "changes";
     selectedChange = change;
-    boardScroll = window.scrollY;
+    boardScroll = boardView.scrollForChanges();
     selectedArtifact = "";
     render();
     const first = change.artifacts.find(
@@ -784,12 +841,43 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     },
     select: (view) => {
       boardTab = view;
-      if (view === "archived" && scope && !archivedState) readArchived(scope);
+      returningToSpec = null;
+      readBrowse();
       render();
+    },
+    openSpec: (id) => {
+      if (!scope || boardTab !== "specs" || !specsState?.value?.some((item) => item.id === id))
+        return;
+      specListScroll = window.scrollY;
+      selectedSpec = id;
+      readSpec(scope, id);
+      render();
+      specView?.focusBack();
     },
   });
   const detailRoot = document.createElement("div");
   appRoot.append(detailRoot);
+  let specView: ReturnType<typeof mountSpecView> | null = null;
+  const specCallbacks = {
+    close: () => {
+      returningToSpec = selectedSpec;
+      selectedSpec = null;
+      specState = null;
+      readBrowse();
+      render();
+      restoreSpecList();
+    },
+    refresh: () => loadBoard({ refresh: true, workflows: true }),
+    retry: () => {
+      if (!scope || !selectedSpec) return;
+      if (!specState && errorMessage) loadBoard({ refresh: true, workflows: true });
+      else {
+        readSpec(scope, selectedSpec, true);
+        render();
+      }
+    },
+    openUrl: openDocumentLink,
+  };
   const deleteView = mountDeleteDialog(appRoot, client, {
     current: () =>
       selectedChange && scope ? { scope, epoch, selection, name: selectedChange.id } : null,
@@ -832,18 +920,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         await host.toast({ kind: "success", message: "Change name copied" });
       })().catch(() => {});
     },
-    openUrl: (url) => {
-      void host
-        .openUrl(url)
-        .catch(async (caught: unknown) => {
-          await host.toast({
-            kind: "error",
-            message:
-              caught instanceof HostRequestError ? caught.message : "Cannot open document link",
-          });
-        })
-        .catch(() => {});
-    },
+    openUrl: openDocumentLink,
     refresh: () => loadBoard({ refresh: true, workflows: true }),
     delete: () => {
       if (scope && selectedChange && !unavailableIds.has(selectedChange.id))
@@ -865,6 +942,28 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       if (selectedChange) void preparePrompt(selectedChange, scope, epoch, intent);
     },
   });
+
+  function openDocumentLink(url: string) {
+    void host
+      .openUrl(url)
+      .catch(async (caught: unknown) => {
+        await host.toast({
+          kind: "error",
+          message:
+            caught instanceof HostRequestError ? caught.message : "Cannot open document link",
+        });
+      })
+      .catch(() => {});
+  }
+
+  function restoreSpecList() {
+    const id = returningToSpec;
+    if (!id || specsState?.pending || boardTab !== "specs" || selectedSpec || selectedChange)
+      return;
+    returningToSpec = null;
+    boardView.focusSpec(id);
+    window.scrollTo(0, specListScroll);
+  }
 
   function closeDetail() {
     const name = selectedChange?.id;
@@ -914,6 +1013,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       workflows,
       view: boardTab,
       archived: archivedState,
+      specs: specsState,
       cards: changes.map((change) => ({
         change,
         stale: staleIds.has(change.id),
@@ -929,7 +1029,14 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           void preparePrompt(change, captured, originatingEpoch, intent, originatingSession),
       })),
     });
-    boardView.setVisible(!selectedChange);
+    boardView.setVisible(!selectedChange && !selectedSpec);
+    if (selectedSpec) {
+      specView ??= mountSpecView(appRoot, specCallbacks);
+      specView.update(selectedSpec, specState, loading, errorMessage);
+    } else if (specView) {
+      specView.dispose();
+      specView = null;
+    }
     detailView.update(
       selectedChange
         ? {
@@ -994,6 +1101,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     offServiceEvent();
     resources.dispose();
     boardView.dispose();
+    specView?.dispose();
     detailView.dispose();
     deleteView.dispose();
     createView.dispose();

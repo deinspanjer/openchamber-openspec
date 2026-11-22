@@ -8,6 +8,7 @@ export function decodePlanning(value: unknown): string {
 }
 export type ListingEntry = { id: string; completedTasks: number; totalTasks: number };
 export type ArchivedChange = { name: string; completedTasks: number; totalTasks: number };
+export type SpecEntry = { id: string; requirementCount: number };
 export type Task = {
   id: string;
   description: string;
@@ -117,6 +118,25 @@ export function decodeArchived(value: unknown): ArchivedChange[] {
   if (new Set(archived.map(({ name }) => name)).size !== archived.length)
     throw new Error("Duplicate archived change.");
   return archived;
+}
+
+export function isSpecId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/.exec(value)?.[0] === value
+  );
+}
+
+export function decodeSpecs(value: unknown): SpecEntry[] {
+  const { specs } = record(value);
+  if (!Array.isArray(specs)) throw new Error("Invalid spec listing.");
+  const entries = specs.map((value) => {
+    const { id, requirementCount } = record(value);
+    return { id: string(id), requirementCount: count(requirementCount) };
+  });
+  if (new Set(entries.map(({ id }) => id)).size !== entries.length)
+    throw new Error("Duplicate spec.");
+  return entries;
 }
 
 export function decodeListing(value: unknown): {

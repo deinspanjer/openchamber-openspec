@@ -2422,6 +2422,17 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Duplicate archived change.");
     return archived;
   }
+  function decodeSpecs(value) {
+    const { specs } = record(value);
+    if (!Array.isArray(specs)) throw new Error("Invalid spec listing.");
+    const entries = specs.map((value2) => {
+      const { id, requirementCount } = record(value2);
+      return { id: string(id), requirementCount: count(requirementCount) };
+    });
+    if (new Set(entries.map(({ id }) => id)).size !== entries.length)
+      throw new Error("Duplicate spec.");
+    return entries;
+  }
   function decodeListing(value) {
     const input = record(value);
     const directory2 = string(input.directory);
@@ -2608,6 +2619,17 @@ ${GUEST_UI_LOOK_CSS}`;
         await request("/archived", { directory: directory2, expectedRoot: root2, expectedPlanning: planning }),
         decodeArchived
       ),
+      specs: async ({ directory: directory2, root: root2, planning }) => decode2(
+        await request("/specs", { directory: directory2, expectedRoot: root2, expectedPlanning: planning }),
+        decodeSpecs
+      ),
+      spec: async ({ directory: directory2, root: root2, planning }, spec) => {
+        const value = record2(
+          await request("/spec", { directory: directory2, expectedRoot: root2, expectedPlanning: planning, spec })
+        );
+        if (value.id !== spec || typeof value.content !== "string") throw invalid();
+        return value.content;
+      },
       workflows: async (directory2) => decode2(await request("/workflows", { directory: directory2 }), decodeWorkflows),
       list: async (directory2, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {

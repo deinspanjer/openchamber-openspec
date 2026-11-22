@@ -1,5 +1,5 @@
 import { mountButton, mountProgress, mountSearchField, mountTabs } from "@openchamber/sdk/ui";
-import type { ArchivedChange, Workflow } from "../contracts.js";
+import type { ArchivedChange, SpecEntry, Workflow } from "../contracts.js";
 import type { DerivedChange } from "../model.js";
 import { stages, workflowLabel } from "./workflow.js";
 import { mountPrimaryAction, type PrimaryIntent } from "./primary-action.js";
@@ -41,6 +41,7 @@ export type BoardState = {
   workflows: ReadonlySet<Workflow>;
   view: BoardView;
   archived: ReadState<ArchivedChange[]> | null;
+  specs: ReadState<SpecEntry[]> | null;
 };
 
 export function mountBoardView(
@@ -52,6 +53,7 @@ export function mountBoardView(
     search: (value: string) => void;
     help: () => void;
     select: (view: BoardView) => void;
+    openSpec: (id: string) => void;
   },
 ) {
   const main = document.createElement("div");
@@ -216,6 +218,56 @@ export function mountBoardView(
           ? "No matching archived changes."
           : "No changes are archived.");
   }
+  const specsStatus = document.createElement("div");
+  specsStatus.className = "notice browse-status";
+  const specsMessage = document.createElement("span");
+  const specsRetryRoot = document.createElement("span");
+  const specsRetry = mountButton(specsRetryRoot, {
+    label: "refresh",
+    variant: "secondary",
+    size: "sm",
+    onClick: callbacks.retry,
+  });
+  const specsList = document.createElement("ul");
+  specsList.className = "browse-list spec-list";
+  specsStatus.append(specsMessage, specsRetryRoot);
+  panes.specs.append(specsStatus, specsList);
+  let lastSpecs: BoardState["specs"] | undefined;
+  let lastSpecQuery: string | undefined;
+  function updateSpecs(state: BoardState["specs"], query: string) {
+    if (lastSpecs === state && lastSpecQuery === query) return;
+    lastSpecs = state;
+    lastSpecQuery = query;
+    const rows = (state?.value ?? []).filter(({ id }) => id.toLocaleLowerCase().includes(query));
+    specsList.replaceChildren(
+      ...rows.map(({ id, requirementCount }) => {
+        const row = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.spec = id;
+        button.className = "spec-row";
+        const name = document.createElement("span");
+        name.textContent = id;
+        const count = document.createElement("span");
+        count.textContent = `${requirementCount} ${requirementCount === 1 ? "requirement" : "requirements"}`;
+        count.className = "browse-meta";
+        button.append(name, count);
+        button.addEventListener("click", () => callbacks.openSpec(id));
+        row.append(button);
+        return row;
+      }),
+    );
+    specsStatus.hidden = !state || rows.length > 0;
+    specsStatus.classList.toggle("error", !!state?.error);
+    specsRetryRoot.hidden = !state?.error;
+    specsMessage.textContent =
+      state?.error?.message ??
+      (state?.pending
+        ? "Loading specs…"
+        : state?.value?.length
+          ? "No matching specs."
+          : "No specs exist yet.");
+  }
   const board = panes.changes;
   board.className = "board";
   const sections = stages.map((stage) => {
@@ -350,6 +402,15 @@ export function mountBoardView(
     resetPositions() {
       positions.clear();
     },
+    scrollForChanges() {
+      return view === "changes" ? window.scrollY : (positions.get("changes")?.scroll ?? 0);
+    },
+    focusSpec(id: string) {
+      const button = specsList.querySelector<HTMLElement>(`[data-spec="${CSS.escape(id)}"]`);
+      (button ?? tablist.querySelector<HTMLElement>("#board-tab-specs"))?.focus({
+        preventScroll: true,
+      });
+    },
     update(state: BoardState) {
       const switched = view !== state.view;
       const tabHadFocus = switched && tabRoot.contains(document.activeElement);
@@ -418,6 +479,7 @@ export function mountBoardView(
       }
       const query = state.search.trim().toLocaleLowerCase();
       updateArchived(state.archived, query);
+      updateSpecs(state.specs, query);
       for (const entry of cards.values()) {
         if (!entry.current.change.id.toLocaleLowerCase().includes(query)) entry.node.remove();
       }
@@ -477,6 +539,7 @@ export function mountBoardView(
       search.dispose();
       tabs.dispose();
       archivedRetry.dispose();
+      specsRetry.dispose();
       main.remove();
     },
   };

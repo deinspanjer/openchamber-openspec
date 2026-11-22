@@ -38,14 +38,16 @@ task.
       shows rows newest first as name, date and `n of m tasks`, shows the empty state, and shows the
       error with `refresh` on failure. Reopening does not read; `refresh` while shown re-reads.
       Implement the view and its `resources.ts` entry.
-- [ ] 2.3 Specs. Service seam: add failing tests for `/specs` and `/spec` with the real CLI on a
+- [x] 2.3 Specs. Service seam: add failing tests for `/specs` and `/spec` with the real CLI on a
       disposable root holding a top-level and a nested spec. Add a rejected `spec` id with a
-      leading `-` or a `..` segment, an unknown spec's CLI error, and malformed output. Implement
-      the routes and client calls. Fake host seam: add failing tests that `Specs` lists ids with
-      requirement counts (`1 requirement`, `5 requirements`). Opening a spec renders its `spec.md` as written
-      (including a non-standard section) through the document renderer, with raw HTML inert. Back restores
-      the list's scroll, reopening reads nothing, and a failed read shows a retry. Implement the
-      spec read (listing-gated, `realpath` inside the specs tree), the spec pane and its `resources.ts` entries.
+      leading `-` or a `..` segment, a listing miss (`404 SPEC_UNAVAILABLE`, no `show` call or file
+      read), and malformed output. Implement the routes and client calls. Fake host seam: add
+      failing tests that `Specs` lists ids with requirement counts (`1 requirement`,
+      `5 requirements`). Opening a spec renders its `spec.md` as written (including a non-standard
+      section) through the document renderer, with raw HTML inert. Back restores the list's scroll,
+      reopening reads nothing until Refresh, and a failed read shows a retry. Implement the
+      listing-gated spec read with `realpath` containment, the spec pane and its `resources.ts`
+      entries.
 
 ## 3. Release
 
