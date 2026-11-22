@@ -58,9 +58,5 @@ export async function findProject(host: HostClient, directory: string) {
         .map(({ project }) => project),
     );
   }
-  if (owners.length !== 1)
-    throw new Error(
-      "Cannot identify the originating registered project. No worktree was requested.",
-    );
-  return owners[0]!;
+  return owners.length === 1 ? owners[0]! : null;
 }

@@ -7,6 +7,10 @@ export async function inspectWorktreeDestination(
   name: string,
 ) {
   const project = await findProject(host, directory);
+  if (!project)
+    throw new Error(
+      "Cannot identify the originating registered project. No worktree was requested.",
+    );
   const [trees, sessions] = await Promise.all([
     ready(
       () => host.listWorktrees(project.id),

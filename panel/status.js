@@ -2840,11 +2840,7 @@ ${GUEST_UI_LOOK_CSS}`;
         ...mappings.filter(({ trees }) => trees.worktrees.some((tree) => tree.directory === directory2)).map(({ project }) => project)
       );
     }
-    if (owners.length !== 1)
-      throw new Error(
-        "Cannot identify the originating registered project. No worktree was requested."
-      );
-    return owners[0];
+    return owners.length === 1 ? owners[0] : null;
   }
 
   // src/panel/prompts.ts
@@ -2933,6 +2929,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var projectEpoch = 0;
   var sessions = null;
   var offSessions;
+  var workspace;
   var disposed = false;
   var reading = false;
   var queued = false;
@@ -3134,7 +3131,9 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     notes.append(line);
   }
   function resolve(listing, saved) {
-    const record2 = sessions?.sessions.find((item) => item.id === sessionId);
+    const candidate = sessions?.sessions.find((item) => item.id === sessionId);
+    const coverage = sessions?.coverage.find((item) => item.directory === candidate?.directory);
+    const record2 = coverage?.state === "ready" ? candidate : void 0;
     return resolveTrackedChange({
       saved,
       items: record2?.items ?? [],
@@ -3143,13 +3142,14 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     });
   }
   function read() {
-    if (disposed || !directory || sessions?.state !== "ready") return;
+    if (disposed || !directory) return;
     if (reading) {
       queued = true;
       return;
     }
     const capturedDirectory = directory;
     const capturedSession = sessionId;
+    const capturedWorkspace = workspace;
     const capturedEpoch = epoch;
     const current = () => !disposed && epoch === capturedEpoch;
     reading = true;
@@ -3159,6 +3159,10 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         if (!current()) return;
         const saved = capturedSession ? await readTrackedChange(host, capturedSession) : null;
         if (!current()) return;
+        if (capturedSession && !listing.changes.some(({ id }) => id === saved)) {
+          await capturedWorkspace;
+          if (!current()) return;
+        }
         const tracked = resolve(listing, saved);
         selection2 = { listing, saved, change: tracked.change };
         if (tracked.change === null) {
@@ -3189,50 +3193,29 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   function subscribeToProject(capturedDirectory) {
     const capturedProject = ++projectEpoch;
     const current = () => !disposed && projectEpoch === capturedProject;
-    const failed = (message) => {
-      if (!current()) return;
-      epoch++;
-      selection2 = null;
-      render({ kind: "error", message });
-    };
-    void (async () => {
+    return (async () => {
       try {
         const project = await findProject(host, capturedDirectory);
-        if (!current()) return;
+        if (!current() || !project) return;
         const off = await host.onSessions(project.id, (snapshot) => {
           if (!current()) return;
-          const wasReady = sessions?.state === "ready";
           sessions = snapshot;
-          if (snapshot.state === "error") {
-            failed("Could not read project sessions.");
-          } else if (snapshot.state === "ready") {
-            if (!wasReady) read();
-            else if (selection2 && resolve(selection2.listing, selection2.saved).change !== selection2.change) {
-              epoch++;
-              selection2 = null;
-              render({ kind: "loading" });
-              read();
-            }
+          if (selection2 && resolve(selection2.listing, selection2.saved).change !== selection2.change) {
+            epoch++;
+            selection2 = null;
+            render({ kind: "loading" });
+            read();
           }
         });
         if (current()) offSessions = off;
         else off();
       } catch (caught) {
-        failed(
-          caught instanceof Error ? caught.message : "Could not identify the registered project."
-        );
+        if (current()) console.warn("Could not inspect OpenSpec session metadata.", caught);
       }
     })();
   }
   function refresh() {
-    if (!directory) return;
-    if (sessions?.state === "ready") read();
-    else if (sessions?.state === "error" || !offSessions) {
-      offSessions?.();
-      offSessions = void 0;
-      sessions = null;
-      subscribeToProject(directory);
-    }
+    read();
   }
   function publishRefreshControl() {
     const request = ++headerRequest;
@@ -3260,10 +3243,9 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       offSessions?.();
       offSessions = void 0;
       sessions = null;
-      if (directory) subscribeToProject(directory);
-    } else {
-      read();
+      workspace = directory ? subscribeToProject(directory) : void 0;
     }
+    read();
   }
   var lastHeight = 0;
   var resize = new ResizeObserver(() => {

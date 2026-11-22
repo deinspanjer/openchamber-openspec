@@ -7992,16 +7992,16 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         ...mappings.filter(({ trees }) => trees.worktrees.some((tree) => tree.directory === directory)).map(({ project }) => project)
       );
     }
-    if (owners.length !== 1)
-      throw new Error(
-        "Cannot identify the originating registered project. No worktree was requested."
-      );
-    return owners[0];
+    return owners.length === 1 ? owners[0] : null;
   }
 
   // src/panel/worktree.ts
   async function inspectWorktreeDestination(host2, directory, name) {
     const project = await findProject(host2, directory);
+    if (!project)
+      throw new Error(
+        "Cannot identify the originating registered project. No worktree was requested."
+      );
     const [trees, sessions] = await Promise.all([
       ready(
         () => host2.listWorktrees(project.id),

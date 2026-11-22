@@ -217,6 +217,9 @@ function hostHtml(statusCase) {
         worktree, activity: "idle", outcome: null, items: worktree ? [] : items }];
       if (statusCase === "saved" || statusCase === "stale")
         storage.set("session-change:fixture-session", { change: statusCase === "saved" ? "second-change" : "old-change", savedAt: 1 });
+      if (statusCase === "other-directory-error" || statusCase === "unregistered-saved")
+        storage.set("session-change:fixture-session", { change: "second-change", savedAt: 1 });
+      if (statusCase.startsWith("unregistered-")) projects = [];
       if (statusCase === "stale") sessions[0].items = [];
       if (statusCase === "switch") sessions.push({ ...sessions[0], id: "replacement-session",
         items: [{ id: "second-change", data: { kind: "change", change: "second-change" } }] });
@@ -399,9 +402,11 @@ function hostHtml(statusCase) {
       if (message.type === "workspace-subscribe") {
         window.__requests.push({path:message.type,body:message.payload});
         const { subscriptionId, query } = message.payload;
+        const coverage = [{ directory: statusDirectory, state: "ready" }];
+        if (statusCase === "other-directory-error") coverage.push({ directory: "/tmp/other-worktree", state: "error" });
         event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "workspace",
           payload: { subscriptionId, snapshot: { kind: "sessions", projectId: query.projectId,
-            state: "ready", coverage: [], sessions } } }, "*");
+            state: statusCase === "other-directory-error" ? "error" : "ready", coverage, sessions } } }, "*");
         reply();
         return;
       }
@@ -902,6 +907,34 @@ test("session section collapses the disclosure when a finished turn changes the 
     await page.close();
   });
 });
+
+for (const scenario of ["other-directory-error", "unregistered-saved", "unregistered-picker"]) {
+  test(`session section resolves ${scenario} without requiring project-wide session readiness`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=${scenario}`);
+      const frame = page.frameLocator("iframe");
+      if (scenario === "unregistered-picker") {
+        await frame.getByRole("button", { name: "Choose a change", exact: true }).click({
+          timeout: 3000,
+        });
+        await frame.getByRole("menuitem", { name: "first-change", exact: true }).waitFor();
+      } else {
+        await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor({
+          timeout: 3000,
+        });
+      }
+      await page.waitForFunction(() =>
+        __requests.some((r) => r.path === "storage" && r.body.op === "get"),
+      );
+      assert.equal(
+        await page.evaluate(() => __requests.some((r) => r.path === "/summaries")),
+        false,
+      );
+      await page.close();
+    });
+  });
+}
 
 test("session section coalesces refresh triggers during a read", async () => {
   await withPanel(async (browser, url) => {

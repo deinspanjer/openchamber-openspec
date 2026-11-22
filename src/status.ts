@@ -38,6 +38,7 @@ let epoch = 0;
 let projectEpoch = 0;
 let sessions: GuestSessionsSnapshot | null = null;
 let offSessions: (() => void) | undefined;
+let workspace: Promise<void> | undefined;
 let disposed = false;
 let reading = false;
 let queued = false;
@@ -262,7 +263,9 @@ function note(text: string, role?: string) {
 }
 
 function resolve(listing: Listing, saved: string | null) {
-  const record = sessions?.sessions.find((item) => item.id === sessionId);
+  const candidate = sessions?.sessions.find((item) => item.id === sessionId);
+  const coverage = sessions?.coverage.find((item) => item.directory === candidate?.directory);
+  const record = coverage?.state === "ready" ? candidate : undefined;
   return resolveTrackedChange({
     saved,
     items: record?.items ?? [],
@@ -272,13 +275,14 @@ function resolve(listing: Listing, saved: string | null) {
 }
 
 function read() {
-  if (disposed || !directory || sessions?.state !== "ready") return;
+  if (disposed || !directory) return;
   if (reading) {
     queued = true;
     return;
   }
   const capturedDirectory = directory;
   const capturedSession = sessionId;
+  const capturedWorkspace = workspace;
   const capturedEpoch = epoch;
   const current = () => !disposed && epoch === capturedEpoch;
   reading = true;
@@ -288,6 +292,10 @@ function read() {
       if (!current()) return;
       const saved = capturedSession ? await readTrackedChange(host, capturedSession) : null;
       if (!current()) return;
+      if (capturedSession && !listing.changes.some(({ id }) => id === saved)) {
+        await capturedWorkspace;
+        if (!current()) return;
+      }
       const tracked = resolve(listing, saved);
       selection = { listing, saved, change: tracked.change };
       if (tracked.change === null) {
@@ -319,54 +327,30 @@ function read() {
 function subscribeToProject(capturedDirectory: string) {
   const capturedProject = ++projectEpoch;
   const current = () => !disposed && projectEpoch === capturedProject;
-  const failed = (message: string) => {
-    if (!current()) return;
-    epoch++;
-    selection = null;
-    render({ kind: "error", message });
-  };
-  void (async () => {
+  return (async () => {
     try {
       const project = await findProject(host, capturedDirectory);
-      if (!current()) return;
+      if (!current() || !project) return;
       const off = await host.onSessions(project.id, (snapshot) => {
         if (!current()) return;
-        const wasReady = sessions?.state === "ready";
         sessions = snapshot;
-        if (snapshot.state === "error") {
-          failed("Could not read project sessions.");
-        } else if (snapshot.state === "ready") {
-          if (!wasReady) read();
-          else if (
-            selection &&
-            resolve(selection.listing, selection.saved).change !== selection.change
-          ) {
-            epoch++;
-            selection = null;
-            render({ kind: "loading" });
-            read();
-          }
+        if (selection && resolve(selection.listing, selection.saved).change !== selection.change) {
+          epoch++;
+          selection = null;
+          render({ kind: "loading" });
+          read();
         }
       });
       if (current()) offSessions = off;
       else off();
     } catch (caught) {
-      failed(
-        caught instanceof Error ? caught.message : "Could not identify the registered project.",
-      );
+      if (current()) console.warn("Could not inspect OpenSpec session metadata.", caught);
     }
   })();
 }
 
 function refresh() {
-  if (!directory) return;
-  if (sessions?.state === "ready") read();
-  else if (sessions?.state === "error" || !offSessions) {
-    offSessions?.();
-    offSessions = undefined;
-    sessions = null;
-    subscribeToProject(directory);
-  }
+  read();
 }
 
 function publishRefreshControl() {
@@ -399,10 +383,9 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
     offSessions?.();
     offSessions = undefined;
     sessions = null;
-    if (directory) subscribeToProject(directory);
-  } else {
-    read();
+    workspace = directory ? subscribeToProject(directory) : undefined;
   }
+  read();
 }
 
 let lastHeight = 0;
