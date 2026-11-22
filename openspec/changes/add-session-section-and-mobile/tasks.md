@@ -187,8 +187,9 @@ One commit per task.
       extending the flyout data with `directory` and `offerContinue`.
 - [ ] 9.5 Prompts. Fake host seam: add failing tests that `ff`, `continue`, `update`, `explore`,
       `verify` and the footer's `new` each compose their prompt unsent with `mode: "replace"`,
-      naming the design's skill, change and goal, with no paths. `new` names no change and leaves
-      tracking unchanged; the others append tracking. Implement the prompts in
+      naming the design's skill, change and goal, with no paths. `verify` reuses the board's
+      existing prompt verbatim, without a goal. `new` names no change and leaves tracking unchanged;
+      the others append tracking. Implement the prompts in
       `src/panel/prompts.ts` and drop `stageChip`.
 - [ ] 9.6 Compact sizing. Fake host seam at 320px: add failing tests that on a coarse pointer chips
       are 28px tall with at least 8px between adjacent chips, and that `＋ Track a change`, the

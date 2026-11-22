@@ -63,7 +63,7 @@ section SHALL NOT infer changes from conversation content or tool activity.
 Below the last card, or alone when nothing is tracked, the section SHALL show one footer line:
 `＋ Track a change` on the left, and on the right `new`, `board`, and a refresh icon button whose
 accessible name is `Refresh`. `new` SHALL show only when the `new` workflow is configured. `board`
-SHALL open the extension's board at its list. Refresh SHALL re-read the section. The section SHALL
+SHALL open the extension's board. Refresh SHALL re-read the section. The section SHALL
 contribute no Refresh control to the Work Status header.
 
 #### Scenario: Core profile
@@ -79,7 +79,7 @@ contribute no Refresh control to the Work Status header.
 #### Scenario: Open the board from the footer
 
 - **WHEN** the user activates the footer's `board`
-- **THEN** the board opens at its list, without opening a change's detail
+- **THEN** the board opens without changing an existing list or detail view
 
 #### Scenario: Footer on a phone
 
