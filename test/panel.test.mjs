@@ -150,9 +150,17 @@ function hostHtml(statusCase, pointer, popovers) {
     let holdCompose = false;
     let failCompose = false;
     const storage = new Map();
+    const deviceStorage = new Map();
     let failStorage = false;
     window.__stored = () => Object.fromEntries(storage);
     window.__seedStorage = (entries) => { for (const [key, value] of entries) storage.set(key, value); };
+    window.__deviceStored = () => Object.fromEntries(deviceStorage);
+    window.__seedDeviceStorage = (entries) => { for (const [key, value] of entries) deviceStorage.set(key, value); };
+    window.__remountStatus = () => {
+      const frame = document.querySelector('iframe[title="OpenSpec test panel"]');
+      guests.delete(frame.contentWindow);
+      frame.replaceWith(frame.cloneNode(false));
+    };
     window.__failStorage = () => { failStorage = true; };
     let failOpenUrl = false;
     let holdClipboard = false;
@@ -262,6 +270,8 @@ function hostHtml(statusCase, pointer, popovers) {
       session: statusCase === "new" ? null : { id: "fixture-session", busy: false },
       surface: statusCase ? "status" : "panel", connection: { connected: true, account: "" }, settings: {}, item: null };
     if (popovers) ready.features = { popovers: true };
+    if (location.search.includes("device-storage")) ready.features = { ...ready.features, deviceStorage: true };
+    if (statusCase === "mount-burst") ready.session.busy = true;
     if (pointer) ready.device = { formFactor: pointer === "coarse" ? "phone" : "desktop", pointer,
       insets: { top: 0, right: 0, bottom: 0, left: 0 }, keyboard: 0 };
     window.__device = (bottom, keyboard) => {
@@ -338,6 +348,10 @@ function hostHtml(statusCase, pointer, popovers) {
          const show = () => {
            const context = readyFor(event.source);
            post(event.source, "ready", context);
+           if (statusCase) {
+             post(event.source, "directory", { directory: context.directory });
+             post(event.source, "session", { session: context.session });
+           }
            if (statusCase && context.session) post(event.source, "session-lifecycle", {
              sessionId: context.session.id, phase: context.session.busy ? "started" : "completed",
            });
@@ -476,18 +490,19 @@ function hostHtml(statusCase, pointer, popovers) {
       if (message.type === "storage") {
         const { op, key, value, scope } = message.payload;
         window.__requests.push({ path: "storage", body: message.payload });
-        if (failStorage || (scope !== undefined && scope !== "instance")) {
+        if (failStorage || (scope === "device" && !ready.features?.deviceStorage)) {
           event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result",
             id: message.id, ok: false, code: "HOST_REJECTED", error: "Storage unavailable" }, "*");
           return;
         }
-        if (op === "get") reply(storage.has(key)
-          ? { storage: true, op, found: true, value: storage.get(key) }
+        const shelf = scope === "device" ? deviceStorage : storage;
+        if (op === "get") reply(shelf.has(key)
+          ? { storage: true, op, found: true, value: shelf.get(key) }
           : { storage: true, op, found: false });
-        else if (op === "keys") reply({ storage: true, op, keys: [...storage.keys()].sort() });
+        else if (op === "keys") reply({ storage: true, op, keys: [...shelf.keys()].sort() });
         else if (op === "set" || op === "delete") {
-          if (op === "set") storage.set(key, value);
-          else storage.delete(key);
+          if (op === "set") shelf.set(key, value);
+          else shelf.delete(key);
           reply({ storage: true, op });
         }
         return;
@@ -1590,6 +1605,119 @@ test("session section omits additional validation issues to fit JSON-escaped mes
       }
       await page.close();
     }
+  });
+});
+
+test("Work Status coalesces a completed lifecycle event with its mount-time context", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=mount-burst&hold-ready`);
+    const frame = page.frameLocator("iframe");
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __holdListing();
+      __releaseReady();
+      __lifecycle("fixture-session", "completed");
+    });
+    await page.waitForFunction(() => __requests.some(({ path }) => path === "/changes"));
+    await page.evaluate(() => __releaseListing());
+    await frame.getByText("1/2", { exact: true }).waitFor();
+    await page.evaluate(() => __theme("light"));
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
+      1,
+    );
+  });
+});
+
+for (const remount of [false, true]) {
+  test(`Work Status restores display-only progress after a ${remount ? "frame remount" : "session switch"}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=switch${remount ? "&device-storage" : ""}`);
+      const frame = page.frameLocator("iframe");
+      await frame.getByText("1/2", { exact: true }).waitFor();
+      if (remount) {
+        await page.waitForFunction(() => Object.keys(__deviceStored()).length > 0, null, {
+          timeout: 3000,
+        });
+        const stored = await page.evaluate(() => JSON.stringify(__deviceStored()));
+        assert.match(stored, /fixture-session.*first-change.*Second description/s);
+        assert.doesNotMatch(stored, /Read the proposal|CLI description|openspec-apply-change/);
+      } else {
+        await page.evaluate(() => __session("replacement-session"));
+        await frame.getByRole("heading", { name: "second-change" }).waitFor();
+      }
+      await page.evaluate((remount) => {
+        __holdListing();
+        __edit("Done");
+        if (remount) __remountStatus();
+        else __session("fixture-session");
+      }, remount);
+      const refresh = frame.getByRole("status").filter({ hasText: "Showing last known progress" });
+      await refresh.waitFor({ timeout: 3000 });
+      await frame.getByText("Second description", { exact: true }).waitFor();
+      assert.equal(await frame.getByText("1/2", { exact: true }).isVisible(), true);
+      assert.equal(await frame.getByRole("heading", { name: "second-change" }).count(), 0);
+      assert.equal(await frame.getByRole("button", { name: "apply", exact: true }).count(), 0);
+      await page.waitForFunction(
+        (count) => __requests.filter(({ path }) => path === "/changes").length === count,
+        remount ? 2 : 3,
+      );
+      await page.evaluate(() => __releaseListing());
+      await frame.getByText("2/2", { exact: true }).waitFor();
+      await refresh.waitFor({ state: "hidden" });
+    });
+  });
+}
+
+test("Work Status keeps the last known progress when refreshing the listing fails", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByText("1/2", { exact: true }).waitFor();
+    await page.evaluate(() => __failNextListing());
+    await frame.getByRole("button", { name: "Refresh", exact: true }).click();
+    await frame.getByRole("alert").filter({ hasText: "Cannot check listing" }).waitFor();
+    assert.equal(await frame.getByText("1/2", { exact: true }).isVisible(), true);
+    assert.equal(await frame.getByRole("button", { name: "apply", exact: true }).count(), 0);
+  });
+});
+
+test("the Work Status device cache retains at most 50 sessions", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item&device-storage&hold-ready`);
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate((directory) => {
+      __seedDeviceStorage([
+        [
+          "work-status:cards",
+          Array.from({ length: 50 }, (_, index) => ({
+            sessionId: "cached-session-" + index,
+            directory,
+            cards: [],
+          })),
+        ],
+      ]);
+      __releaseReady();
+    }, directory);
+    await page.waitForFunction(
+      () =>
+        __deviceStored()["work-status:cards"].some(
+          ({ sessionId }) => sessionId === "fixture-session",
+        ),
+      null,
+      { timeout: 3000 },
+    );
+    const sessions = await page.evaluate(() =>
+      __deviceStored()["work-status:cards"].map(({ sessionId }) => sessionId),
+    );
+    assert.equal(sessions.length, 50);
+    assert.equal(sessions.includes("cached-session-0"), false);
+    assert.equal(sessions.at(-1), "fixture-session");
   });
 });
 

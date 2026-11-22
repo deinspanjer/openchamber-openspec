@@ -210,6 +210,11 @@ each shown change, its planning status and tasks, never every change's summary. 
 NOT poll or refresh on visibility changes. A failed read SHALL show an error with Refresh on the
 affected card, or on the section when the listing fails, and SHALL NOT show partial progress.
 
+#### Scenario: Initial host signals arrive together
+
+- **WHEN** mount-time context and lifecycle signals arrive together
+- **THEN** the section runs one read
+
 #### Scenario: Turn finishes
 
 - **WHEN** the shown session's turn completes after the agent checked off a task
@@ -224,6 +229,18 @@ affected card, or on the section when the listing fails, and SHALL NOT show part
 
 - **WHEN** the OpenSpec CLI fails while reading one of two tracked changes
 - **THEN** that card shows the error and Refresh, and the other card shows its progress
+
+### Requirement: Keep last known progress until fresh data arrives
+
+While a read is pending, the section SHALL display available last known cards for the session and
+mark them stale. On failure it SHALL retain that display with an error. The cache SHALL store only
+the names, counts, current task titles, and stages, in memory across session switches and in device
+storage where supported.
+
+#### Scenario: Return to a session
+
+- **WHEN** the section returns to a session with cached cards
+- **THEN** it shows those cards as stale until a successful read replaces them
 
 ### Requirement: Keep interaction state across reads
 

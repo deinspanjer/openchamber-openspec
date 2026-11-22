@@ -124,7 +124,7 @@
   var GUEST_STATUS_CONTROL_OPTIONS_MAX = 16;
   var GUEST_STATUS_CONTROL_VALUE_MAX = 80;
   var isControlObject = (value) => Object(value) === value && !Array.isArray(value);
-  var hasOnlyKeys = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
+  var hasOnlyKeys = (value, keys) => Object.keys(value).every((key2) => keys.includes(key2));
   var isLabel = (value) => String(value) === value && value.length >= 1 && value.length <= GUEST_STATUS_CONTROL_LABEL_MAX;
   var isValue = (value) => String(value) === value && value.length >= 1 && value.length <= GUEST_STATUS_CONTROL_VALUE_MAX;
   var isGuestStatusControls = (controls2) => {
@@ -228,7 +228,7 @@
     if (value === null || value === true || value === false)
       return true;
     if (Array.isArray(value))
-      return Object.keys(value).every((key) => /^(0|[1-9]\d*)$/.test(key) && Number(key) < value.length) && value.every(isFiniteJson);
+      return Object.keys(value).every((key2) => /^(0|[1-9]\d*)$/.test(key2) && Number(key2) < value.length) && value.every(isFiniteJson);
     if (Object(value) === value) {
       const prototype = Object.getPrototypeOf(value);
       return (prototype === null || prototype === Object.prototype) && Object.values(value).every(isFiniteJson);
@@ -477,25 +477,25 @@
   };
   var rejectBadPath = () => Promise.reject(new HostRequestError("BAD_PATH", 'Request path must start with "/" and stay on the declared origin.'));
   var rejectBadFilePath = () => Promise.reject(new HostRequestError("BAD_PATH", `File path must be 1 to ${GUEST_FILE_PATH_MAX} characters without NUL or backslash.`));
-  var deviceStorageScope = (options) => {
-    if (options === void 0)
+  var deviceStorageScope = (options2) => {
+    if (options2 === void 0)
       return void 0;
-    if (Object(options) !== options || Array.isArray(options) || options.scope !== void 0 && options.scope !== "instance" && options.scope !== "device") {
+    if (Object(options2) !== options2 || Array.isArray(options2) || options2.scope !== void 0 && options2.scope !== "instance" && options2.scope !== "device") {
       throw new HostRequestError("HOST_REJECTED", 'Storage scope must be "instance" or "device".');
     }
-    return options.scope === "device" ? "device" : void 0;
+    return options2.scope === "device" ? "device" : void 0;
   };
   var nextId = (n) => {
     n.value += 1;
     return `oc-${n.value}`;
   };
-  var connectHost = (options = {}) => {
-    const target = options.target ?? ("window" in globalThis ? window : null);
+  var connectHost = (options2 = {}) => {
+    const target = options2.target ?? ("window" in globalThis ? window : null);
     if (!target) {
       throw new HostRequestError("HOST_UNAVAILABLE", "No window. connectHost runs in a browser frame.");
     }
-    const acceptSource = options.acceptSource ?? ((source) => source === target.parent);
-    const requestTimeoutMs = options.requestTimeoutMs ?? GUEST_REQUEST_TIMEOUT_MS;
+    const acceptSource = options2.acceptSource ?? ((source) => source === target.parent);
+    const requestTimeoutMs = options2.requestTimeoutMs ?? GUEST_REQUEST_TIMEOUT_MS;
     const readyListeners = /* @__PURE__ */ new Set();
     const directoryListeners = /* @__PURE__ */ new Set();
     const sessionListeners = /* @__PURE__ */ new Set();
@@ -1022,13 +1022,13 @@
           listener(snapshot);
       }),
       onRunningShells: (scope, listener) => subscribeShells(scope, listener),
-      readShellOutput: async (shellId, options2) => {
+      readShellOutput: async (shellId, options3) => {
         requireIdentity(shellId, GUEST_SHELL_ID_MAX);
-        const cursor = options2?.cursor;
+        const cursor = options3?.cursor;
         if (cursor !== void 0 && (!Number.isInteger(cursor) || cursor < 0)) {
           throw new HostRequestError("HOST_REJECTED", "Shell output cursor must be a non-negative integer.");
         }
-        const tailBytes = options2?.tailBytes;
+        const tailBytes = options3?.tailBytes;
         if (tailBytes !== void 0 && (!Number.isInteger(tailBytes) || tailBytes < 1 || tailBytes > GUEST_SHELL_OUTPUT_TAIL_MAX)) {
           throw new HostRequestError("HOST_REJECTED", `Shell output tailBytes must be an integer between 1 and ${GUEST_SHELL_OUTPUT_TAIL_MAX}.`);
         }
@@ -1051,30 +1051,30 @@
         await request({ ...envelope, type: "open-session", id: nextId(ids), payload: { sessionId: sessionId2 } });
       },
       storage: {
-        get: async (key, options2) => {
-          const scope = deviceStorageScope(options2);
-          const payload = { op: "get", key };
+        get: async (key2, options3) => {
+          const scope = deviceStorageScope(options3);
+          const payload = { op: "get", key: key2 };
           if (scope)
             payload.scope = scope;
           const result = await storage(payload);
           return result.op === "get" && result.found ? result.value : void 0;
         },
-        set: async (key, value, options2) => {
-          const scope = deviceStorageScope(options2);
-          const payload = { op: "set", key, value };
+        set: async (key2, value, options3) => {
+          const scope = deviceStorageScope(options3);
+          const payload = { op: "set", key: key2, value };
           if (scope)
             payload.scope = scope;
           await storage(payload);
         },
-        delete: async (key, options2) => {
-          const scope = deviceStorageScope(options2);
-          const payload = { op: "delete", key };
+        delete: async (key2, options3) => {
+          const scope = deviceStorageScope(options3);
+          const payload = { op: "delete", key: key2 };
           if (scope)
             payload.scope = scope;
           await storage(payload);
         },
-        keys: async (options2) => {
-          const scope = deviceStorageScope(options2);
+        keys: async (options3) => {
+          const scope = deviceStorageScope(options3);
           const payload = { op: "keys" };
           if (scope)
             payload.scope = scope;
@@ -1278,7 +1278,7 @@
           type: "start-session",
           id: nextId(ids),
           payload: clampStartSessionRequest(payload)
-        }, options.requestTimeoutMs ?? 18e4);
+        }, options2.requestTimeoutMs ?? 18e4);
         if (!isStartSessionResult(result)) {
           throw new HostRequestError("HOST_REJECTED", "Host did not return a session.");
         }
@@ -1436,7 +1436,7 @@
           type: "generate",
           id: nextId(ids),
           payload
-        }, options.requestTimeoutMs ?? GUEST_GENERATE_TIMEOUT_MS).then((result) => {
+        }, options2.requestTimeoutMs ?? GUEST_GENERATE_TIMEOUT_MS).then((result) => {
           if (!isGenerateResult(result)) {
             throw new HostRequestError("HOST_REJECTED", "Host did not return generated text.");
           }
@@ -1641,11 +1641,11 @@
   ];
   var applyHostTheme = (theme, root2) => {
     root2.style.colorScheme = theme.mode;
-    for (const [name, key] of TOKEN_VARS) {
-      root2.style.setProperty(name, theme.tokens[key]);
+    for (const [name, key2] of TOKEN_VARS) {
+      root2.style.setProperty(name, theme.tokens[key2]);
     }
-    for (const [alias, hostName, key] of SYNTAX_TOKEN_VARS) {
-      const value = theme.tokens[key] ?? "";
+    for (const [alias, hostName, key2] of SYNTAX_TOKEN_VARS) {
+      const value = theme.tokens[key2] ?? "";
       root2.style.setProperty(alias, value);
       root2.style.setProperty(hostName, value);
     }
@@ -2059,7 +2059,7 @@ ${GUEST_UI_LOOK_CSS}`;
   // node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
   var nextPopoverAnchorId = 0;
   var isKeyboardEvent = (event) => "key" in event;
-  var mountPopoverAnchor = (element, options) => {
+  var mountPopoverAnchor = (element, options2) => {
     const document2 = element.ownerDocument;
     const window2 = document2.defaultView;
     let timer = null;
@@ -2095,7 +2095,7 @@ ${GUEST_UI_LOOK_CSS}`;
       if (ownsExpanded)
         element.setAttribute("aria-expanded", "false");
       if (id)
-        void options.host.closePopover(id, reason).catch(() => void 0);
+        void options2.host.closePopover(id, reason).catch(() => void 0);
       if (restoreFocus) {
         ignoreNextFocus = true;
         element.focus();
@@ -2122,7 +2122,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
     const reportAnchorActivity = () => {
       if (activeId)
-        void options.host.setPopoverAnchorActive(activeId, pointerActive || focusActive).catch(() => void 0);
+        void options2.host.setPopoverAnchorActive(activeId, pointerActive || focusActive).catch(() => void 0);
     };
     const open = (focus) => {
       clearTimer();
@@ -2134,7 +2134,7 @@ ${GUEST_UI_LOOK_CSS}`;
       const id = `oc-popover-${++nextPopoverAnchorId}`;
       let data;
       try {
-        data = options.getData();
+        data = options2.getData();
       } catch {
         return;
       }
@@ -2143,12 +2143,12 @@ ${GUEST_UI_LOOK_CSS}`;
       if (ownsExpanded)
         element.setAttribute("aria-expanded", "true");
       watchActive();
-      void options.host.openPopover({
+      void options2.host.openPopover({
         id,
         anchor: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        width: options.width,
-        height: options.height,
-        side: options.side,
+        width: options2.width,
+        height: options2.height,
+        side: options2.side,
         focus,
         data
       }).catch(() => {
@@ -2218,7 +2218,7 @@ ${GUEST_UI_LOOK_CSS}`;
         close("escape", true);
       }
     };
-    const unsubscribe = options.host.onPopoverClosed((event) => {
+    const unsubscribe = options2.host.onPopoverClosed((event) => {
       if (event.id !== activeId)
         return;
       activeId = null;
@@ -2238,8 +2238,8 @@ ${GUEST_UI_LOOK_CSS}`;
     element.setAttribute("aria-haspopup", "dialog");
     if (ownsExpanded)
       element.setAttribute("aria-expanded", "false");
-    if (options.label)
-      element.setAttribute("aria-label", options.label);
+    if (options2.label)
+      element.setAttribute("aria-label", options2.label);
     element.addEventListener("pointerenter", onPointerEnter);
     element.addEventListener("pointermove", onPointerEnter);
     element.addEventListener("pointerleave", onPointerLeave);
@@ -2263,7 +2263,7 @@ ${GUEST_UI_LOOK_CSS}`;
         element.removeAttribute("aria-haspopup");
       else
         element.setAttribute("aria-haspopup", previousPopup);
-      if (options.label) {
+      if (options2.label) {
         if (previousLabel === null)
           element.removeAttribute("aria-label");
         else
@@ -2374,9 +2374,9 @@ ${GUEST_UI_LOOK_CSS}`;
       })
     };
   }
-  function decodeListingEntry(value, key = "id") {
+  function decodeListingEntry(value, key2 = "id") {
     const item = record(value);
-    const id = string(item[key]);
+    const id = string(item[key2]);
     if (!isChangeName(id)) throw new Error("Invalid change name.");
     const completedTasks = count(item.completedTasks);
     const totalTasks = count(item.totalTasks);
@@ -2529,7 +2529,7 @@ ${GUEST_UI_LOOK_CSS}`;
       }
       return value;
     }
-    function decode(value, decoder) {
+    function decode2(value, decoder) {
       try {
         return decoder(value);
       } catch {
@@ -2547,7 +2547,7 @@ ${GUEST_UI_LOOK_CSS}`;
           ...expectedRoot ? { expectedRoot } : {},
           ...expectedPlanning ? { expectedPlanning } : {}
         });
-        const listing = decode(value, decodeListing);
+        const listing = decode2(value, decodeListing);
         if (listing.directory !== directory2 || expectedRoot && listing.root !== expectedRoot)
           throw new ServiceRequestError("ROOT_CHANGED", "OpenSpec root changed.");
         if (expectedPlanning && listing.planning !== expectedPlanning)
@@ -2555,7 +2555,7 @@ ${GUEST_UI_LOOK_CSS}`;
         return listing;
       },
       summary: async (scope, change) => {
-        const value = decode(
+        const value = decode2(
           await request("/summary", {
             directory: scope.directory,
             expectedRoot: scope.root,
@@ -2569,7 +2569,7 @@ ${GUEST_UI_LOOK_CSS}`;
         if (value.id !== change) throw invalid();
         return value;
       },
-      validate: async (scope, change) => decode(
+      validate: async (scope, change) => decode2(
         await request("/validate", {
           directory: scope.directory,
           expectedRoot: scope.root,
@@ -2590,7 +2590,7 @@ ${GUEST_UI_LOOK_CSS}`;
         return change;
       },
       summaries: async (scope, entries) => {
-        const value = decode(
+        const value = decode2(
           await request("/summaries", {
             directory: scope.directory,
             expectedRoot: scope.root,
@@ -2626,7 +2626,7 @@ ${GUEST_UI_LOOK_CSS}`;
         });
       },
       tasks: async (scope, change) => {
-        return decode(
+        return decode2(
           await request("/tasks", {
             ...scope,
             expectedRoot: scope.root,
@@ -2806,6 +2806,88 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
 Report what you synced without archiving the change.`;
   }
 
+  // src/panel/workflow.ts
+  var stages = [
+    { id: "planning", label: "Planning", action: "propose" },
+    { id: "ready", label: "Ready", action: "apply" },
+    { id: "progress", label: "In Progress", action: "continue" },
+    { id: "complete", label: "Complete", action: "archive" }
+  ];
+  var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
+
+  // src/panel/status-cache.ts
+  var key = "work-status:cards";
+  var options = { scope: "device" };
+  var sessionLimit = 50;
+  function decode(value) {
+    if (!Array.isArray(value)) return [];
+    const entries = [];
+    for (const entry of value.slice(-sessionLimit)) {
+      if (!entry || typeof entry.sessionId !== "string" || typeof entry.directory !== "string" || !Array.isArray(entry.cards))
+        continue;
+      try {
+        const cards = entry.cards.map((card) => {
+          const listing = decodeListingEntry(card);
+          if (!card || typeof card !== "object" || !("stage" in card))
+            throw new Error("Missing stage.");
+          const stage = stages.find(({ id }) => id === card.stage)?.id;
+          if (!stage || !("currentTaskTitle" in card) || card.currentTaskTitle !== null && typeof card.currentTaskTitle !== "string")
+            throw new Error("Invalid status card.");
+          return { ...listing, stage, currentTaskTitle: card.currentTaskTitle };
+        });
+        entries.push({ sessionId: entry.sessionId, directory: entry.directory, cards });
+      } catch {
+      }
+    }
+    return entries;
+  }
+  function createStatusCache(host2) {
+    const memory = /* @__PURE__ */ new Map();
+    let stored;
+    function remember(sessionId2, snapshot) {
+      memory.delete(sessionId2);
+      memory.set(sessionId2, snapshot);
+      if (memory.size > sessionLimit) memory.delete(memory.keys().next().value);
+    }
+    function load() {
+      return stored ??= host2.storage.get(key, options).then((value) => {
+        const recent = [...memory];
+        memory.clear();
+        for (const { sessionId: sessionId2, ...snapshot } of decode(value)) {
+          remember(sessionId2, snapshot);
+        }
+        for (const [sessionId2, snapshot] of recent) remember(sessionId2, snapshot);
+      }).catch(
+        (caught) => console.warn("Could not read cached OpenSpec progress.", caught)
+      );
+    }
+    function get(sessionId2, directory2) {
+      const snapshot = memory.get(sessionId2);
+      return snapshot?.directory === directory2 ? snapshot.cards : void 0;
+    }
+    return {
+      get,
+      async restore(sessionId2, directory2) {
+        await load();
+        return get(sessionId2, directory2);
+      },
+      set(sessionId2, directory2, cards, persist) {
+        remember(sessionId2, { directory: directory2, cards });
+        if (!persist) return;
+        stored = load().then(async () => {
+          const entries = Array.from(memory, ([sessionId3, snapshot]) => ({
+            sessionId: sessionId3,
+            ...snapshot
+          }));
+          const encoder = new TextEncoder();
+          while (encoder.encode(JSON.stringify(entries)).length > GUEST_STORAGE_VALUE_BYTES)
+            entries.shift();
+          await host2.storage.set(key, entries, options);
+        }).catch((caught) => console.warn("Could not cache OpenSpec progress.", caught));
+      }
+    };
+  }
+
   // src/panel/tracked-change.ts
   var prefix = "session-change:";
   var readBatchSize = 32;
@@ -2838,24 +2920,24 @@ Report what you synced without archiving the change.`;
       if (base === null) throw new Error("The session's directory coverage is not ready.");
       const changes = update(base);
       if (saved && changes === saved) return true;
-      const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));
+      const keys = (await host2.storage.keys()).filter((key2) => key2.startsWith(prefix));
       if (keys.length >= 1900) {
         const choices2 = [];
         for (let i = 0; i < keys.length; i += readBatchSize) {
           if (!current()) return false;
           const batch = keys.slice(i, i + readBatchSize);
           const values = await Promise.all(
-            batch.map(async (key) => ({ key, value: await host2.storage.get(key) }))
+            batch.map(async (key2) => ({ key: key2, value: await host2.storage.get(key2) }))
           );
-          for (const { key, value } of values) {
+          for (const { key: key2, value } of values) {
             if (value && typeof value === "object" && "savedAt" in value && typeof value.savedAt === "number" && Number.isFinite(value.savedAt))
-              choices2.push({ key, savedAt: value.savedAt });
+              choices2.push({ key: key2, savedAt: value.savedAt });
           }
         }
         choices2.sort((left, right) => left.savedAt - right.savedAt);
-        for (const { key } of choices2.slice(0, 100)) {
+        for (const { key: key2 } of choices2.slice(0, 100)) {
           if (!current()) return false;
-          await host2.storage.delete(key);
+          await host2.storage.delete(key2);
         }
       }
       if (!current()) return false;
@@ -2876,20 +2958,12 @@ Report what you synced without archiving the change.`;
     );
   }
 
-  // src/panel/workflow.ts
-  var stages = [
-    { id: "planning", label: "Planning", action: "propose" },
-    { id: "ready", label: "Ready", action: "apply" },
-    { id: "progress", label: "In Progress", action: "continue" },
-    { id: "complete", label: "Complete", action: "archive" }
-  ];
-  var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
-
   // src/status.ts
   var root = document.querySelector("#root");
   if (!root) throw new Error("Status section root is missing");
   var host = connectHost();
   var client = createClient(host);
+  var statusCache = createStatusCache(host);
   var panelRoot = root;
   var directory = null;
   var sessionId = null;
@@ -2902,8 +2976,10 @@ Report what you synced without archiving the change.`;
   var disposed = false;
   var reading = false;
   var queued = false;
+  var contextRead;
   var selection2 = null;
   var hasStatusControls = false;
+  var hasDeviceStorage = false;
   var hasPopovers = false;
   var popoverFrame = false;
   var headerRequest = 0;
@@ -2951,6 +3027,8 @@ Report what you synced without archiving the change.`;
   });
   var pickerKey = "";
   var viewKey = "";
+  var showingLive = false;
+  var readError;
   var mountedCards = /* @__PURE__ */ new Map();
   function setPickerOpen(open, restoreFocus = true) {
     picker.hidden = !open;
@@ -2973,8 +3051,10 @@ Report what you synced without archiving the change.`;
     const nextViewKey = JSON.stringify([epoch, view]);
     if (viewKey === nextViewKey) return;
     viewKey = nextViewKey;
+    showingLive = view.kind === "ready";
+    markRefreshing(false);
     controls.hidden = view.kind === "empty" || view.kind === "loading";
-    const cards = view.kind === "ready" ? view.cards : [];
+    const cards = view.kind === "ready" ? view.cards : view.kind === "stale" ? view.cards.map((display) => ({ id: display.id, display })) : [];
     content.hidden = !cards.length;
     for (const [id, mounted] of mountedCards) {
       if (cards.some((card) => card.id === id)) continue;
@@ -2997,6 +3077,9 @@ Report what you synced without archiving the change.`;
       if (!view.listing.changes.length) note("No active changes.");
     } else if (view.kind === "error") {
       note(view.message, "alert");
+    } else if (view.kind === "stale") {
+      if (view.message) note(view.message, "alert");
+      note("Showing last known progress.", "status");
     } else if (view.kind === "loading") {
       note("Loading OpenSpec change\u2026", "status");
     }
@@ -3076,6 +3159,9 @@ Report what you synced without archiving the change.`;
       await showError(current, caught, "The workflow prompt could not be prepared.");
     }
   }
+  function taskTitle(task) {
+    return task?.description.split("\n", 1)[0] ?? "";
+  }
   function mountTaskTitle() {
     const button2 = document.createElement("button");
     button2.type = "button";
@@ -3090,7 +3176,7 @@ Report what you synced without archiving the change.`;
       update(next) {
         if (task?.id !== next?.id) flyout.reset();
         task = next;
-        const title = task?.description.split("\n", 1)[0] ?? "";
+        const title = taskTitle(task);
         if (button2.textContent !== title) button2.textContent = title;
         if (task) flyout.update();
       },
@@ -3205,7 +3291,11 @@ Report what you synced without archiving the change.`;
     });
     const details = document.createElement("div");
     details.className = "section-content";
-    details.append(meter, disclosure, currentTask.inline, actions, validationInline);
+    details.append(disclosure, currentTask.inline, actions, validationInline);
+    const cachedStage = document.createElement("p");
+    cachedStage.className = "note";
+    const cachedTask = document.createElement("p");
+    cachedTask.className = "note cached-task";
     const errorCard = document.createElement("div");
     errorCard.className = "section-content";
     const error = document.createElement("p");
@@ -3217,7 +3307,13 @@ Report what you synced without archiving the change.`;
       variant: "secondary",
       onClick: refresh
     });
-    element.append(heading, inline, details, errorCard);
+    element.append(heading, inline, meter, cachedStage, cachedTask, details, errorCard);
+    function updateProgress({ completedTasks, totalTasks }) {
+      const percentage = totalTasks ? 100 * completedTasks / totalTasks : 0;
+      meter.value = percentage;
+      meter.setAttribute("aria-valuenow", String(percentage));
+      count2.textContent = `${completedTasks}/${totalTasks}`;
+    }
     return {
       element,
       refreshAnchor() {
@@ -3228,12 +3324,22 @@ Report what you synced without archiving the change.`;
       },
       update(card, listing) {
         scope = listing;
-        details.hidden = "message" in card;
-        errorCard.hidden = !details.hidden;
-        count2.hidden = details.hidden;
+        const display = "display" in card ? card.display : null;
+        details.hidden = !("change" in card);
+        const message = "message" in card ? card.message : void 0;
+        errorCard.hidden = !message;
+        error.textContent = message ?? "";
+        count2.hidden = meter.hidden = details.hidden && !display;
         nameButton.disabled = details.hidden;
-        if ("message" in card) {
-          error.textContent = card.message;
+        element.classList.toggle("stale-card", !!display);
+        cachedStage.hidden = !display;
+        cachedTask.hidden = !display?.currentTaskTitle;
+        if (!("change" in card)) {
+          if (display) {
+            updateProgress(display);
+            cachedStage.textContent = stageLabel(display.stage);
+            cachedTask.textContent = display.currentTaskTitle;
+          }
           change = null;
           nameAnchor.reset();
           currentTask.update(null);
@@ -3246,11 +3352,7 @@ Report what you synced without archiving the change.`;
         primary2.update({
           label: stageChip(change.stage)
         });
-        const { completedTasks, totalTasks } = change;
-        const percentage = totalTasks ? 100 * completedTasks / totalTasks : 0;
-        meter.value = percentage;
-        meter.setAttribute("aria-valuenow", String(percentage));
-        count2.textContent = `${completedTasks}/${totalTasks}`;
+        updateProgress(change);
         const next = card.tasks.find((task) => !task.done) ?? card.tasks.at(-1) ?? null;
         const nextKey = next?.id ?? null;
         if (nextKey !== taskKey) disclosure.open = false;
@@ -3548,8 +3650,26 @@ Report what you synced without archiving the change.`;
   function sameChanges(left, right) {
     return left === right || left !== null && right !== null && left.length === right.length && left.every((id, index) => id === right[index]);
   }
+  function markRefreshing(stale) {
+    content.classList.toggle("refreshing", stale);
+    content.setAttribute("aria-busy", String(stale));
+  }
+  function showCached() {
+    const cards = sessionId && directory ? statusCache.get(sessionId, directory) : void 0;
+    if (cards?.length) render({ kind: "stale", cards, ...readError ? { message: readError } : {} });
+    else if (readError) render({ kind: "error", message: readError });
+    else render({ kind: directory ? "loading" : "empty" });
+  }
+  function queueContextRead() {
+    clearTimeout(contextRead);
+    contextRead = setTimeout(() => {
+      contextRead = void 0;
+      read();
+    }, 32);
+  }
   function read() {
     if (disposed || !directory) return;
+    if (contextRead !== void 0) return;
     if (reading) {
       queued = true;
       return;
@@ -3560,6 +3680,7 @@ Report what you synced without archiving the change.`;
     const capturedEpoch = epoch;
     const current = () => !disposed && epoch === capturedEpoch;
     reading = true;
+    if (showingLive && mountedCards.size) markRefreshing(true);
     void (async () => {
       try {
         const listing = await client.list(capturedDirectory);
@@ -3596,14 +3717,44 @@ Report what you synced without archiving the change.`;
             }
           })
         );
-        if (current()) render({ kind: "ready", listing, cards });
+        if (!current()) return;
+        const previous = new Map(
+          (capturedSession ? statusCache.get(capturedSession, capturedDirectory) : void 0)?.map(
+            (card) => [card.id, card]
+          )
+        );
+        const display = [];
+        const visibleCards = cards.map((card) => {
+          if ("change" in card) {
+            const { id, completedTasks, totalTasks, stage } = card.change;
+            const task = card.tasks.find(({ done }) => !done) ?? card.tasks.at(-1) ?? null;
+            display.push({
+              id,
+              completedTasks,
+              totalTasks,
+              stage,
+              currentTaskTitle: taskTitle(task) || null
+            });
+            return card;
+          }
+          const old = previous.get(card.id);
+          if (old) {
+            display.push(old);
+            return { ...card, display: old };
+          }
+          return card;
+        });
+        if (capturedSession)
+          statusCache.set(capturedSession, capturedDirectory, display, hasDeviceStorage);
+        readError = void 0;
+        render({ kind: "ready", listing, cards: visibleCards });
       } catch (caught) {
-        if (current())
-          render({
-            kind: "error",
-            message: caught instanceof Error ? caught.message : "Could not read the OpenSpec change."
-          });
+        if (current()) {
+          readError = caught instanceof Error ? caught.message : "Could not read the OpenSpec change.";
+          showCached();
+        }
       } finally {
+        if (current()) markRefreshing(false);
         reading = false;
         if (queued) {
           queued = false;
@@ -3628,7 +3779,7 @@ Report what you synced without archiving the change.`;
           )) {
             epoch++;
             selection2 = null;
-            render({ kind: "loading" });
+            showCached();
             read();
           }
         });
@@ -3666,7 +3817,14 @@ Report what you synced without archiving the change.`;
     epoch++;
     selection2 = null;
     queued = false;
-    render({ kind: directory ? "loading" : "empty" });
+    readError = void 0;
+    setPickerOpen(false, false);
+    showCached();
+    const current = captureContext();
+    if (hasDeviceStorage && nextSession && nextDirectory && !statusCache.get(nextSession, nextDirectory))
+      void statusCache.restore(nextSession, nextDirectory).then((cards) => {
+        if (current() && cards?.length && !showingLive) showCached();
+      });
     if (directoryChanged) {
       bodyRefresh.hidden = false;
       projectEpoch++;
@@ -3675,7 +3833,7 @@ Report what you synced without archiving the change.`;
       sessions = null;
       workspace = directory ? subscribeToProject(directory) : void 0;
     }
-    read();
+    queueContextRead();
   }
   var lastHeight = 0;
   var popoverSession = null;
@@ -3688,6 +3846,7 @@ Report what you synced without archiving the change.`;
   });
   var offReady = host.onReady((ready2) => {
     hasStatusControls = ready2.features?.statusControls === true;
+    hasDeviceStorage = ready2.features?.deviceStorage === true;
     applyHostReady(ready2, document.documentElement);
     applyDevice(ready2.device);
     if (ready2.surface === "popover") {
@@ -3764,6 +3923,7 @@ Report what you synced without archiving the change.`;
     "pagehide",
     () => {
       disposed = true;
+      clearTimeout(contextRead);
       resize.disconnect();
       offReady();
       offDirectory();

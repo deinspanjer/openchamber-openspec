@@ -136,7 +136,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
 - [x] 8.3 Same seam: the section's header Refresh works. Reproduce against the real host contract
       first (`setStatusControls` / `onStatusControl` in /Users/dre/src/openchamber v2.7.3), pin it
       with a fake host that sends the real control activation, then fix.
-- [ ] 8.4 Same seam: debounce the mount-time reads, so `ready`, the session push and lifecycle
+- [x] 8.4 Same seam: debounce the mount-time reads, so `ready`, the session push and lifecycle
       events coalesce into one read, and show the last known cards per session immediately instead
       of an empty section. Keep them in memory across session switches, and in device storage
       (`features.deviceStorage`) across frame remounts. Replace them when the read lands, and mark

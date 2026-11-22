@@ -11,6 +11,7 @@ import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
 import { actionPrompt, syncPrompt, stageChip } from "./panel/prompts.js";
+import { createStatusCache, type DisplayCard } from "./panel/status-cache.js";
 import {
   appendTrackedChange,
   readTrackedChanges,
@@ -21,9 +22,13 @@ import { stageLabel } from "./panel/workflow.js";
 
 type View =
   | { kind: "empty" | "loading" }
+  | { kind: "stale"; cards: DisplayCard[]; message?: string }
   | { kind: "error"; message: string }
   | { kind: "ready"; listing: Listing; cards: Card[] };
-type Card = { id: string; change: DerivedChange; tasks: Task[] } | { id: string; message: string };
+type Card =
+  | { id: string; change: DerivedChange; tasks: Task[] }
+  | { id: string; message: string }
+  | { id: string; display: DisplayCard; message?: string };
 type ChangeFlyout = { kind: "change"; name: string; stage: Stage; goal: string | null };
 type TaskFlyout = { kind: "task"; id: string; description: string };
 type ValidationFlyout = {
@@ -37,6 +42,7 @@ const root = document.querySelector<HTMLElement>("#root");
 if (!root) throw new Error("Status section root is missing");
 const host = connectHost();
 const client = createClient(host);
+const statusCache = createStatusCache(host);
 const panelRoot = root;
 
 let directory: string | null = null;
@@ -50,8 +56,10 @@ let workspace: Promise<void> | undefined;
 let disposed = false;
 let reading = false;
 let queued = false;
+let contextRead: ReturnType<typeof setTimeout> | undefined;
 let selection: { active: Set<string>; saved: string[] | null; changes: string[] } | null = null;
 let hasStatusControls = false;
+let hasDeviceStorage = false;
 let hasPopovers = false;
 let popoverFrame = false;
 let headerRequest = 0;
@@ -100,6 +108,8 @@ const cancelPicker = mountButton(cancelRoot, {
 });
 let pickerKey = "";
 let viewKey = "";
+let showingLive = false;
+let readError: string | undefined;
 const mountedCards = new Map<string, ReturnType<typeof mountTrackedCard>>();
 
 function setPickerOpen(open: boolean, restoreFocus = true) {
@@ -127,8 +137,15 @@ function render(view: View) {
   const nextViewKey = JSON.stringify([epoch, view]);
   if (viewKey === nextViewKey) return;
   viewKey = nextViewKey;
+  showingLive = view.kind === "ready";
+  markRefreshing(false);
   controls.hidden = view.kind === "empty" || view.kind === "loading";
-  const cards = view.kind === "ready" ? view.cards : [];
+  const cards: Card[] =
+    view.kind === "ready"
+      ? view.cards
+      : view.kind === "stale"
+        ? view.cards.map((display) => ({ id: display.id, display }))
+        : [];
   content.hidden = !cards.length;
   for (const [id, mounted] of mountedCards) {
     if (cards.some((card) => card.id === id)) continue;
@@ -151,6 +168,9 @@ function render(view: View) {
     if (!view.listing.changes.length) note("No active changes.");
   } else if (view.kind === "error") {
     note(view.message, "alert");
+  } else if (view.kind === "stale") {
+    if (view.message) note(view.message, "alert");
+    note("Showing last known progress.", "status");
   } else if (view.kind === "loading") {
     note("Loading OpenSpec change…", "status");
   }
@@ -243,6 +263,10 @@ async function preparePrompt(change: DerivedChange, text: string, current: () =>
   }
 }
 
+function taskTitle(task: Task | null) {
+  return task?.description.split("\n", 1)[0] ?? "";
+}
+
 function mountTaskTitle() {
   const button = document.createElement("button");
   button.type = "button";
@@ -257,7 +281,7 @@ function mountTaskTitle() {
     update(next: Task | null) {
       if (task?.id !== next?.id) flyout.reset();
       task = next;
-      const title = task?.description.split("\n", 1)[0] ?? "";
+      const title = taskTitle(task);
       if (button.textContent !== title) button.textContent = title;
       if (task) flyout.update();
     },
@@ -386,7 +410,11 @@ function mountTrackedCard(id: string) {
   });
   const details = document.createElement("div");
   details.className = "section-content";
-  details.append(meter, disclosure, currentTask.inline, actions, validationInline);
+  details.append(disclosure, currentTask.inline, actions, validationInline);
+  const cachedStage = document.createElement("p");
+  cachedStage.className = "note";
+  const cachedTask = document.createElement("p");
+  cachedTask.className = "note cached-task";
   const errorCard = document.createElement("div");
   errorCard.className = "section-content";
   const error = document.createElement("p");
@@ -398,7 +426,13 @@ function mountTrackedCard(id: string) {
     variant: "secondary",
     onClick: refresh,
   });
-  element.append(heading, inline, details, errorCard);
+  element.append(heading, inline, meter, cachedStage, cachedTask, details, errorCard);
+  function updateProgress({ completedTasks, totalTasks }: ListingEntry) {
+    const percentage = totalTasks ? (100 * completedTasks) / totalTasks : 0;
+    meter.value = percentage;
+    meter.setAttribute("aria-valuenow", String(percentage));
+    count.textContent = `${completedTasks}/${totalTasks}`;
+  }
   return {
     element,
     refreshAnchor() {
@@ -409,12 +443,22 @@ function mountTrackedCard(id: string) {
     },
     update(card: Card, listing: Scope | null) {
       scope = listing;
-      details.hidden = "message" in card;
-      errorCard.hidden = !details.hidden;
-      count.hidden = details.hidden;
+      const display = "display" in card ? card.display : null;
+      details.hidden = !("change" in card);
+      const message = "message" in card ? card.message : undefined;
+      errorCard.hidden = !message;
+      error.textContent = message ?? "";
+      count.hidden = meter.hidden = details.hidden && !display;
       nameButton.disabled = details.hidden;
-      if ("message" in card) {
-        error.textContent = card.message;
+      element.classList.toggle("stale-card", !!display);
+      cachedStage.hidden = !display;
+      cachedTask.hidden = !display?.currentTaskTitle;
+      if (!("change" in card)) {
+        if (display) {
+          updateProgress(display);
+          cachedStage.textContent = stageLabel(display.stage);
+          cachedTask.textContent = display.currentTaskTitle;
+        }
         change = null;
         nameAnchor.reset();
         currentTask.update(null);
@@ -427,11 +471,7 @@ function mountTrackedCard(id: string) {
       primary.update({
         label: stageChip(change.stage),
       });
-      const { completedTasks, totalTasks } = change;
-      const percentage = totalTasks ? (100 * completedTasks) / totalTasks : 0;
-      meter.value = percentage;
-      meter.setAttribute("aria-valuenow", String(percentage));
-      count.textContent = `${completedTasks}/${totalTasks}`;
+      updateProgress(change);
 
       const next = card.tasks.find((task) => !task.done) ?? card.tasks.at(-1) ?? null;
       const nextKey = next?.id ?? null;
@@ -787,8 +827,29 @@ function sameChanges(left: string[] | null, right: string[] | null) {
   );
 }
 
+function markRefreshing(stale: boolean) {
+  content.classList.toggle("refreshing", stale);
+  content.setAttribute("aria-busy", String(stale));
+}
+
+function showCached() {
+  const cards = sessionId && directory ? statusCache.get(sessionId, directory) : undefined;
+  if (cards?.length) render({ kind: "stale", cards, ...(readError ? { message: readError } : {}) });
+  else if (readError) render({ kind: "error", message: readError });
+  else render({ kind: directory ? "loading" : "empty" });
+}
+
+function queueContextRead() {
+  clearTimeout(contextRead);
+  contextRead = setTimeout(() => {
+    contextRead = undefined;
+    read();
+  }, 32);
+}
+
 function read() {
   if (disposed || !directory) return;
+  if (contextRead !== undefined) return;
   if (reading) {
     queued = true;
     return;
@@ -799,6 +860,7 @@ function read() {
   const capturedEpoch = epoch;
   const current = () => !disposed && epoch === capturedEpoch;
   reading = true;
+  if (showingLive && mountedCards.size) markRefreshing(true);
   void (async () => {
     try {
       const listing = await client.list(capturedDirectory);
@@ -836,14 +898,45 @@ function read() {
           }
         }),
       );
-      if (current()) render({ kind: "ready", listing, cards });
+      if (!current()) return;
+      const previous = new Map(
+        (capturedSession ? statusCache.get(capturedSession, capturedDirectory) : undefined)?.map(
+          (card) => [card.id, card] as const,
+        ),
+      );
+      const display: DisplayCard[] = [];
+      const visibleCards = cards.map((card) => {
+        if ("change" in card) {
+          const { id, completedTasks, totalTasks, stage } = card.change;
+          const task = card.tasks.find(({ done }) => !done) ?? card.tasks.at(-1) ?? null;
+          display.push({
+            id,
+            completedTasks,
+            totalTasks,
+            stage,
+            currentTaskTitle: taskTitle(task) || null,
+          });
+          return card;
+        }
+        const old = previous.get(card.id);
+        if (old) {
+          display.push(old);
+          return { ...card, display: old };
+        }
+        return card;
+      });
+      if (capturedSession)
+        statusCache.set(capturedSession, capturedDirectory, display, hasDeviceStorage);
+      readError = undefined;
+      render({ kind: "ready", listing, cards: visibleCards });
     } catch (caught) {
-      if (current())
-        render({
-          kind: "error",
-          message: caught instanceof Error ? caught.message : "Could not read the OpenSpec change.",
-        });
+      if (current()) {
+        readError =
+          caught instanceof Error ? caught.message : "Could not read the OpenSpec change.";
+        showCached();
+      }
     } finally {
+      if (current()) markRefreshing(false);
       reading = false;
       if (queued) {
         queued = false;
@@ -872,7 +965,7 @@ function subscribeToProject(capturedDirectory: string) {
         ) {
           epoch++;
           selection = null;
-          render({ kind: "loading" });
+          showCached();
           read();
         }
       });
@@ -918,7 +1011,19 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
   epoch++;
   selection = null;
   queued = false;
-  render({ kind: directory ? "loading" : "empty" });
+  readError = undefined;
+  setPickerOpen(false, false);
+  showCached();
+  const current = captureContext();
+  if (
+    hasDeviceStorage &&
+    nextSession &&
+    nextDirectory &&
+    !statusCache.get(nextSession, nextDirectory)
+  )
+    void statusCache.restore(nextSession, nextDirectory).then((cards) => {
+      if (current() && cards?.length && !showingLive) showCached();
+    });
   if (directoryChanged) {
     bodyRefresh.hidden = false;
     projectEpoch++;
@@ -927,7 +1032,7 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
     sessions = null;
     workspace = directory ? subscribeToProject(directory) : undefined;
   }
-  read();
+  queueContextRead();
 }
 
 let lastHeight = 0;
@@ -943,6 +1048,7 @@ const resize = new ResizeObserver(() => {
 });
 const offReady = host.onReady((ready) => {
   hasStatusControls = ready.features?.statusControls === true;
+  hasDeviceStorage = ready.features?.deviceStorage === true;
   applyHostReady(ready, document.documentElement);
   applyDevice(ready.device);
   if (ready.surface === "popover") {
@@ -1025,6 +1131,7 @@ window.addEventListener(
   "pagehide",
   () => {
     disposed = true;
+    clearTimeout(contextRead);
     resize.disconnect();
     offReady();
     offDirectory();
