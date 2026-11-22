@@ -45,7 +45,7 @@
     }
   },
   "dependencies": {
-    "@openchamber/sdk": "1.24.2",
+    "@openchamber/sdk": "2.7.3",
     "dompurify": "^3.4.16",
     "marked": "^18.0.14",
     "yaml": "^2.8.2"

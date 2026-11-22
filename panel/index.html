@@ -91,7 +91,8 @@
         display: inline-flex;
         align-items: center;
       }
-      .loading-action .oc-sdk-btn > svg {
+      .loading-action .oc-sdk-btn > svg,
+      .loading-action .oc-sdk-btn > .oc-sdk-spinner-ring {
         width: 14px;
         height: 14px;
         flex: none;
@@ -117,8 +118,16 @@
       .board-search .oc-sdk-search {
         width: 100%;
       }
+      .board-search .oc-sdk-search .oc-sdk-input {
+        height: 36px;
+      }
       body .oc-sdk-btn[data-size="sm"] {
         height: 28px;
+      }
+      body .oc-sdk-badge {
+        padding: 1px 6px;
+        font-size: 11px;
+        line-height: 16px;
       }
       .board {
         display: grid;
@@ -352,6 +361,9 @@
       }
       .artifact-tabs .oc-sdk-tabs {
         padding: 0;
+      }
+      .artifact-tabs .oc-sdk-tab {
+        height: 28px;
       }
       .artifact-tabs .oc-sdk-tab > span {
         line-height: 18px;

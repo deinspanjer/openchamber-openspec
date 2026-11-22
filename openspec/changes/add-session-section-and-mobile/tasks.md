@@ -2,7 +2,7 @@
 
 ## 1. SDK upgrade
 
-- [ ] 1.1 Pin `@openchamber/sdk` to `2.7.3` in `package.json`, run `npm ci`, and fix type or
+- [x] 1.1 Pin `@openchamber/sdk` to `2.7.3` in `package.json`, run `npm ci`, and fix type or
       behaviour breaks in `src/` without feature changes. Read `node_modules/@openchamber/sdk/`
       docs for status sections, storage, `device` and `onSessionLifecycle` before task 3. Verify
       with `npm run check`.
