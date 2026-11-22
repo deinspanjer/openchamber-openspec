@@ -894,12 +894,19 @@ function publishRefreshControl() {
     if (disposed || headerRequest !== request) return;
     bodyRefresh.hidden = visible;
   };
-  showHeader(false);
-  if (!directory || !hasStatusControls) return;
+  if (!directory || !hasStatusControls) {
+    showHeader(false);
+    return;
+  }
+  // OpenChamber can replace its header binding independently of the status document.
+  // It deduplicates identical definitions while the binding is still current.
   void host
     .setStatusControls([{ kind: "button", id: "refresh", label: "Refresh" }])
     .then(() => showHeader(true))
-    .catch((caught: unknown) => console.warn("Could not publish OpenSpec Refresh.", caught));
+    .catch((caught: unknown) => {
+      showHeader(false);
+      console.warn("Could not publish OpenSpec Refresh.", caught);
+    });
 }
 
 function updateContext(nextDirectory: string | null, nextSession: string | null) {
@@ -913,7 +920,7 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
   queued = false;
   render({ kind: directory ? "loading" : "empty" });
   if (directoryChanged) {
-    publishRefreshControl();
+    bodyRefresh.hidden = false;
     projectEpoch++;
     offSessions?.();
     offSessions = undefined;
@@ -935,10 +942,7 @@ const resize = new ResizeObserver(() => {
     .catch((error: unknown) => console.warn("Could not resize the OpenSpec section.", error));
 });
 const offReady = host.onReady((ready) => {
-  const nextStatusControls = ready.features?.statusControls === true;
-  const statusControlsChanged = nextStatusControls !== hasStatusControls;
-  const directoryChanged = ready.directory !== directory;
-  hasStatusControls = nextStatusControls;
+  hasStatusControls = ready.features?.statusControls === true;
   applyHostReady(ready, document.documentElement);
   applyDevice(ready.device);
   if (ready.surface === "popover") {
@@ -980,11 +984,14 @@ const offReady = host.onReady((ready) => {
     for (const card of mountedCards.values()) card.refreshAnchor();
   }
   updateContext(ready.directory, ready.session?.id ?? null);
-  if (statusControlsChanged && !directoryChanged) publishRefreshControl();
+  publishRefreshControl();
   resize.observe(panelRoot);
 });
 const offDirectory = host.onDirectory((next) => {
-  if (!popoverFrame) updateContext(next, sessionId);
+  if (!popoverFrame && next !== directory) {
+    updateContext(next, sessionId);
+    publishRefreshControl();
+  }
 });
 const offSession = host.onSession((next) => {
   if (!popoverFrame) updateContext(directory, next?.id ?? null);

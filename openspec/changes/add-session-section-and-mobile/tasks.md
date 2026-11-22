@@ -133,7 +133,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       chip on a fine pointer, with 44px only as the touch target on a coarse pointer. In the change
       flyout, `Untrack` is a smaller link aligned right. Chips get slightly less vertical padding
       while keeping 44px coarse-pointer targets.
-- [ ] 8.3 Same seam: the section's header Refresh works. Reproduce against the real host contract
+- [x] 8.3 Same seam: the section's header Refresh works. Reproduce against the real host contract
       first (`setStatusControls` / `onStatusControl` in /Users/dre/src/openchamber v2.7.3), pin it
       with a fake host that sends the real control activation, then fix.
 - [ ] 8.4 Same seam: debounce the mount-time reads, so `ready`, the session push and lifecycle

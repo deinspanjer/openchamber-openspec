@@ -231,9 +231,11 @@ function hostHtml(statusCase, pointer, popovers) {
       for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
         type: "session-lifecycle", payload: { sessionId, phase } }, "*");
     };
-    window.__statusControl = (id) => {
-      for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
-        type: "status-control-event", payload: { id } }, "*");
+    let headerBinding = null;
+    window.__rebindStatusHeader = () => {
+      headerBinding = null;
+      document.querySelector("[data-work-status-controls]").replaceChildren();
+      for (const guest of guests) post(guest, "ready", readyFor(guest));
     };
     window.__holdCompose = () => { holdCompose = true; };
     window.__releaseCompose = () => { holdCompose = false; pendingCompose.splice(0).forEach((finish) => finish()); };
@@ -246,8 +248,14 @@ function hostHtml(statusCase, pointer, popovers) {
     window.__holdSummaries = () => { holdSummaries = true; };
     window.__holdFiles = () => { holdFiles = true; };
     window.__releaseFile = () => { const finish = pending.shift(); finish?.(); };
-    window.__directory = (next) => { ready.directory = next; for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
-      type: "directory", payload: { directory: next } }, "*"); };
+    window.__directory = (next) => {
+      if (next !== ready.directory) {
+        headerBinding = null;
+        document.querySelector("[data-work-status-controls]").replaceChildren();
+      }
+      ready.directory = next;
+      for (const guest of guests) post(guest, "directory", { directory: next });
+    };
     window.__root = (next) => { currentRoot = next; };
     window.__planning = next => { currentPlanning = next; };
     const ready = { directory: statusDirectory, theme, locale: "en-AU",
@@ -324,7 +332,7 @@ function hostHtml(statusCase, pointer, popovers) {
       if (!message || message.channel !== "openchamber.sdk" || message.v !== 1) return;
        const reply = (payload) => { if (message.type === "service-request") __completed.push(message.payload.path);
          event.source.postMessage({ channel: "openchamber.sdk", v: 1,
-           type: "result", id: message.id, ok: true, payload }, "*"); };
+           type: "result", id: message.id, ok: true, ...(payload === undefined ? {} : { payload }) }, "*"); };
       if (message.type === "hello") {
         guests.add(event.source);
          const show = () => {
@@ -542,7 +550,38 @@ function hostHtml(statusCase, pointer, popovers) {
          reply();
          return;
        }
-       if (["workspace-unsubscribe", "resize", "status-controls", "open-surface"].includes(message.type)) {
+       if (message.type === "status-controls") {
+         window.__requests.push({ path: message.type, body: message.payload });
+         const owner = event.source;
+         const context = readyFor(owner);
+         if (context.surface !== "status" || !context.features?.statusControls) {
+           owner.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id,
+             ok: false, code: "UNSUPPORTED", error: "This frame has no status header." }, "*");
+           return;
+         }
+         const signature = JSON.stringify(message.payload.controls);
+         if (headerBinding?.signature !== signature) {
+           const binding = { owner, directory: context.directory, signature };
+           headerBinding = binding;
+           document.querySelector("[data-work-status-controls]").replaceChildren(
+             ...message.payload.controls.map((control) => {
+               const button = document.createElement("button");
+               button.textContent = control.label;
+               button.disabled = !!control.disabled;
+               button.onclick = () => {
+                 if (headerBinding === binding && binding.directory === ready.directory &&
+                     guests.has(owner) && !control.disabled && control.kind === "button") {
+                   post(owner, "status-control-event", { id: control.id });
+                 }
+               };
+               return button;
+             })
+           );
+         }
+         reply();
+         return;
+       }
+       if (["workspace-unsubscribe", "resize", "open-surface"].includes(message.type)) {
          window.__requests.push({path:message.type,body:message.payload});
          if (message.type === "open-surface" && location.search.includes("open-board") && !board)
            __mountBoard();
@@ -619,7 +658,7 @@ function hostHtml(statusCase, pointer, popovers) {
               { artifactId: "tasks", selector: "tasks.md", label: "tasks.md" }]),
           ] });
     }
-  </script><style>body{margin:0}iframe{display:block;width:100%;height:${statusCase ? "160px" : "100vh"};border:0}</style><iframe src="/panel/${statusCase ? "status" : "index"}.html" title="OpenSpec test panel"></iframe>`;
+  </script><style>body{margin:0}iframe{display:block;width:100%;height:${statusCase ? "160px" : "100vh"};border:0}</style><div data-work-status-controls></div><iframe src="/panel/${statusCase ? "status" : "index"}.html" title="OpenSpec test panel"></iframe>`;
 }
 
 async function withPanel(run) {
@@ -1814,10 +1853,8 @@ for (const [scenario, header] of [
           ),
           [{ kind: "button", id: "refresh", label: "Refresh" }],
         );
-        await page.evaluate(() => {
-          __edit("Completed");
-          __statusControl("refresh");
-        });
+        await page.evaluate(() => __edit("Completed"));
+        await page.getByRole("button", { name: "Refresh", exact: true }).click();
       } else {
         await page.evaluate(() => __edit("Completed"));
         await refresh.click();
@@ -1832,6 +1869,27 @@ for (const [scenario, header] of [
     });
   });
 }
+
+test("the Work Status header republishes after the host retires its same-directory binding", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=header`);
+    const frame = page.frameLocator("iframe");
+    const refresh = page.getByRole("button", { name: "Refresh", exact: true });
+    await frame.getByText("1/2", { exact: true }).waitFor();
+    await refresh.waitFor();
+    await page.evaluate(() => {
+      __rebindStatusHeader();
+      __edit("Completed");
+    });
+    await refresh.click({ timeout: 3000 });
+    await frame.getByText("2/2", { exact: true }).waitFor({ timeout: 3000 });
+    assert.equal(
+      await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
+      2,
+    );
+  });
+});
 
 test("a long Work Status change name truncates before the count wraps", async () => {
   await withPanel(async (browser, url) => {

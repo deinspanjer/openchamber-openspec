@@ -3648,9 +3648,14 @@ Report what you synced without archiving the change.`;
       if (disposed || headerRequest !== request) return;
       bodyRefresh.hidden = visible;
     };
-    showHeader(false);
-    if (!directory || !hasStatusControls) return;
-    void host.setStatusControls([{ kind: "button", id: "refresh", label: "Refresh" }]).then(() => showHeader(true)).catch((caught) => console.warn("Could not publish OpenSpec Refresh.", caught));
+    if (!directory || !hasStatusControls) {
+      showHeader(false);
+      return;
+    }
+    void host.setStatusControls([{ kind: "button", id: "refresh", label: "Refresh" }]).then(() => showHeader(true)).catch((caught) => {
+      showHeader(false);
+      console.warn("Could not publish OpenSpec Refresh.", caught);
+    });
   }
   function updateContext(nextDirectory, nextSession) {
     const directoryChanged = nextDirectory !== directory;
@@ -3663,7 +3668,7 @@ Report what you synced without archiving the change.`;
     queued = false;
     render({ kind: directory ? "loading" : "empty" });
     if (directoryChanged) {
-      publishRefreshControl();
+      bodyRefresh.hidden = false;
       projectEpoch++;
       offSessions?.();
       offSessions = void 0;
@@ -3682,10 +3687,7 @@ Report what you synced without archiving the change.`;
     void host.setHeight(height).catch((error) => console.warn("Could not resize the OpenSpec section.", error));
   });
   var offReady = host.onReady((ready2) => {
-    const nextStatusControls = ready2.features?.statusControls === true;
-    const statusControlsChanged = nextStatusControls !== hasStatusControls;
-    const directoryChanged = ready2.directory !== directory;
-    hasStatusControls = nextStatusControls;
+    hasStatusControls = ready2.features?.statusControls === true;
     applyHostReady(ready2, document.documentElement);
     applyDevice(ready2.device);
     if (ready2.surface === "popover") {
@@ -3723,11 +3725,14 @@ Report what you synced without archiving the change.`;
       for (const card of mountedCards.values()) card.refreshAnchor();
     }
     updateContext(ready2.directory, ready2.session?.id ?? null);
-    if (statusControlsChanged && !directoryChanged) publishRefreshControl();
+    publishRefreshControl();
     resize.observe(panelRoot);
   });
   var offDirectory = host.onDirectory((next) => {
-    if (!popoverFrame) updateContext(next, sessionId);
+    if (!popoverFrame && next !== directory) {
+      updateContext(next, sessionId);
+      publishRefreshControl();
+    }
   });
   var offSession = host.onSession((next) => {
     if (!popoverFrame) updateContext(directory, next?.id ?? null);
