@@ -53,9 +53,10 @@ height: 160, requiresProject: true }`, built from `src/status.ts` to `panel/stat
 small and avoids branching the board controller on `ready.surface`. Reusing `panel.entry`
 (`statusSection: true`) was rejected: every section frame would load the board's code and DOM.
 
-The section reports height with `setHeight` from a `ResizeObserver`. Refresh is a header control
-through `setStatusControls` when `ready.features.statusControls` is present, otherwise a body
-button.
+The section reports height with `setHeight` from a `ResizeObserver`. Refresh is an icon button in
+the section's footer (group 9). Through 1.4.x it was a header control published with
+`setStatusControls`, with a body button as fallback. Group 9 removes both, and the
+`onStatusControl` handler, because the user wants every section action in one place.
 
 ### Compact cards (redesign after first live use, 2026-11-21)
 
@@ -70,11 +71,11 @@ layout below. Each tracked change is a card:
   task's title clamped to one line. The title is its own button opening the task flyout. Expanded,
   it lists the five-task window from `taskWindow` (below). Each row is a read-only checkbox and a
   title button opening that task's flyout.
-- Chips: stage chip (`propose` | `apply` | `archive`, from `deriveChange`'s stage; `ready` and
-  `progress` both map to `apply`), `sync`, `validate`, `board`, as small `mountButton`s with the
-  stage chip in the primary style.
-- `＋ Track a change` after the last card opens the inline list (kept from 1.3.1, now excluding
-  changes already tracked).
+- Chips: stage chip, secondary chip, `sync`, `validate`, as small `mountButton`s with the stage
+  chip in the primary style. Group 9 replaced the 1.4.x set (`propose` | `apply` | `archive`,
+  `sync`, `validate`, `board`); see "Workflow-aware chips and footer".
+- A footer line after the last card (group 9): `＋ Track a change`, which opens the inline list
+  (kept from 1.3.1, excluding changes already tracked), then `new`, `board` and Refresh.
 
 `taskWindow(tasks, size = 5)` is a pure function in `src/model.ts`. It centres on the first
 incomplete task (or the last task when all are done) and clamps to the list's ends. The board's
@@ -194,14 +195,133 @@ on a phone once the panel opts in. The 2.7.3 host checks the surface ID in
 (`packages/ui/src/lib/surfaces/modes.ts:21-30`, tag `v2.7.3`). **Upstream cause:** `openSurface`
 takes no target item, so the board would open at its root rather than on the change.
 
-**Focus handoff:** `board` first posts `/focus` `{ directory, change }` to the service, then calls
-`openSurface`. The service keeps one pending focus in memory for 30 s and calls
-`createServiceHost({ env: process.env }).emit("focus")` without a target. `emit` needs no capability
+**Focus handoff:** `Open in board` (a card's `board` chip through 1.4.x) first posts `/focus`
+`{ directory, change }` to the service, then calls `openSurface`. The service keeps one pending
+focus in memory for 30 s and calls `createServiceHost({ env: process.env }).emit("focus")` without a target. `emit` needs no capability
 (`packages/sdk/GUEST_SERVICES.md:204`). A mounted board claims on `host.onServiceEvent`; a board
 mounting later claims once after its first listing. Both use `GET /focus?directory=…`. The first
 request from the matching directory returns and clears the focus; other directories neither receive
 nor clear it. If the claimed change is unlisted, the controller runs one explicit Refresh. It
 calls `openDetail` if the change is listed; otherwise it shows a toast and leaves the list open.
+
+### Workflow detection (group 9)
+
+OpenSpec 2.x installs a profile's workflows as skills. Its `getProfileWorkflows`
+(`src/core/profiles.ts`) resolves them: profile `custom` gives the config's `workflows`, with `sync`
+inserted before the first `archive` or `bulk-archive` when missing; any other profile gives the
+core set `propose`, `explore`, `apply`, `update`, `sync`, `archive`. Under profile `core` the
+`workflows` key is ignored.
+
+**Route.** Add `/workflows`: `{ directory }` (absolute) → `{ workflows: string[] }`. It runs
+`openspec config list` once; the runner appends `--json`. It skips root and planning checks because
+the config is global and the output carries no root. It applies the rule above, keeps only the 12
+names in `ALL_WORKFLOWS` in OpenSpec's order, and drops unknown names so newer CLIs keep working. A
+`profile` that is not a string, or `workflows` that is not an array of strings, is
+`BAD_CLI_OUTPUT`. A failed command returns its CLI error.
+
+`config list` rather than `config get workflows`: the runner always adds `--json`, which `config get`
+rejects on 2.1.0. `config get workflows` also exits 1 when the key is unset, and it would report a
+list that profile `core` ignores. `config list --json` returns `profile` and `workflows` in one call;
+`workflows` is absent when never set. Checked on 2.1.0 with an isolated `XDG_CONFIG_HOME`.
+
+**Separate route, not the listing.** `/changes` runs on every section read, including after each
+finished turn, and on every board load. Adding the config read to it would cost a CLI call per
+turn. A separate route lets callers read it only at context loads, as one call run in parallel with
+the listing.
+
+**Shared module.** `src/panel/workflows.ts` holds everything the board and section share:
+`CORE_WORKFLOWS`, `loadWorkflows(client, directory)` → `ReadonlySet<Workflow>`, and the selection
+helpers `planningWorkflow(set)` (`ff`, then `continue`, then `propose`) and `cardChips(change,
+set)`. `decodeWorkflows` lives in `src/contracts.ts` with the other decoders. The section uses it
+now; `align-board-with-openspec-2` adds the board's call.
+
+**Fallback.** `loadWorkflows` returns the core set and logs a console warning on any failure:
+transport, CLI or decoding. The service still fails fast; the panel chooses the fallback because
+the user wants older CLIs to keep the core chips. Behaviour on OpenSpec 1.x is unverified here; the
+fallback covers a missing `config list` or a missing `profile`.
+
+**Gating.** Only optional workflows gate actions: `new`, `continue`, `ff`, `verify` and
+`bulk-archive`. Core actions always show, as in 1.4.x, even under a custom profile that omits them.
+
+**When the section reads it.** On the first read after mount, on a directory change and on footer
+Refresh, awaited together with the listing so chips never render from an older set. The result is
+kept in memory per directory and reused for session switches and finished turns. Cached stale cards
+show no chips, so the device-storage card cache stores no workflows.
+
+**Upstream cause:** the CLI reports no installed skills. The configured set is what `openspec
+update` would install, not proof of what is installed: delivery `commands` installs no skills, and a
+user may not have run `openspec update` since changing the profile. The panel does not inspect skill
+directories.
+
+### Workflow-aware chips and footer (group 9)
+
+Chips per card, from `cardChips`:
+
+| Stage | Stage chip (primary style) | Secondary chip |
+| --- | --- | --- |
+| `planning` | `planningWorkflow(set)` | `explore` |
+| `ready`, `progress` | `apply` | none |
+| `complete` | `archive` | `verify` when the set has it |
+
+Then `sync` unless the summary's `specs` artefact has status `skipped`, then `validate`. The `board`
+chip is removed. Chips keep their DOM identity across reads; a changed label updates in place.
+
+The footer is one flex row below the cards, always rendered while the section shows. Left: the
+`＋ Track a change` link control. Right, pushed with `margin-inline-start: auto`: `new` (only when
+the set has `new`) and `board`, styled as link controls like Track, and an icon-only button drawn
+with `addButtonIcon(root, "refresh")` and `aria-label="Refresh"`, sized to the text line and
+loading while a read runs. The footer
+`board` calls `host.openSurface("plugin:openspec-board")` without posting `/focus`. A listing
+failure shows its error above the footer. Remove `setStatusControls`, `onStatusControl`, the
+`features.statusControls` check and the body Refresh button.
+
+The change flyout's data gains `directory` and `offerContinue` (true in Planning when the set has
+both `ff` and `continue`). Its action row is `continue` (when offered), `update`, `Open in board`;
+`Untrack` follows on its own line, small and right-aligned. In popover mode the popover frame runs
+these itself, as `Untrack` already does: the child inherits host APIs
+(`packages/sdk/API.md:361`). It composes or posts `/focus` and opens the board, then closes with
+`closePopover(ready.popover.id)`. Composition from the flyout appends tracking through the same
+helper as the chips.
+
+### Shared prompts (group 9 additions)
+
+In `src/panel/prompts.ts`, with `target` = `OpenSpec change "<name>"` and `goal` as in
+`actionPrompt`:
+
+- `ff`: "Use your skill tool to load and invoke the openspec-ff-change skill for <target> (existing
+  change).<goal>" then "Create every remaining planning artefact for <target>, preserving existing
+  decisions and any recorded goal. Do not create another change or implement code."
+- `continue`: the same opening with `openspec-continue-change`, then "Write the next planning
+  artefact for <target>, preserving existing decisions and any recorded goal. Do not implement
+  code."
+- `update`: "Use your skill tool to load and invoke the openspec-update-change skill for
+  <target>.<goal>" then "Revise <target>'s existing planning artefacts as I describe and keep them
+  consistent with each other. If I have not described a revision, ask me what to change. Do not
+  edit code."
+- `new`: "Use your skill tool to load and invoke the openspec-new-change skill." then "Ask me what
+  the change is for before creating it."
+
+`explore` and `verify` reuse `actionPrompt`'s existing text. `stageChip` is replaced by
+`cardChips`.
+
+### Compact section sizing (group 9)
+
+After 1.4.2 on a phone, the user found the section's 44px coarse-pointer chips and Track control too
+tall. The section now follows WCAG 2.2 AA success criterion 2.5.8 (Target Size, Minimum) instead of
+the 44px rule: under `[data-pointer="coarse"]` in `panel/status.html`, chips are 28px tall with an
+8px `gap` between them, so every target and its spacing cover at least 24px. `＋ Track a change`,
+the footer's `new`, `board` and Refresh, the `Tasks:` summary, task titles and the name button take
+`padding-block: 0` and the text's line height on both pointers. The board's 44px coarse-pointer
+rule in `panel/index.html` is unchanged, as is the change-presentation requirement for it.
+
+### Icon crop (group 9)
+
+`assets/openspec-logo.svg` keeps the 512-unit canvas of OpenSpec's icon, so the glyph fills about
+half the box at rail and header sizes. The glyph spans x 144–368 and y 124–386. Set
+`viewBox="125 124 262 262"`: square, the glyph's full height, centred horizontally, paths
+unchanged. 262 units do not divide evenly into 16 or 24 pixels, so `crispEdges` may render cell
+edges one pixel uneven; check the render at 16 and 24px against another rail icon and, if the
+unevenness shows, retrace the glyph on a grid that divides the target sizes.
 
 ### Phone and touch
 
@@ -231,6 +351,13 @@ pointer is coarse.
 - Service seam (`test/service.test.mjs`): `/summary` scope checks and output against the real CLI
   on a disposable root.
 
+- Group 9: service seam `/workflows` against the real CLI with `XDG_CONFIG_HOME` pointed at a
+  disposable directory, as the existing isolated-environment tests do (`test/service.test.mjs`
+  around line 1979): default config gives the core set; `custom` with `ff`, `verify`, `archive`
+  gives those plus `sync` before `archive`; a fake runner covers CLI failure and malformed output.
+  Fake host seam: the fake service answers `/workflows` with a per-test set. Existing assertions on
+  exact request sequences gain the `/workflows` request.
+
 No new test files or helpers.
 
 ## Risks / Trade-offs
@@ -246,6 +373,14 @@ No new test files or helpers.
   code), and the inline fallback covers hosts without popovers.
 - Storage is per server; a saved choice does not follow a session to another server → acceptable,
   sessions are per server too.
+- Configured workflows may not be installed (delivery `commands`, or no `openspec update` since a
+  profile change) → a chip prepares a prompt for a missing skill, which the agent reports; the
+  README states that chips follow `openspec config profile`.
+- On a machine with no global config, `openspec config list` writes a default config file (seen on
+  2.1.0 with an empty `XDG_CONFIG_HOME`) → harmless, and any other `openspec` command does the
+  same.
+- The service reads the global config of the OpenChamber server's user, which can differ from a
+  terminal with another `XDG_CONFIG_HOME` → accepted; the service already runs the CLI as that user.
 - Older hosts ignore the section and phone opt-in, and `engines.openchamber` cannot express 2.7.1 →
   README states the minimum version for these features.
 

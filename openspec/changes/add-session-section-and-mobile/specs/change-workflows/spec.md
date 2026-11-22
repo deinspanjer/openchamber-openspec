@@ -53,6 +53,46 @@ paths. It SHALL NOT send or change files.
 - **THEN** the composer holds an unsent prompt requesting `openspec-sync-specs` for OpenSpec change
   `add-login`
 
+### Requirement: Prepare fast-forward, continue and update prompts
+
+The section's `ff`, `continue` and `update` actions SHALL replace the open composer's text with an
+unsent prompt that asks the agent, in plain prose, to load and invoke `openspec-ff-change`,
+`openspec-continue-change` or `openspec-update-change` through its skill tool. The prompt SHALL
+name the change without paths and include its recorded goal when present. The actions SHALL NOT
+send, create sessions or worktrees, or change files.
+
+#### Scenario: Prepare fast-forward
+
+- **WHEN** the user activates `ff` on Planning change `add-login` with goal `Sign in with SSO`
+- **THEN** the composer holds an unsent prompt requesting `openspec-ff-change` for OpenSpec change
+  `add-login`, including the goal, that asks for every remaining planning artefact
+
+#### Scenario: Prepare continue
+
+- **WHEN** the user activates `continue` for Planning change `add-login`
+- **THEN** the composer holds an unsent prompt requesting `openspec-continue-change` that asks for
+  `add-login`'s next planning artefact
+
+#### Scenario: Prepare update
+
+- **WHEN** the user activates `update` for `add-login`
+- **THEN** the composer holds an unsent prompt requesting `openspec-update-change` that asks the
+  agent to revise `add-login`'s existing planning artefacts without editing code
+
+### Requirement: Prepare a new-change prompt
+
+The section's `new` action SHALL replace the open composer's text with an unsent prompt that asks
+the agent, in plain prose, to load and invoke `openspec-new-change` through its skill tool and to
+ask the user what the change is for before creating it. It SHALL name no change, and SHALL NOT
+send, create sessions or worktrees, change files or change tracking.
+
+#### Scenario: Prepare a new change
+
+- **WHEN** the user activates the footer's `new`
+- **THEN** the composer holds an unsent prompt requesting `openspec-new-change` that asks the user
+  what the change is for
+- **AND** the session's tracked changes are unchanged
+
 ### Requirement: Board opens on a requested change
 
 When the section requests a change for the board's current project, the board SHALL show that

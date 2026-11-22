@@ -58,6 +58,34 @@ section SHALL NOT infer changes from conversation content or tool activity.
 - **WHEN** a saved change has been archived or deleted
 - **THEN** that change is not shown, and the other saved changes still are
 
+### Requirement: Close the section with a footer line
+
+Below the last card, or alone when nothing is tracked, the section SHALL show one footer line:
+`＋ Track a change` on the left, and on the right `new`, `board`, and a refresh icon button whose
+accessible name is `Refresh`. `new` SHALL show only when the `new` workflow is configured. `board`
+SHALL open the extension's board at its list. Refresh SHALL re-read the section. The section SHALL
+contribute no Refresh control to the Work Status header.
+
+#### Scenario: Core profile
+
+- **WHEN** the configured workflows are the core set
+- **THEN** the footer shows `＋ Track a change`, `board` and `Refresh`, and no `new`
+
+#### Scenario: New workflow configured
+
+- **WHEN** the configured workflows include `new`
+- **THEN** the footer shows `new` before `board`
+
+#### Scenario: Open the board from the footer
+
+- **WHEN** the user activates the footer's `board`
+- **THEN** the board opens at its list, without opening a change's detail
+
+#### Scenario: Footer on a phone
+
+- **WHEN** the section renders at 320px width on a coarse pointer
+- **THEN** the footer stays on one line, no taller than its line of text
+
 ### Requirement: Track and untrack changes
 
 `＋ Track a change` SHALL list active changes that are not already tracked, in task-progress order,
@@ -133,7 +161,7 @@ sides, and otherwise shift to show five tasks. The checkboxes SHALL be read-only
 
 ### Requirement: Flyouts show detail on demand
 
-Activating a change's name SHALL open a flyout with the name, stage label, goal and `Untrack`.
+Activating a change's name SHALL open a flyout with the name, stage label, goal and change actions.
 Activating a task title, in the `Tasks:` line or the expanded list, SHALL open a flyout with that
 task's full description. On a phone, flyouts open as the host's bottom sheet. Where the host offers
 no flyouts, the same content SHALL expand inline below the activated element.
@@ -146,14 +174,60 @@ no flyouts, the same content SHALL expand inline below the activated element.
 #### Scenario: Host without flyouts
 
 - **WHEN** the host does not support flyouts and the user activates a change's name
-- **THEN** the name, stage, goal and `Untrack` expand inline under the name
+- **THEN** the name, stage, goal, actions and `Untrack` expand inline under the name
+
+### Requirement: Offer change actions in the name flyout
+
+The name flyout SHALL offer `update` and `Open in board`, preceded by `continue` when the change is
+in Planning and both `ff` and `continue` are configured. `Untrack` SHALL follow as a small control
+aligned right.
+
+#### Scenario: Name flyout actions
+
+- **WHEN** the user opens the name flyout of an In Progress change
+- **THEN** it offers `update` and `Open in board`, and a smaller right-aligned `Untrack`
+- **AND** it offers no `continue`
+
+#### Scenario: Continue beside fast-forward
+
+- **WHEN** `ff` and `continue` are both configured and the user opens a Planning change's name
+  flyout
+- **THEN** it offers `continue` before `update` and `Open in board`
+
+#### Scenario: Update a change
+
+- **WHEN** the user activates `update` in a change's name flyout
+- **THEN** the composer holds an unsent prompt to revise that change's planning artefacts
+
+### Requirement: Read the configured workflows at context loads
+
+The section SHALL read which OpenSpec workflows are configured when it loads, when the project
+changes and on Refresh, and SHALL reuse that result for finished-turn reads and session switches in
+the same project. When the read fails, the section SHALL use the core set: `propose`, `explore`,
+`apply`, `update`, `sync` and `archive`. A configured workflow SHALL count as expected to be
+installed, not as proof that its skill exists.
+
+#### Scenario: Turn finishes
+
+- **WHEN** the shown session finishes a turn
+- **THEN** the section re-reads its tracked changes without re-reading the configured workflows
+
+#### Scenario: Older OpenSpec CLI
+
+- **WHEN** the CLI cannot report its configured workflows
+- **THEN** the section shows chips for the core set and no error
 
 ### Requirement: Offer workflow chips on each card
 
-Each card SHALL show chips in this order: the stage chip, `sync`, `validate`, `board`. The stage
-chip SHALL be `propose` in Planning, `apply` in Ready and In Progress, and `archive` when Complete.
-Stage chips and `sync` SHALL replace the open composer's text with an unsent prompt and SHALL NOT
-send, create sessions or worktrees, or change OpenSpec files.
+Each card SHALL show chips in this order: the stage chip, the stage's secondary chip when it has
+one, `sync`, `validate`. `sync` SHALL be hidden when the change's specs artefact is skipped. Cards
+SHALL have no `board` chip. Workflow chips SHALL replace the open composer's text with an unsent
+prompt and SHALL NOT send, create sessions or worktrees, or change OpenSpec files.
+
+#### Scenario: Specs skipped
+
+- **WHEN** a tracked change's specs artefact is skipped
+- **THEN** its card shows no `sync` chip
 
 #### Scenario: Apply an in-progress change
 
@@ -170,6 +244,37 @@ send, create sessions or worktrees, or change OpenSpec files.
 
 - **WHEN** the user switches session before composition completes
 - **THEN** no feedback or composition is replayed into the replacement session
+
+### Requirement: Choose stage chips from the configured workflows
+
+The stage and secondary chips SHALL follow the change's stage and the configured workflows:
+
+| Stage | Stage chip | Secondary chip |
+| --- | --- | --- |
+| Planning | `ff` if configured, else `continue` if configured, else `propose` | `explore` |
+| Ready, In Progress | `apply` | none |
+| Complete | `archive` | `verify`, only when configured |
+
+#### Scenario: Planning with the core profile
+
+- **WHEN** the core set is configured and a tracked change is in Planning
+- **THEN** its chips are `propose`, `explore`, `sync`, `validate`
+
+#### Scenario: Planning with fast-forward
+
+- **WHEN** `ff` is configured and a tracked change is in Planning
+- **THEN** its stage chip is `ff`, and activating it composes a prompt for `openspec-ff-change`
+
+#### Scenario: Planning with continue only
+
+- **WHEN** `continue` is configured, `ff` is not, and a tracked change is in Planning
+- **THEN** its stage chip is `continue`, and activating it composes a prompt for
+  `openspec-continue-change`
+
+#### Scenario: Complete with verify
+
+- **WHEN** `verify` is configured and a tracked change is Complete
+- **THEN** its chips are `archive`, `verify`, `sync`, `validate`
 
 ### Requirement: Validate a change on request
 
@@ -188,27 +293,27 @@ each reported issue. It SHALL change no files and SHALL run only when activated.
 
 ### Requirement: Open the board on the change
 
-`board` SHALL open the extension's board showing that change's detail when the board's project is
-the session's project, whether the board was already open or opens now. Otherwise the board SHALL
-open at its list.
+`Open in board`, in a change's name flyout, SHALL open the extension's board showing that change's
+detail when the board's project is the session's project, whether the board was already open or
+opens now. Otherwise the board SHALL open at its list.
 
 #### Scenario: Board already open
 
-- **WHEN** the board is open on the same project and the user activates `board` on `add-login`
+- **WHEN** the board is open on the same project and the user activates `Open in board` for
+  `add-login`
 - **THEN** the board shows `add-login`'s detail
 
 #### Scenario: Board not yet open
 
-- **WHEN** the board is closed and the user activates `board` on `add-login`
+- **WHEN** the board is closed and the user activates `Open in board` for `add-login`
 - **THEN** the board opens and shows `add-login`'s detail once its listing has loaded
 
 ### Requirement: Refresh on context, request and finished turns
 
 The section SHALL read when it loads, when the session or project changes, when the user activates
-Refresh, and when the shown session finishes a turn. Each read SHALL cover the listing and, for
-each shown change, its planning status and tasks, never every change's summary. The section SHALL
-NOT poll or refresh on visibility changes. A failed read SHALL show an error with Refresh on the
-affected card, or on the section when the listing fails, and SHALL NOT show partial progress.
+the footer's Refresh, and when the shown session finishes a turn. Each read SHALL cover the listing
+and, for each shown change, its planning status and tasks, never every change's summary. The
+section SHALL NOT poll or refresh on visibility changes.
 
 #### Scenario: Initial host signals arrive together
 
@@ -224,6 +329,11 @@ affected card, or on the section when the listing fails, and SHALL NOT show part
 
 - **WHEN** a session other than the shown one finishes a turn
 - **THEN** the section does not read
+
+### Requirement: Show read failures without partial progress
+
+A failed read SHALL show an error with Refresh on the affected card, or an error above the footer
+when the listing fails, and SHALL NOT show partial progress.
 
 #### Scenario: Read fails for one change
 
@@ -254,12 +364,17 @@ keyboard focus, while the change, its current task and the tracked list are unch
 
 ### Requirement: Fit the section to touch devices
 
-On a coarse pointer every chip, disclosure, task title and name control SHALL have a touch target
-at least 44 CSS pixels tall, and the section SHALL fit a 320 CSS pixel width without horizontal
-overflow. On a fine pointer the cards SHALL keep their compact height.
+On a coarse pointer every chip SHALL be 28 CSS pixels tall, with at least 8 CSS pixels between
+adjacent chips. On either pointer, `＋ Track a change`, the footer's other controls, the `Tasks:`
+line, task titles and the name control SHALL take no padding beyond their line of text. The
+section SHALL fit a 320 CSS pixel width without horizontal overflow. On a fine pointer the cards
+SHALL keep their compact height.
 
 #### Scenario: Phone Status tab
 
 - **WHEN** the section renders two tracked changes on a phone at 320px width
-- **THEN** names, counts, bars, `Tasks:` lines and chips fit without horizontal scrolling and each
-  control's touch target is at least 44px tall
+- **THEN** names, counts, bars, `Tasks:` lines, chips and the footer fit without horizontal
+  scrolling
+- **AND** each chip is 28px tall with at least 8px to the next chip
+- **AND** `＋ Track a change`, the footer controls, `Tasks:` lines, task titles and names are no
+  taller than their line of text

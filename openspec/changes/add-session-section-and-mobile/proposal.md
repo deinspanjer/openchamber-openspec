@@ -15,6 +15,12 @@ there.
   chips for the stage action (`propose` / `apply` / `archive`), `sync`, `validate` and `board`.
   Names and tasks open flyouts with detail. (Redesigned on 2026-11-21 after the 1.3.x layout proved
   too tall in live use.)
+- 1.5.0 (after 1.4.2 live use): chips follow the change's stage and the OpenSpec workflows the
+  user configured (`ff` / `continue` / `propose`, `explore`, `apply`, `archive`, `verify`), `sync`
+  hides when specs are skipped, and a footer line holds `＋ Track a change`, `new`, `board` and
+  Refresh in place of the header Refresh and each card's `board` chip. The name flyout gains
+  `update` and `Open in board`. Coarse-pointer chips shrink to 28px, and the icon is cropped to its
+  glyph.
 - A session tracks the changes the user saved for it, or else one derived from the extension's item
   on the session or a worktree named after a change. Never infer changes from the transcript.
 - Stage and `sync` chips prepare prompts unsent in the session's composer. `validate` runs
@@ -58,4 +64,8 @@ Compatibility: hosts before OpenChamber 2.0.1 ignore the status section and host
 ignore the phone opt-in; `engines.openchamber` cannot express a floor above 1.22.0, so the README
 states the minimum. The SDK upgrade crosses a major version and may change types the panel uses.
 The extra reads after each turn add a few `openspec` CLI calls per finished turn in sessions that
-show the section expanded. No new CLI commands, flags or skill names.
+show the section expanded. 1.5.0 adds one CLI call, `openspec config list --json`, at section
+context loads; CLIs without it fall back to the core chips. It adds prompts for the
+`openspec-ff-change`, `openspec-continue-change`, `openspec-update-change` and
+`openspec-new-change` skills, offered only when the configured profile installs them (update is
+core).

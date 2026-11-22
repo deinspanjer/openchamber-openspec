@@ -148,6 +148,62 @@ delivery in both directions. No new test files or shared helpers. One commit per
 - [x] 8.6 Run the full panel suite twice and `npm run check`, then release 1.4.2 with
       `npm version 1.4.2 --no-git-tag-version`.
 
+## 9. Workflow-aware chips, footer and compact sizing (2026-11-22, after 1.4.2)
+
+Spec: `specs/session-change-section`, `specs/change-workflows`; design: "Workflow detection",
+"Workflow-aware chips and footer", "Shared prompts (group 9 additions)", "Compact section sizing",
+"Icon crop". Each test fails first for the expected reason. No new test files or shared helpers.
+One commit per task.
+
+- [ ] 9.1 Detection. Service seam (`test/service.test.mjs`): add failing tests for `/workflows`
+      against the real CLI with an isolated `XDG_CONFIG_HOME`: an empty config gives the core set,
+      and `custom` with `ff`, `verify`, `archive` gives those plus `sync` before `archive`. With a
+      fake runner, CLI failure returns its error and malformed `profile` or `workflows` returns
+      `BAD_CLI_OUTPUT`. Implement the route, `decodeWorkflows`, `client.workflows()` and
+      `src/panel/workflows.ts`. Fake host seam (`test/panel.test.mjs`): the fake service answers
+      `/workflows`; add failing tests that the section requests it on mount, on directory change
+      and on Refresh, but not on a finished turn or a session switch in the same project, and that
+      a failed `/workflows` shows core chips without an error. Wire it into the section's reads.
+      Add `/workflows` to existing exact request-sequence assertions. Verify with `npm run build &&
+      node --test test/service.test.mjs` and the focused panel tests.
+- [ ] 9.2 Footer. Fake host seam: add failing tests that one footer line follows the cards, or
+      stands alone with nothing tracked: `＋ Track a change` left; `new` (only when the fake set has
+      `new`), `board` and an icon button named `Refresh` right. The footer `board` calls
+      `openSurface("plugin:openspec-board")` without posting `/focus`; Refresh runs one read; cards
+      have no `board` chip; the section never calls `setStatusControls`. Implement, and remove the
+      header control, `onStatusControl` handler, body Refresh button and their tests (8.3, 4.4).
+- [ ] 9.3 Stage chips. Fake host seam: add failing tests for the chip table with stage fixtures and
+      fake sets. Planning gives `propose` + `explore` (core), `continue` (continue only) and `ff`
+      (ff, with or without continue). Ready and In Progress give `apply`. Complete gives `archive`,
+      plus `verify` only when configured. `sync` is absent when the summary's `specs` artefact is
+      `skipped`, and `validate` stays. Chip order follows the spec. A read that changes the set or
+      stage updates chips in place without moving focus. Implement `cardChips` and
+      `planningWorkflow` and use them in `src/status.ts`.
+- [ ] 9.4 Flyout additions. Fake host seam, popover and inline modes: add failing tests that the
+      change flyout shows `update` and `Open in board`, plus `continue` first for a Planning change
+      when the set has `ff` and `continue`, and `Untrack` small and right-aligned below.
+      `Open in board` posts `/focus` and opens the board, so a same-project board opens the change's
+      detail (reuse the 7.6 assertions). In popover mode each action closes the popover. Implement,
+      extending the flyout data with `directory` and `offerContinue`.
+- [ ] 9.5 Prompts. Fake host seam: add failing tests that `ff`, `continue`, `update`, `explore`,
+      `verify` and the footer's `new` each compose their prompt unsent with `mode: "replace"`,
+      naming the design's skill, change and goal, with no paths. `new` names no change and leaves
+      tracking unchanged; the others append tracking. Implement the prompts in
+      `src/panel/prompts.ts` and drop `stageChip`.
+- [ ] 9.6 Compact sizing. Fake host seam at 320px: add failing tests that on a coarse pointer chips
+      are 28px tall with at least 8px between adjacent chips, and that `＋ Track a change`, the
+      footer controls, `Tasks:` lines, task titles and names are no taller than their line of text
+      on both pointers, with no horizontal overflow. Assert that the board's coarse-pointer 44px
+      tests still pass unchanged. Implement in `panel/status.html` and replace the section's
+      44px assertions from 5.1 and 7.7.
+- [ ] 9.7 Icon crop. Set `viewBox="125 124 262 262"` in `assets/openspec-logo.svg`, keeping the
+      paths. Render it at 16 and 24px next to another rail icon and confirm the glyph fills the box
+      without uneven cells; if cells are uneven, retrace on a grid that divides 16 and 24.
+- [ ] 9.8 Release. Update `README.md` (footer, chips follow `openspec config profile`, compact
+      sizing) and `AGENTS.md` (the section reads configured workflows on mount, project change and
+      Refresh; `/workflows`). Run `npm version 1.5.0 --no-git-tag-version`, then `npm run check`
+      and `npm run format:check`.
+
 ## Workflow follow-up
 
 - Best effort by the agent, with the user's approval rather than as tracked tasks: a live desktop
@@ -155,5 +211,10 @@ delivery in both directions. No new test files or shared helpers. One commit per
   validate, open the board from a card, finish a turn to watch a count update), and a phone check
   with the user (Status tab, More-menu board page, touch sizes, bottom-sheet flyouts, insets,
   keyboard). Ask before any check that creates sessions or worktrees.
+
+- Best effort after 1.5.0: on desktop, check the footer, chips under the core profile and after
+  `openspec config profile` adds `ff`, `verify` and `new`, the flyout actions and `Open in board`.
+  On the phone with the user, check chip height, footer fit and the icon in the rail and section
+  header.
 
 - Draft the upstream OpenChamber issues listed in `design.md` for the user to approve.
