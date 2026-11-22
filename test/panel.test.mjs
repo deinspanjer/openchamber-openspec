@@ -1871,6 +1871,44 @@ test("a long Work Status change name truncates before the count wraps", async ()
 });
 
 for (const pointer of ["coarse", "fine"]) {
+  test(`Work Status secondary links and chips keep their ${pointer} sizing`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+      await page.goto(`${url}?status=item&pointer=${pointer}`);
+      const frame = page.frameLocator("iframe");
+      const track = frame.getByRole("button", { name: "＋ Track a change" });
+      await track.waitFor();
+      const chip = frame.getByRole("button", { name: "validate", exact: true });
+      const chipHeight = (await chip.boundingBox()).height;
+      assert.ok(pointer === "coarse" ? chipHeight >= 44 : chipHeight <= 24);
+      assert.ok((await track.boundingBox()).height <= chipHeight);
+      if (pointer === "coarse") assert.ok((await track.boundingBox()).height >= 44);
+      assert.equal(
+        await track.evaluate((node) => getComputedStyle(node).textDecorationLine),
+        "underline",
+      );
+      await frame.getByRole("button", { name: "first-change", exact: true }).click();
+      const untrack = frame.getByRole("button", { name: "Untrack" });
+      await untrack.waitFor();
+      assert.equal(
+        await untrack.evaluate((node) => getComputedStyle(node).textDecorationLine),
+        "underline",
+      );
+      assert.ok(
+        await untrack.evaluate((node) => {
+          const { width, right } = node.getBoundingClientRect();
+          const card = node.parentElement.getBoundingClientRect();
+          return width < card.width / 2 && right === card.right;
+        }),
+      );
+      assert.ok(
+        pointer === "coarse"
+          ? (await untrack.boundingBox()).height >= 44
+          : (await untrack.boundingBox()).height <= chipHeight,
+      );
+    });
+  });
+
   test(`session section keeps two cards within 320px for a ${pointer} pointer`, async () => {
     await withPanel(async (browser, url) => {
       const page = await browser.newPage({ viewport: { width: 320, height: 720 } });

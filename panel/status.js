@@ -2937,6 +2937,7 @@ Report what you synced without archiving the change.`;
     onClick: () => setPickerOpen(picker.hidden === true)
   });
   var pickerTrigger = pickerRoot.querySelector("button");
+  pickerTrigger.classList.add("status-link");
   pickerTrigger.setAttribute("aria-controls", picker.id);
   pickerTrigger.setAttribute("aria-expanded", "false");
   var optionButtons = [];
@@ -3136,14 +3137,14 @@ Report what you synced without archiving the change.`;
     let scope = null;
     const primary2 = mountButton(actions, {
       label: "",
-      size: "sm",
+      size: "xs",
       onClick: () => {
         if (change) void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
       }
     });
     const sync = mountButton(actions, {
       label: "sync",
-      size: "sm",
+      size: "xs",
       variant: "secondary",
       onClick: () => {
         if (change) void preparePrompt(change, syncPrompt(change), captureContext());
@@ -3158,7 +3159,7 @@ Report what you synced without archiving the change.`;
     let disposedCard = false;
     const validate = mountButton(validateRoot, {
       label: "validate",
-      size: "sm",
+      size: "xs",
       variant: "secondary",
       onClick: () => {
         if (!change || !scope || validating) return;
@@ -3189,7 +3190,7 @@ Report what you synced without archiving the change.`;
     );
     const board = mountButton(actions, {
       label: "board",
-      size: "sm",
+      size: "xs",
       variant: "secondary",
       onClick: () => {
         const targetDirectory = directory;
@@ -3418,13 +3419,16 @@ Report what you synced without archiving the change.`;
       goal.textContent = data.goal;
       container.append(goal);
     }
-    if (untrack)
-      return mountButton(container, {
+    if (untrack) {
+      const button2 = mountButton(container, {
         label: "Untrack",
         variant: "secondary",
-        size: "sm",
+        size: "xs",
         onClick: untrack
       });
+      container.querySelector("button").classList.add("status-link", "untrack-link");
+      return button2;
+    }
   }
   function mountFlyout(button2, inline, getData, onReset) {
     let anchor;

@@ -129,7 +129,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
 - [x] 8.1 Fake host seam: card line 1 never wraps the count. The name truncates with an ellipsis
       and `n/m` stays on one line (e.g. `6/6` with a long name at 320px). `Tasks:` is not
       underlined; the task title keeps its flyout affordance.
-- [ ] 8.2 Same seam: `＋ Track a change` renders as a compact link-style control, no taller than a
+- [x] 8.2 Same seam: `＋ Track a change` renders as a compact link-style control, no taller than a
       chip on a fine pointer, with 44px only as the touch target on a coarse pointer. In the change
       flyout, `Untrack` is a smaller link aligned right. Chips get slightly less vertical padding
       while keeping 44px coarse-pointer targets.

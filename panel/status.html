@@ -46,6 +46,21 @@
       .flyout-heading {
         font-weight: 600;
       }
+      .oc-sdk-btn.status-link[data-variant][data-size] {
+        height: auto;
+        padding: 0;
+        border: 0;
+        background: none;
+        box-shadow: none;
+        color: var(--oc-primary-text);
+        text-decoration: underline;
+      }
+      .oc-sdk-btn.status-link:focus-visible {
+        outline: 2px solid var(--oc-focus);
+      }
+      .untrack-link {
+        justify-self: end;
+      }
       .validation-issues {
         margin: 0;
         padding-inline-start: 1.5em;

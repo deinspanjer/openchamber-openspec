@@ -86,6 +86,7 @@ const pickerButton = mountButton(pickerRoot, {
   onClick: () => setPickerOpen(picker.hidden === true),
 });
 const pickerTrigger = pickerRoot.querySelector("button")!;
+pickerTrigger.classList.add("status-link");
 pickerTrigger.setAttribute("aria-controls", picker.id);
 pickerTrigger.setAttribute("aria-expanded", "false");
 let optionButtons: ReturnType<typeof mountButton>[] = [];
@@ -310,14 +311,14 @@ function mountTrackedCard(id: string) {
   let scope: Scope | null = null;
   const primary = mountButton(actions, {
     label: "",
-    size: "sm",
+    size: "xs",
     onClick: () => {
       if (change) void preparePrompt(change, actionPrompt(change, "primary"), captureContext());
     },
   });
   const sync = mountButton(actions, {
     label: "sync",
-    size: "sm",
+    size: "xs",
     variant: "secondary",
     onClick: () => {
       if (change) void preparePrompt(change, syncPrompt(change), captureContext());
@@ -332,7 +333,7 @@ function mountTrackedCard(id: string) {
   let disposedCard = false;
   const validate = mountButton(validateRoot, {
     label: "validate",
-    size: "sm",
+    size: "xs",
     variant: "secondary",
     onClick: () => {
       if (!change || !scope || validating) return;
@@ -367,7 +368,7 @@ function mountTrackedCard(id: string) {
   );
   const board = mountButton(actions, {
     label: "board",
-    size: "sm",
+    size: "xs",
     variant: "secondary",
     onClick: () => {
       const targetDirectory = directory;
@@ -631,13 +632,16 @@ function renderFlyout(container: HTMLElement, data: Flyout, untrack?: () => void
     goal.textContent = data.goal;
     container.append(goal);
   }
-  if (untrack)
-    return mountButton(container, {
+  if (untrack) {
+    const button = mountButton(container, {
       label: "Untrack",
       variant: "secondary",
-      size: "sm",
+      size: "xs",
       onClick: untrack,
     });
+    container.querySelector("button")!.classList.add("status-link", "untrack-link");
+    return button;
+  }
 }
 
 function mountFlyout(
