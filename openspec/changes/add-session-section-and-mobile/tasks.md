@@ -145,7 +145,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       official icon (`website/public/docs/icon-512.png` in Fission-AI/OpenSpec), using
       `shape-rendering="crispEdges"` and no fractional transforms. Verify by rendering it at 16, 24
       and 32 px.
-- [ ] 8.6 Run the full panel suite twice and `npm run check`, then release 1.4.2 with
+- [x] 8.6 Run the full panel suite twice and `npm run check`, then release 1.4.2 with
       `npm version 1.4.2 --no-git-tag-version`.
 
 ## Workflow follow-up
