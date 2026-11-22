@@ -131,7 +131,10 @@ function hostHtml(statusCase) {
     const pending = [];
     window.__requests = [];
     window.__completed = [];
-    window.__edit = (text) => { proposal = text; tasks[1].done = true; changes[0].completedTasks = 2; };
+    window.__edit = (text) => { proposal = text;
+      if (statusCase === "progress") { tasks[3].done = true; changes[0].completedTasks = 4; }
+      else { tasks[1].done = true; changes[0].completedTasks = 2; }
+    };
     window.__unedit = () => { tasks[1].done = false; changes[0].completedTasks = 1; };
     window.__goal = (id, value) => { changes.find((item) => item.id === id).goal = value; };
     window.__areas = (id, value) => { changes.find((item) => item.id === id).affectedAreas = value; };
@@ -173,6 +176,14 @@ function hostHtml(statusCase) {
     window.__session = (id) => { ready.session = id ? { id } : null;
       for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
         type: "session", payload: { session: ready.session } }, "*"); };
+    window.__lifecycle = (sessionId, phase) => {
+      for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
+        type: "session-lifecycle", payload: { sessionId, phase } }, "*");
+    };
+    window.__statusControl = (id) => {
+      for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
+        type: "status-control-event", payload: { id } }, "*");
+    };
     window.__holdCompose = () => { holdCompose = true; };
     window.__releaseCompose = () => { holdCompose = false; pendingCompose.splice(0).forEach((finish) => finish()); };
     window.__failCompose = () => { failCompose = true; };
@@ -204,6 +215,9 @@ function hostHtml(statusCase) {
       if (statusCase === "saved" || statusCase === "stale")
         storage.set("session-change:fixture-session", { change: statusCase === "saved" ? "second-change" : "old-change", savedAt: 1 });
       if (statusCase === "stale") sessions[0].items = [];
+      if (statusCase === "switch") sessions.push({ ...sessions[0], id: "replacement-session",
+        items: [{ id: "second-change", data: { kind: "change", change: "second-change" } }] });
+      if (statusCase === "header") ready.features = { statusControls: true };
       if (statusCase === "picker") {
         sessions[0].items = [];
         changes.unshift(
@@ -768,6 +782,159 @@ test("session section Open board opens the extension's plugin surface", async ()
     await page.close();
   });
 });
+
+test("session section refreshes once for a completed turn in the shown session only", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=progress`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByText("3/7", { exact: true }).waitFor();
+    await page.evaluate(() => {
+      __lifecycle("other-session", "completed");
+      __lifecycle("fixture-session", "started");
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 1);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
+      1,
+    );
+    await page.evaluate(() => {
+      __edit("More tasks complete");
+      __lifecycle("fixture-session", "completed");
+    });
+    await frame.getByText("4/7", { exact: true }).waitFor({ timeout: 3000 });
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 2);
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests
+          .filter((r) => ["/changes", "/summary", "/tasks", "/summaries"].includes(r.path))
+          .map((r) => r.path),
+      ),
+      ["/changes", "/summary", "/tasks", "/changes", "/summary", "/tasks"],
+    );
+    await page.close();
+  });
+});
+
+test("session section coalesces refresh triggers during a read", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByText("1/2", { exact: true }).waitFor();
+    await page.evaluate(() => {
+      __holdTasks();
+      __lifecycle("fixture-session", "completed");
+    });
+    await page.waitForFunction(
+      () => __requests.filter((r) => r.path === "/tasks").length === 2,
+      null,
+      {
+        timeout: 3000,
+      },
+    );
+    await page.evaluate(() => {
+      __lifecycle("fixture-session", "completed");
+      __lifecycle("fixture-session", "completed");
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
+      2,
+    );
+    await page.evaluate(() => {
+      __edit("Completed");
+      __releaseReads();
+    });
+    await frame.getByText("2/2", { exact: true }).waitFor();
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 3);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
+      3,
+    );
+    await page.close();
+  });
+});
+
+test("session section re-resolves on session switch without remounting or rendering stale reads", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=switch`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("heading", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => __holdTasks());
+    await frame.getByRole("button", { name: "Refresh", exact: true }).click();
+    await page.waitForFunction(() => __requests.filter((r) => r.path === "/tasks").length === 2);
+    await page.evaluate(() => __session("replacement-session"));
+    await frame.getByRole("status").filter({ hasText: "Loading OpenSpec change" }).waitFor();
+    await frame.locator("#root").evaluate((node) => {
+      window.__oldRendered = false;
+      new MutationObserver(() => {
+        if (node.querySelector("h1")?.textContent === "first-change") window.__oldRendered = true;
+      }).observe(node, { childList: true, subtree: true });
+    });
+    await page.evaluate(() => __releaseReads());
+    await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
+    assert.equal(await frame.locator("html").evaluate(() => window.__oldRendered), false);
+    await page.waitForFunction(() =>
+      __requests.some((r) => r.path === "/tasks" && r.body.change === "second-change"),
+    );
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "workspace-subscribe").length),
+      1,
+    );
+    assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/summaries")), false);
+    await page.close();
+  });
+});
+
+for (const [scenario, header] of [
+  ["header", true],
+  ["item", false],
+]) {
+  test(`session section refreshes from the ${header ? "header" : "body"} control`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=${scenario}`);
+      const frame = page.frameLocator("iframe");
+      await frame.getByText("1/2", { exact: true }).waitFor();
+      const refresh = frame.getByRole("button", { name: "Refresh", exact: true });
+      if (header) {
+        await page.waitForFunction(
+          () => __requests.some((r) => r.path === "status-controls"),
+          null,
+          {
+            timeout: 3000,
+          },
+        );
+        await refresh.waitFor({ state: "hidden" });
+        assert.deepEqual(
+          await page.evaluate(
+            () => __requests.find((r) => r.path === "status-controls").body.controls,
+          ),
+          [{ kind: "button", id: "refresh", label: "Refresh" }],
+        );
+        await page.evaluate(() => {
+          __edit("Completed");
+          __statusControl("refresh");
+        });
+      } else {
+        await page.evaluate(() => __edit("Completed"));
+        await refresh.click();
+      }
+      await frame.getByText("2/2", { exact: true }).waitFor();
+      await page.waitForFunction(() => __requests.filter((r) => r.path === "/tasks").length === 2);
+      assert.equal(
+        await page.evaluate(() => __requests.some((r) => r.path === "status-controls")),
+        header,
+      );
+      await page.close();
+    });
+  });
+}
 
 test("presentation modal backdrops dim every dialog without changing keyboard cancellation", async () => {
   await withPanel(async (browser, url) => {

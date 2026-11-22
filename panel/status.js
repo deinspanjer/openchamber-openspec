@@ -2936,14 +2936,26 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var reading = false;
   var queued = false;
   var selection2 = null;
+  var hasStatusControls = false;
+  var headerRefresh = false;
+  var headerRequest = 0;
+  var bodyRefresh;
   var handles = [];
   function render(view) {
     for (const handle of handles.splice(0)) handle.dispose();
     panelRoot.replaceChildren();
+    bodyRefresh = void 0;
     if (view.kind === "empty") return;
+    if (view.kind === "loading") {
+      note("Loading OpenSpec change\u2026", "status");
+      return;
+    }
     const controls = document.createElement("div");
     controls.className = "section-controls";
-    handles.push(mountButton(controls, { label: "Refresh", size: "sm", onClick: refresh }));
+    bodyRefresh = document.createElement("div");
+    bodyRefresh.hidden = headerRefresh;
+    controls.append(bodyRefresh);
+    handles.push(mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh }));
     const capturedEpoch = epoch;
     const current = () => !disposed && epoch === capturedEpoch;
     handles.push(
@@ -2956,10 +2968,6 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         )
       })
     );
-    if (view.kind === "loading") {
-      note("Loading OpenSpec change\u2026", "status");
-      return;
-    }
     if (view.kind === "tracked") {
       renderTracked(view.change, view.tasks);
       const change = view.change;
@@ -3185,7 +3193,23 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   function refresh() {
     if (!directory) return;
     if (sessions?.state === "ready") read();
-    else if (!offSessions) subscribeToProject(directory);
+    else if (sessions?.state === "error" || !offSessions) {
+      offSessions?.();
+      offSessions = void 0;
+      sessions = null;
+      subscribeToProject(directory);
+    }
+  }
+  function publishRefreshControl() {
+    const request = ++headerRequest;
+    const showHeader = (visible) => {
+      if (disposed || headerRequest !== request) return;
+      headerRefresh = visible;
+      if (bodyRefresh) bodyRefresh.hidden = visible;
+    };
+    showHeader(false);
+    if (!directory || !hasStatusControls) return;
+    void host.setStatusControls([{ kind: "button", id: "refresh", label: "Refresh" }]).then(() => showHeader(true)).catch((caught) => console.warn("Could not publish OpenSpec Refresh.", caught));
   }
   function updateContext(nextDirectory, nextSession) {
     const directoryChanged = nextDirectory !== directory;
@@ -3197,6 +3221,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     queued = false;
     render({ kind: directory ? "loading" : "empty" });
     if (directoryChanged) {
+      publishRefreshControl();
       projectEpoch++;
       offSessions?.();
       offSessions = void 0;
@@ -3213,13 +3238,30 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     lastHeight = height;
     void host.setHeight(height).catch((error) => console.warn("Could not resize the OpenSpec section.", error));
   });
+  var replayedSession = null;
   var offReady = host.onReady((ready2) => {
+    replayedSession = ready2.session?.id ?? null;
+    const nextStatusControls = ready2.features?.statusControls === true;
+    const statusControlsChanged = nextStatusControls !== hasStatusControls;
+    const directoryChanged = ready2.directory !== directory;
+    hasStatusControls = nextStatusControls;
     applyHostReady(ready2, document.documentElement);
     updateContext(ready2.directory, ready2.session?.id ?? null);
+    if (statusControlsChanged && !directoryChanged) publishRefreshControl();
     resize.observe(panelRoot);
   });
   var offDirectory = host.onDirectory((next) => updateContext(next, sessionId));
   var offSession = host.onSession((next) => updateContext(directory, next?.id ?? null));
+  var offLifecycle = host.onSessionLifecycle((event) => {
+    if (event.sessionId === replayedSession) {
+      replayedSession = null;
+      return;
+    }
+    if (event.phase === "completed" && event.sessionId === sessionId) read();
+  });
+  var offStatusControl = host.onStatusControl(({ id }) => {
+    if (id === "refresh") refresh();
+  });
   window.addEventListener(
     "pagehide",
     () => {
@@ -3228,6 +3270,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       offReady();
       offDirectory();
       offSession();
+      offLifecycle();
+      offStatusControl();
       offSessions?.();
       for (const handle of handles.splice(0)) handle.dispose();
       host.dispose();

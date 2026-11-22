@@ -41,15 +41,27 @@ let disposed = false;
 let reading = false;
 let queued = false;
 let selection: { listing: Listing; saved: string | null; change: string | null } | null = null;
+let hasStatusControls = false;
+let headerRefresh = false;
+let headerRequest = 0;
+let bodyRefresh: HTMLElement | undefined;
 const handles: { dispose(): void }[] = [];
 
 function render(view: View) {
   for (const handle of handles.splice(0)) handle.dispose();
   panelRoot.replaceChildren();
+  bodyRefresh = undefined;
   if (view.kind === "empty") return;
+  if (view.kind === "loading") {
+    note("Loading OpenSpec change…", "status");
+    return;
+  }
   const controls = document.createElement("div");
   controls.className = "section-controls";
-  handles.push(mountButton(controls, { label: "Refresh", size: "sm", onClick: refresh }));
+  bodyRefresh = document.createElement("div");
+  bodyRefresh.hidden = headerRefresh;
+  controls.append(bodyRefresh);
+  handles.push(mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh }));
   const capturedEpoch = epoch;
   const current = () => !disposed && epoch === capturedEpoch;
   handles.push(
@@ -65,10 +77,6 @@ function render(view: View) {
           ),
     }),
   );
-  if (view.kind === "loading") {
-    note("Loading OpenSpec change…", "status");
-    return;
-  }
   if (view.kind === "tracked") {
     renderTracked(view.change, view.tasks);
     const change = view.change;
@@ -325,7 +333,27 @@ function subscribeToProject(capturedDirectory: string) {
 function refresh() {
   if (!directory) return;
   if (sessions?.state === "ready") read();
-  else if (!offSessions) subscribeToProject(directory);
+  else if (sessions?.state === "error" || !offSessions) {
+    offSessions?.();
+    offSessions = undefined;
+    sessions = null;
+    subscribeToProject(directory);
+  }
+}
+
+function publishRefreshControl() {
+  const request = ++headerRequest;
+  const showHeader = (visible: boolean) => {
+    if (disposed || headerRequest !== request) return;
+    headerRefresh = visible;
+    if (bodyRefresh) bodyRefresh.hidden = visible;
+  };
+  showHeader(false);
+  if (!directory || !hasStatusControls) return;
+  void host
+    .setStatusControls([{ kind: "button", id: "refresh", label: "Refresh" }])
+    .then(() => showHeader(true))
+    .catch((caught: unknown) => console.warn("Could not publish OpenSpec Refresh.", caught));
 }
 
 function updateContext(nextDirectory: string | null, nextSession: string | null) {
@@ -338,6 +366,7 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
   queued = false;
   render({ kind: directory ? "loading" : "empty" });
   if (directoryChanged) {
+    publishRefreshControl();
     projectEpoch++;
     offSessions?.();
     offSessions = undefined;
@@ -357,13 +386,31 @@ const resize = new ResizeObserver(() => {
     .setHeight(height)
     .catch((error: unknown) => console.warn("Could not resize the OpenSpec section.", error));
 });
+let replayedSession: string | null = null;
 const offReady = host.onReady((ready) => {
+  // The SDK emits a synthetic lifecycle phase immediately after each ready snapshot.
+  replayedSession = ready.session?.id ?? null;
+  const nextStatusControls = ready.features?.statusControls === true;
+  const statusControlsChanged = nextStatusControls !== hasStatusControls;
+  const directoryChanged = ready.directory !== directory;
+  hasStatusControls = nextStatusControls;
   applyHostReady(ready, document.documentElement);
   updateContext(ready.directory, ready.session?.id ?? null);
+  if (statusControlsChanged && !directoryChanged) publishRefreshControl();
   resize.observe(panelRoot);
 });
 const offDirectory = host.onDirectory((next) => updateContext(next, sessionId));
 const offSession = host.onSession((next) => updateContext(directory, next?.id ?? null));
+const offLifecycle = host.onSessionLifecycle((event) => {
+  if (event.sessionId === replayedSession) {
+    replayedSession = null;
+    return;
+  }
+  if (event.phase === "completed" && event.sessionId === sessionId) read();
+});
+const offStatusControl = host.onStatusControl(({ id }) => {
+  if (id === "refresh") refresh();
+});
 window.addEventListener(
   "pagehide",
   () => {
@@ -372,6 +419,8 @@ window.addEventListener(
     offReady();
     offDirectory();
     offSession();
+    offLifecycle();
+    offStatusControl();
     offSessions?.();
     for (const handle of handles.splice(0)) handle.dispose();
     host.dispose();

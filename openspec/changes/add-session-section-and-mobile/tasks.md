@@ -54,7 +54,7 @@
       shown), the stage action composing the board's prompt unsent and saving the change, no replay
       after a session switch, and `Open board` calling `openSurface("plugin:openspec-board")`.
       Implement.
-- [ ] 4.4 At the same seam, extend the fake host to push `onSessionLifecycle`, then add failing
+- [x] 4.4 At the same seam, extend the fake host to push `onSessionLifecycle`, then add failing
       tests: `completed` for the shown session re-reads once; another session's completion does
       not read; session switch re-resolves and re-reads; stale responses are dropped; header
       Refresh control when `features.statusControls` is present, body button otherwise. Implement.
