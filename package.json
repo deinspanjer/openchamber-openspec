@@ -49,7 +49,8 @@
         "runtime": "host",
         "permissions": {
           "exec": [
-            "openspec"
+            "openspec",
+            "git"
           ]
         }
       }

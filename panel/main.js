@@ -2725,6 +2725,12 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Duplicate change.");
     return { directory, root: root2, planning: decodePlanning(input.planning), changes };
   }
+  function decodeModifiedChanges(value) {
+    const { changes } = record(value);
+    if (!Array.isArray(changes) || !changes.every((id) => typeof id === "string" && isChangeName(id)) || new Set(changes).size !== changes.length)
+      throw new Error("Invalid modified change IDs.");
+    return changes;
+  }
   function decodeArtifacts(value, requires) {
     if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
     const artifacts = value.map((value2) => {
@@ -2889,6 +2895,14 @@ ${GUEST_UI_LOOK_CSS}`;
         return value.content;
       },
       workflows: async (directory) => decode(await request("/workflows", { directory }), decodeWorkflows),
+      modifiedChanges: async ({ directory, root: root2, planning }) => decode(
+        await request("/modified-changes", {
+          directory,
+          expectedRoot: root2,
+          expectedPlanning: planning
+        }),
+        decodeModifiedChanges
+      ),
       list: async (directory, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {
           directory,

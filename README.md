@@ -28,13 +28,16 @@ The extension requires OpenChamber 2.7.1 or later.
    **verify** action on completed changes.
 3. In your project, run `openspec init --tools opencode`.
 4. In OpenChamber, open **Settings > Extensions** and add
-   `https://github.com/deinspanjer/openchamber-openspec-v2.git`. Its service runs `openspec` with
-   your user access, and the `sessions` permission lets it start sessions for worktree Apply and
-   bulk archiving. If you trust that, choose **Allow and enable**.
+   `https://github.com/deinspanjer/openchamber-openspec-v2.git`. Its service runs `openspec` and
+   `git` with your user access. The `sessions` permission lets it start sessions for worktree Apply
+   and bulk archiving. If you trust that, choose **Allow and enable**.
 5. Open the **OpenSpec** rail panel, or find it under **Extension pages**.
 
 The fork installs as the same extension (`openspec-board`) and replaces the original if it's
 installed.
+
+If an update shows **Needs approval** because the service now lists `git`, open OpenSpec in
+**Settings > Extensions** and choose **Review permissions**, then **Allow and enable**.
 
 The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
 `openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
@@ -54,6 +57,10 @@ Run `openspec update` after changing the profile to install the selected skills.
 Open **Work Status > OpenSpec** to see task progress for the current session. Select **＋ Track a
 change** to add another active change. To remove one, select its name and then **Untrack**. Your
 choices follow the session on devices connected to the same server.
+
+Use **Search changes** when the picker has more than one choice. If Git finds uncommitted edits in
+the current checkout's OpenSpec changes, those choices appear first with a **Modified in this
+checkout** icon. Nothing is tracked until you select a change.
 
 Expand **Tasks:** to see up to five tasks around the current task. Select a task title to read its
 description. The workflow chips follow the change's stage and the profile set by

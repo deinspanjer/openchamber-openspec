@@ -16,6 +16,7 @@ import {
   type ChangeMetadata,
 } from "../contracts.js";
 import { isChangeName } from "../model.js";
+import { modifiedChangeIds } from "./git.js";
 import {
   MAX_RESPONSE_BYTES,
   runOpenSpec,
@@ -354,6 +355,24 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     if ("code" in listing) return failure(listing);
     const current = await planningScope(listing.root, expectedPlanning);
     return { ok: true, value: { directory, ...listing, planning: current.planning } };
+  }
+
+  async function modifiedChanges(
+    directory: string,
+    expectedRoot: string,
+    expectedPlanning: string,
+    deadline: number,
+  ): Promise<CliResult> {
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const changes = await modifiedChangeIds(
+      directory,
+      current.root,
+      current.planningRoot,
+      deadline,
+    );
+    await planningScope(current.root, current.planning);
+    return { ok: true, value: { changes } };
   }
 
   async function workflows(directory: string): Promise<CliResult> {
@@ -807,6 +826,7 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     specs,
     spec,
     changes,
+    modifiedChanges,
     workflows,
     summary,
     summaries,

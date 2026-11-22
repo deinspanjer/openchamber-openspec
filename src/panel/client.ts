@@ -3,6 +3,7 @@ import {
   decodeArchived,
   decodeTaskResponse,
   decodeListing,
+  decodeModifiedChanges,
   decodeSummary,
   decodeSummaries,
   decodeSpecs,
@@ -100,6 +101,15 @@ export function createClient(host: HostClient) {
     },
     workflows: async (directory: string) =>
       decode(await request("/workflows", { directory }), decodeWorkflows),
+    modifiedChanges: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/modified-changes", {
+          directory,
+          expectedRoot: root,
+          expectedPlanning: planning,
+        }),
+        decodeModifiedChanges,
+      ),
     list: async (
       directory: string,
       expectedRoot?: string,

@@ -30,6 +30,99 @@ async function mockProject(prefix) {
   return root;
 }
 
+test("modified-changes maps Git status only within the scoped local planning tree", async (t) => {
+  const repo = await mkdtemp(join(tempDirectory, "openspec-git-"));
+  const directory = join(repo, "project[1]", "src");
+  const root = join(repo, "project[1]");
+  const prefix = "project[1]/openspec/changes";
+  const git = (...args) => exec("git", args, { cwd: repo });
+  const write = async (path, text = "Changed\n") => {
+    await mkdir(join(repo, path, ".."), { recursive: true });
+    await writeFile(join(repo, path), text);
+  };
+  try {
+    await mkdir(directory, { recursive: true });
+    await git("init", "--quiet");
+    await write(`${prefix}/unstaged/proposal.md`, "Before\n");
+    await write(".gitignore", "*.ignored\n");
+    await git("add", "--", ".");
+    await git(
+      "-c",
+      "user.name=OpenSpec Test",
+      "-c",
+      "user.email=openspec@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--quiet",
+      "-m",
+      "Baseline",
+    );
+    await write(`${prefix}/staged/proposal.md`);
+    await write(`${prefix}/staged/tasks.md`);
+    await git("--literal-pathspecs", "add", "--", `${prefix}/staged`);
+    for (const path of [
+      `${prefix}/unstaged/proposal.md`,
+      `${prefix}/new-change/draft\nnotes.md`,
+      `${prefix}/ignored/cache.ignored`,
+      `${prefix}/archive/old-change/proposal.md`,
+      `${prefix}/parent-file`,
+      `${prefix}/Invalid-Name/proposal.md`,
+      `${prefix}-other/wrong-prefix/proposal.md`,
+      "project1/openspec/changes/other-project/proposal.md",
+      "openspec/changes/repo-root-change/proposal.md",
+    ])
+      await write(path);
+    await withService(
+      async (url) => {
+        const post = async (path, body = {}) => {
+          const response = await fetch(`${url}${path}`, {
+            method: "POST",
+            headers: { authorization: "Bearer test-token" },
+            body: JSON.stringify({ directory, ...body }),
+          });
+          return { status: response.status, value: await response.json() };
+        };
+        const { value: listing } = await post("/changes");
+        const scope = { expectedRoot: listing.root, expectedPlanning: listing.planning };
+        await t.test("returns deduplicated change IDs from all three kinds of edits", async () => {
+          const { status, value } = await post("/modified-changes", scope);
+          assert.equal(status, 200, JSON.stringify(value));
+          assert.deepEqual(
+            { ...value, changes: value.changes.sort() },
+            {
+              changes: ["new-change", "staged", "unstaged"],
+            },
+          );
+        });
+        const planning = join(root, "openspec");
+        await rename(planning, join(root, "original-planning"));
+        await symlink(join(repo, "openspec"), planning);
+        await t.test("rejects the stale planning identity after a retarget", async () => {
+          const { status, value } = await post("/modified-changes", scope);
+          assert.deepEqual([status, value.error?.code], [409, "PLANNING_CHANGED"]);
+        });
+        await t.test("returns no hints when planning is shared", async () => {
+          const { value: shared } = await post("/changes");
+          assert.deepEqual(
+            await post("/modified-changes", { ...scope, expectedPlanning: shared.planning }),
+            { status: 200, value: { changes: [] } },
+          );
+        });
+      },
+      async (_directory, [command]) => ({
+        ok: true,
+        value: {
+          root: { path: root, source: "nearest" },
+          ...(command === "list" ? { changes: [] } : {}),
+        },
+      }),
+    );
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
 test("shared planning scope rejects link retargets without changing the CLI root", async () => {
   await withProjects(async (main, replacement) => {
     const checkout = await mkdtemp(join(tempDirectory, "openspec-linked-"));

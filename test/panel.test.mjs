@@ -110,6 +110,12 @@ function hostHtml(statusCase, pointer, popovers) {
     let holdListing = false;
     let holdSummaries = location.search.includes("hold-summary");
     const pendingSummaries = [];
+    const pendingModifiedChanges = [];
+    let holdModifiedChanges = false;
+    window.__holdModifiedChanges = () => { holdModifiedChanges = true; };
+    window.__releaseModifiedChanges = (index, changes) => {
+      pendingModifiedChanges.splice(index, 1)[0]?.(changes);
+    };
     const pendingValidation = [];
     let holdValidation = false;
     let validationResult = null;
@@ -402,8 +408,16 @@ function hostHtml(statusCase, pointer, popovers) {
            const finish = () => send({ directory: body.directory, root: local ? currentRoot : body.directory + "/openspec",
              changes: local ? changes.map(({ id, completedTasks, totalTasks }) => ({ id, completedTasks, totalTasks })) : [] });
           if (holdListing) pending.push(finish); else finish();
-        }
-         else if (path === "/archived") {
+         }
+          else if (path === "/modified-changes") {
+            const finish = (changes) => {
+              if (changes === null)
+                reply({ status: 503, body: JSON.stringify({ error: { code: "GIT_UNAVAILABLE", message: "Git unavailable" } }) });
+              else reply({ status: 200, body: JSON.stringify({ changes }) });
+            };
+            if (holdModifiedChanges) pendingModifiedChanges.push(finish); else finish([]);
+          }
+          else if (path === "/archived") {
            if (archivedChanges === null)
              send({ error: { code: "OPENSPEC_ERROR", message: "Cannot list archived changes" } }, 422);
            else send({ changes: archivedChanges });
@@ -1275,7 +1289,7 @@ for (const surface of ["section", "board"]) {
   });
 }
 
-test("session section orders the picker by task counts and persists a choice", async () => {
+test("session section orders the picker by task counts and persists a filtered choice", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(`${url}?status=picker`);
@@ -1294,6 +1308,15 @@ test("session section orders the picker by task counts and persists a choice", a
         "complete-change",
       ],
     );
+    const search = frame.getByRole("searchbox", { name: "Search changes" });
+    await search.fill("missing", { timeout: 3000 });
+    assert.equal(await choices.count(), 0);
+    assert.equal(await frame.getByText("No matching changes.", { exact: true }).isVisible(), true);
+    await search.press("Escape");
+    assert.equal(await search.inputValue(), "");
+    assert.equal(await choices.count(), 5);
+    await search.fill("  FiRsT  ");
+    assert.deepEqual(await choices.allTextContents(), ["first-change"]);
     await list.getByRole("button", { name: "first-change", exact: true }).click();
     await frame
       .getByRole("heading", { name: "first-change", exact: true })
@@ -1302,6 +1325,7 @@ test("session section orders the picker by task counts and persists a choice", a
       () => __stored()["session-change:fixture-session"]?.changes?.join() === "first-change",
     );
     await frame.getByRole("button", { name: "＋ Track a change", exact: true }).click();
+    assert.equal(await search.inputValue(), "");
     assert.equal(await list.getByRole("button", { name: "first-change", exact: true }).count(), 0);
     await list.getByRole("button", { name: "second-change", exact: true }).click();
     await frame.getByRole("heading", { name: "first-change", exact: true }).waitFor();
@@ -1318,6 +1342,188 @@ test("session section orders the picker by task counts and persists a choice", a
     await page.close();
   });
 });
+
+test("session picker requests Git hints only on eligible openings without saving tracking", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=picker&hold-ready`);
+    await page.waitForFunction(() => typeof __releaseReady === "function");
+    const saved = { "session-change:fixture-session": { changes: ["first-change"], savedAt: 1 } };
+    await page.evaluate((saved) => {
+      __seedStorage(Object.entries(saved));
+      __recreate("unrelated");
+      __holdModifiedChanges();
+      __releaseReady();
+    }, saved);
+    const frame = page.frameLocator("iframe");
+    const track = frame.getByRole("button", { name: "＋ Track a change", exact: true });
+    const search = frame.getByRole("searchbox", { name: "Search changes" });
+    const choices = frame.getByRole("list", { name: "Changes", exact: true }).getByRole("button");
+    const refresh = frame.getByRole("button", { name: "Refresh", exact: true });
+    await track.and(frame.locator("button:enabled")).waitFor({ timeout: 3000 });
+    await refresh.click();
+    await page.waitForFunction(
+      () => __completed.filter((path) => path === "/changes").length === 2,
+    );
+    await refresh.and(frame.locator('[aria-busy="false"]')).waitFor();
+    await page.evaluate(() => {
+      __lifecycle("fixture-session", "started");
+      __lifecycle("fixture-session", "completed");
+    });
+    await page.waitForFunction(
+      () => __completed.filter((path) => path === "/changes").length === 3,
+    );
+    await refresh.and(frame.locator('[aria-busy="false"]')).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.some((r) => r.path === "/modified-changes")),
+      false,
+    );
+
+    await track.click();
+    await search.fill("  CHanGe  ");
+    const unmodifiedOrder = [
+      "z-progress-change",
+      "not-started-change",
+      "second-change",
+      "complete-change",
+    ];
+    assert.deepEqual(await choices.allTextContents(), unmodifiedOrder);
+    await page.waitForFunction(() => __requests.some((r) => r.path === "/modified-changes"), null, {
+      timeout: 3000,
+    });
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => r.path === "/modified-changes").map(({ body }) => body),
+      ),
+      [{ directory, expectedRoot: root, expectedPlanning: "fixture-planning" }],
+    );
+    assert.deepEqual(await page.evaluate(() => __stored()), saved);
+    await page.evaluate(() =>
+      __releaseModifiedChanges(0, [
+        "complete-change",
+        "first-change",
+        "not-started-change",
+        "unknown-change",
+        "unrelated",
+      ]),
+    );
+    await choices
+      .first()
+      .and(frame.getByRole("button", { name: "not-started-change", exact: true }))
+      .waitFor({ timeout: 3000 });
+    assert.deepEqual(await choices.allTextContents(), [
+      "not-started-change",
+      "complete-change",
+      "z-progress-change",
+      "second-change",
+    ]);
+    assert.equal(await search.inputValue(), "  CHanGe  ");
+    assert.equal(await search.evaluate((input) => input === document.activeElement), true);
+    await search.press("Escape");
+    await search.press("Escape");
+    await track.click();
+    await page.waitForFunction(
+      () => __requests.filter((r) => r.path === "/modified-changes").length === 2,
+    );
+    await search.fill("change");
+    await page.evaluate(() => {
+      __releaseModifiedChanges(0, null);
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.deepEqual(await choices.allTextContents(), unmodifiedOrder);
+    await search.press("Escape");
+    await search.press("Escape");
+
+    await page.evaluate(() => {
+      for (const id of [
+        "z-progress-change",
+        "not-started-change",
+        "second-change",
+        "complete-change",
+        "unrelated",
+      ])
+        __remove(id);
+    });
+    await refresh.click();
+    await page.waitForFunction(
+      () => __completed.filter((path) => path === "/changes").length === 4,
+    );
+    await refresh.and(frame.locator('[aria-busy="false"]')).waitFor();
+    await track.click();
+    await frame.getByText("No untracked changes.", { exact: true }).waitFor();
+    await page.evaluate(() => __theme("dark"));
+    await frame.locator('html[data-oc-theme="dark"]').waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/modified-changes").length),
+      2,
+    );
+    assert.deepEqual(await page.evaluate(() => __stored()), saved);
+    assert.equal(
+      await page.evaluate(() =>
+        __requests.some(
+          ({ path, body }) =>
+            path === "storage" && body.op === "set" && body.key.startsWith("session-change:"),
+        ),
+      ),
+      false,
+    );
+  });
+});
+
+for (const restart of ["reopening", "switching sessions"]) {
+  test(`session picker discards delayed Git hints after ${restart}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=picker&hold-ready`);
+      await page.waitForFunction(() => typeof __releaseReady === "function");
+      await page.evaluate(() => {
+        __holdModifiedChanges();
+        __releaseReady();
+      });
+      const frame = page.frameLocator("iframe");
+      const track = frame.getByRole("button", { name: "＋ Track a change", exact: true });
+      const search = frame.getByRole("searchbox", { name: "Search changes" });
+      const choices = frame.getByRole("list", { name: "Changes", exact: true }).getByRole("button");
+      await track.click({ timeout: 3000 });
+      await page.waitForFunction(
+        () => __requests.some((r) => r.path === "/modified-changes"),
+        null,
+        { timeout: 3000 },
+      );
+      if (restart === "reopening") {
+        await search.press("Escape");
+      } else {
+        await page.evaluate(() => __session("replacement-session"));
+        await search.waitFor({ state: "hidden" });
+      }
+      await track.click();
+      await page.waitForFunction(
+        () => __requests.filter((r) => r.path === "/modified-changes").length === 2,
+      );
+      const focused = frame
+        .getByRole("list", { name: "Changes", exact: true })
+        .getByRole("button", { name: "first-change", exact: true });
+      await focused.focus();
+      await page.evaluate(() => __releaseModifiedChanges(1, ["first-change"]));
+      await choices.first().and(focused).waitFor({ timeout: 3000 });
+      assert.equal(await focused.evaluate((button) => button === document.activeElement), true);
+      await page.evaluate(() => {
+        __releaseModifiedChanges(0, ["complete-change"]);
+        __theme("light");
+      });
+      await frame.locator('html[data-oc-theme="light"]').waitFor();
+      assert.deepEqual(await choices.allTextContents(), [
+        "first-change",
+        "z-progress-change",
+        "not-started-change",
+        "second-change",
+        "complete-change",
+      ]);
+      assert.deepEqual(await page.evaluate(() => __stored()), {});
+    });
+  });
+}
 
 test("session tracking seeds a worktree's derived change and untracking all keeps it hidden", async () => {
   await withPanel(async (browser, url) => {
@@ -1414,8 +1620,12 @@ for (const [width, pointer, scenario] of [
         assert.ok(box.position === "static" || box.position === "relative");
         if (pointer === "coarse") assert.ok(box.height >= 44);
       }
-      assert.equal(await options.first().evaluate((node) => node === document.activeElement), true);
-      await options.first().press("Escape");
+      const firstFocus =
+        scenario === "item"
+          ? options.first()
+          : frame.getByRole("searchbox", { name: "Search changes" });
+      assert.equal(await firstFocus.evaluate((node) => node === document.activeElement), true);
+      await firstFocus.press("Escape");
       await options.first().waitFor({ state: "hidden" });
       assert.equal(await trigger.evaluate((node) => node === document.activeElement), true);
       await page.waitForFunction(

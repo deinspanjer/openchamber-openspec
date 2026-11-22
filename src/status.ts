@@ -1,5 +1,10 @@
 import { connectHost, HostRequestError, type GuestSessionsSnapshot } from "@openchamber/sdk";
-import { applyHostReady, mountButton, mountPopoverAnchor } from "@openchamber/sdk/ui";
+import {
+  applyHostReady,
+  mountButton,
+  mountPopoverAnchor,
+  mountSearchField,
+} from "@openchamber/sdk/ui";
 import {
   decodeValidation,
   type ListingEntry,
@@ -87,12 +92,30 @@ const picker = document.createElement("div");
 picker.className = "section-picker";
 picker.id = "section-picker";
 picker.hidden = true;
+const searchRoot = document.createElement("div");
+searchRoot.className = "picker-search";
+searchRoot.hidden = true;
+let pickerQuery = "";
+const pickerSearch = mountSearchField(searchRoot, {
+  value: "",
+  placeholder: "Search changes",
+  label: "Search changes",
+  onChange: (value) => {
+    pickerQuery = value;
+    pickerSearch.update({ value });
+    renderPickerRows();
+  },
+});
+const searchInput = searchRoot.querySelector("input")!;
 const choices = document.createElement("ul");
 choices.setAttribute("aria-label", "Changes");
 const emptyChoices = document.createElement("p");
 emptyChoices.className = "note";
-emptyChoices.textContent = "No untracked changes.";
-picker.append(choices, emptyChoices);
+const modifiedDescription = document.createElement("span");
+modifiedDescription.id = "picker-modified-description";
+modifiedDescription.textContent = "Modified in this checkout";
+modifiedDescription.hidden = true;
+picker.append(searchRoot, choices, emptyChoices, modifiedDescription);
 panelRoot.append(picker);
 const footerActions = document.createElement("div");
 footerActions.className = "footer-actions";
@@ -134,7 +157,7 @@ const pickerTrigger = pickerRoot.querySelector("button")!;
 pickerTrigger.classList.add("status-link");
 pickerTrigger.setAttribute("aria-controls", picker.id);
 pickerTrigger.setAttribute("aria-expanded", "false");
-let optionButtons: ReturnType<typeof mountButton>[] = [];
+const pickerRows = new Map<string, ReturnType<typeof mountPickerRow>>();
 const cancelRoot = document.createElement("div");
 picker.append(cancelRoot);
 const cancelPicker = mountButton(cancelRoot, {
@@ -143,21 +166,47 @@ const cancelPicker = mountButton(cancelRoot, {
   variant: "secondary",
   onClick: () => setPickerOpen(false),
 });
-let pickerKey = "";
+let pickerItems: string[] = [];
+let pickerScope: Scope | null = null;
+let latestPickerScope: Scope | null = null;
+let hintOpening: { hints: ReadonlySet<string> } | null = null;
 let viewKey = "";
 let showingLive = false;
 let readError: string | undefined;
 const mountedCards = new Map<string, ReturnType<typeof mountTrackedCard>>();
 
 function setPickerOpen(open: boolean, restoreFocus = true) {
+  hintOpening = null;
   picker.hidden = !open;
   pickerTrigger.setAttribute("aria-expanded", String(open));
-  if (open) choices.querySelector<HTMLElement>("button:enabled")?.focus();
-  else if (restoreFocus) pickerTrigger.focus();
+  if (open) {
+    pickerQuery = "";
+    pickerSearch.update({ value: "" });
+    renderPickerRows();
+    if (!searchRoot.hidden) searchInput.focus();
+    else choices.querySelector<HTMLElement>("button:enabled")?.focus();
+    const scope = pickerScope;
+    if (scope && pickerItems.length && samePickerScope(scope, latestPickerScope)) {
+      const opening = { hints: new Set<string>() };
+      hintOpening = opening;
+      const current = captureContext();
+      void client.modifiedChanges(scope).then(
+        (ids) => {
+          if (hintOpening !== opening || !current() || !samePickerScope(scope, latestPickerScope))
+            return;
+          opening.hints = new Set(ids);
+          renderPickerRows();
+        },
+        () => {
+          // Git is optional; leave the picker sorted by task progress.
+        },
+      );
+    }
+  } else if (restoreFocus) pickerTrigger.focus();
 }
 
 function escapePicker(event: KeyboardEvent) {
-  if (event.key !== "Escape" || picker.hidden) return;
+  if (event.key !== "Escape" || event.defaultPrevented || picker.hidden) return;
   event.preventDefault();
   event.stopPropagation();
   setPickerOpen(false);
@@ -215,12 +264,7 @@ function render(view: View) {
   notes.hidden = !notes.childElementCount;
   pickerButton.update({ disabled: view.kind !== "ready" || !sessionId });
   cancelRoot.hidden = !cards.length;
-  if (view.kind === "ready")
-    updatePicker(
-      view.listing,
-      cards.map(({ id }) => id),
-    );
-  else setPickerOpen(false, false);
+  if (view.kind !== "ready") setPickerOpen(false, false);
 }
 
 function pickerPriority({ completedTasks, totalTasks }: ListingEntry) {
@@ -229,45 +273,96 @@ function pickerPriority({ completedTasks, totalTasks }: ListingEntry) {
   return completedTasks < totalTasks ? 0 : 3;
 }
 
+function samePickerScope(left: Scope, right: Scope | null) {
+  return (
+    left.directory === right?.directory &&
+    left.root === right.root &&
+    left.planning === right.planning
+  );
+}
+
+function updateLatestPickerScope(scope: Scope) {
+  if (samePickerScope(scope, latestPickerScope)) return;
+  latestPickerScope = scope;
+  if (!hintOpening) return;
+  hintOpening = null;
+  renderPickerRows();
+}
+
 function updatePicker(listing: Listing, tracked: string[]) {
-  const items = [...listing.changes]
+  pickerScope = listing;
+  pickerItems = listing.changes
     .filter(({ id }) => !tracked.includes(id))
     .sort((left, right) => pickerPriority(left) - pickerPriority(right))
     .map(({ id }) => id);
-  const nextKey = JSON.stringify([sessionId, items]);
-  if (pickerKey === nextKey) return;
-  pickerKey = nextKey;
-  emptyChoices.hidden = items.length !== 0;
-  const focused = choices.contains(document.activeElement)
-    ? document.activeElement?.textContent
-    : null;
-  for (const button of optionButtons) button.dispose();
-  choices.replaceChildren();
-  optionButtons = items.map((id) => {
-    const row = document.createElement("li");
-    choices.append(row);
-    const button = mountButton(row, {
-      label: id,
-      size: "sm",
-      variant: "secondary",
-      onClick: () => {
-        const session = sessionId;
-        const current = captureContext();
-        if (!session || !current()) return;
-        setPickerOpen(false);
-        void (async () => {
-          const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
-          if (!current()) return;
-          if (saved) read();
-          else await showError(current, null, "Could not track the OpenSpec change. Try again.");
-        })();
-      },
-    });
-    if (focused === id) row.querySelector("button")?.focus();
-    return button;
+  renderPickerRows();
+}
+
+function mountPickerRow(id: string) {
+  const row = document.createElement("li");
+  const button = mountButton(row, {
+    label: id,
+    size: "sm",
+    variant: "secondary",
+    onClick: () => {
+      const session = sessionId;
+      const current = captureContext();
+      if (!session || !current()) return;
+      setPickerOpen(false);
+      void (async () => {
+        const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
+        if (!current()) return;
+        if (saved) read();
+        else await showError(current, null, "Could not track the OpenSpec change. Try again.");
+      })();
+    },
   });
-  if (focused && !choices.contains(document.activeElement))
-    (choices.querySelector<HTMLElement>("button:enabled") ?? pickerTrigger).focus();
+  const control = row.querySelector("button")!;
+  return { row, button, control };
+}
+
+function renderPickerRows() {
+  const query = pickerQuery.trim().toLocaleLowerCase();
+  const hints = hintOpening?.hints;
+  const items = pickerItems
+    .filter((id) => id.toLocaleLowerCase().includes(query))
+    .sort((left, right) => Number(hints?.has(right) ?? false) - Number(hints?.has(left) ?? false));
+  searchRoot.hidden = pickerItems.length <= 1 && pickerQuery === "";
+  emptyChoices.hidden = items.length !== 0;
+  emptyChoices.textContent = pickerItems.length ? "No matching changes." : "No untracked changes.";
+  const focused = document.activeElement;
+  const hadChoiceFocus = choices.contains(focused);
+  const visible = new Set(items);
+  for (const [id, { row, button }] of pickerRows) {
+    if (visible.has(id)) continue;
+    button.dispose();
+    row.remove();
+    pickerRows.delete(id);
+  }
+  for (const [index, id] of items.entries()) {
+    let mounted = pickerRows.get(id);
+    if (!mounted) {
+      mounted = mountPickerRow(id);
+      pickerRows.set(id, mounted);
+    }
+    const { row, control } = mounted;
+    if (hints?.has(id)) {
+      control.setAttribute("aria-describedby", modifiedDescription.id);
+    } else control.removeAttribute("aria-describedby");
+    let previous = choices.children.item(index);
+    if (previous === row) continue;
+    // Reorder around the focused row; moving it directly would blur its button.
+    if (control === focused) {
+      while (previous && previous !== row) {
+        choices.append(previous);
+        previous = choices.children.item(index);
+      }
+    } else choices.insertBefore(row, previous);
+  }
+  if (hadChoiceFocus && !choices.contains(document.activeElement)) {
+    if (!searchRoot.hidden) searchInput.focus();
+    else (choices.querySelector<HTMLElement>("button:enabled") ?? pickerTrigger).focus();
+  }
 }
 
 function seedTrackedChanges() {
@@ -1011,6 +1106,7 @@ function read() {
       if (!current()) return;
       if (listingResult.status === "rejected") throw listingResult.reason;
       const listing = listingResult.value;
+      updateLatestPickerScope(listing);
       const saved = capturedSession ? await readTrackedChanges(host, capturedSession) : null;
       if (!current()) return;
       if (capturedSession && saved === null) {
@@ -1021,6 +1117,7 @@ function read() {
       const active = new Set(byId.keys());
       const changes = resolveSessionChanges(capturedSession, sessions, saved, active) ?? [];
       selection = { active, saved, changes };
+      updatePicker(listing, changes);
       const cards = await Promise.all(
         changes.map(async (id): Promise<Card> => {
           try {
@@ -1262,8 +1359,9 @@ window.addEventListener(
       newButton,
       boardButton,
       pickerButton,
+      pickerSearch,
       cancelPicker,
-      ...optionButtons,
+      ...Array.from(pickerRows.values(), ({ button }) => button),
     ])
       handle.dispose();
     panelRoot.removeEventListener("keydown", escapePicker);

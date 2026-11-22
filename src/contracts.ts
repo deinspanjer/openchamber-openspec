@@ -155,6 +155,17 @@ export function decodeListing(value: unknown): {
   return { directory, root, planning: decodePlanning(input.planning), changes };
 }
 
+export function decodeModifiedChanges(value: unknown): string[] {
+  const { changes } = record(value);
+  if (
+    !Array.isArray(changes) ||
+    !changes.every((id) => typeof id === "string" && isChangeName(id)) ||
+    new Set(changes).size !== changes.length
+  )
+    throw new Error("Invalid modified change IDs.");
+  return changes;
+}
+
 export function decodeArtifacts(value: unknown, requires: unknown): Artifact[] {
   if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
   const artifacts = value.map((value): Artifact => {

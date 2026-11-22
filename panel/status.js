@@ -2007,6 +2007,13 @@ ${GUEST_UI_LOOK_CSS}`;
       node.textContent = next;
     }
   };
+  var setAttr = (node, name, value) => {
+    if (value === void 0 || value === null || value === "") {
+      node.removeAttribute(name);
+    } else if (node.getAttribute(name) !== value) {
+      node.setAttribute(name, value);
+    }
+  };
 
   // node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
@@ -2052,6 +2059,93 @@ ${GUEST_UI_LOOK_CSS}`;
       dispose: () => {
         node.removeEventListener("click", onClick);
         node.remove();
+      }
+    };
+  };
+
+  // node_modules/@openchamber/sdk/dist/ui/icons.js
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var ICON_PATH = {
+    search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
+    chevron: "M12 13.172l4.95-4.95 1.414 1.414L12 16 5.636 9.636 7.05 8.222z",
+    check: "M10 15.172l9.192-9.193 1.415 1.414L10 18l-6.364-6.364 1.414-1.414z",
+    close: "M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"
+  };
+  var icon = (name, size, className) => {
+    const node = document.createElementNS(SVG_NS, "svg");
+    node.setAttribute("viewBox", "0 0 24 24");
+    node.setAttribute("width", String(size));
+    node.setAttribute("height", String(size));
+    node.style.width = len(size);
+    node.style.height = len(size);
+    node.setAttribute("aria-hidden", "true");
+    node.setAttribute("fill", "currentColor");
+    if (className) {
+      node.setAttribute("class", className);
+    }
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", ICON_PATH[name]);
+    node.append(path);
+    return node;
+  };
+
+  // node_modules/@openchamber/sdk/dist/ui/search.js
+  var mountSearchField = (root2, initial) => {
+    ensureStyle(UI_CSS);
+    let props = initial;
+    const wrap = el("div", "oc-sdk oc-sdk-search");
+    const input = el("input", "oc-sdk-input");
+    input.type = "text";
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.setAttribute("role", "searchbox");
+    const clear = button("oc-sdk-search-clear");
+    clear.append(icon("close", 14));
+    clear.tabIndex = -1;
+    wrap.append(icon("search", 16, "oc-sdk-search-icon"), input, clear);
+    root2.append(wrap);
+    const paint = () => {
+      const placeholder = props.placeholder ?? "Search";
+      setAttr(input, "placeholder", placeholder);
+      input.setAttribute("aria-label", props.label ?? placeholder);
+      clear.setAttribute("aria-label", "Clear search");
+      if (input.value !== props.value) {
+        input.value = props.value;
+      }
+      wrap.dataset.active = props.value.trim() === "" ? "false" : "true";
+    };
+    const clearValue = () => {
+      if (props.value !== "") {
+        props.onChange("");
+      }
+      input.focus();
+    };
+    const onInput = () => {
+      props.onChange(input.value);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && input.value !== "") {
+        event.preventDefault();
+        clearValue();
+      }
+    };
+    input.addEventListener("input", onInput);
+    input.addEventListener("keydown", onKeyDown);
+    clear.addEventListener("click", clearValue);
+    paint();
+    if (props.autofocus) {
+      input.focus();
+    }
+    return {
+      update: (next) => {
+        props = { ...props, ...next };
+        paint();
+      },
+      dispose: () => {
+        input.removeEventListener("input", onInput);
+        input.removeEventListener("keydown", onKeyDown);
+        clear.removeEventListener("click", clearValue);
+        wrap.remove();
       }
     };
   };
@@ -2443,6 +2537,12 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Duplicate change.");
     return { directory: directory2, root: root2, planning: decodePlanning(input.planning), changes };
   }
+  function decodeModifiedChanges(value) {
+    const { changes } = record(value);
+    if (!Array.isArray(changes) || !changes.every((id) => typeof id === "string" && isChangeName(id)) || new Set(changes).size !== changes.length)
+      throw new Error("Invalid modified change IDs.");
+    return changes;
+  }
   function decodeArtifacts(value, requires) {
     if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
     const artifacts = value.map((value2) => {
@@ -2631,6 +2731,14 @@ ${GUEST_UI_LOOK_CSS}`;
         return value.content;
       },
       workflows: async (directory2) => decode2(await request("/workflows", { directory: directory2 }), decodeWorkflows),
+      modifiedChanges: async ({ directory: directory2, root: root2, planning }) => decode2(
+        await request("/modified-changes", {
+          directory: directory2,
+          expectedRoot: root2,
+          expectedPlanning: planning
+        }),
+        decodeModifiedChanges
+      ),
       list: async (directory2, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {
           directory: directory2,
@@ -3122,12 +3230,30 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   picker.className = "section-picker";
   picker.id = "section-picker";
   picker.hidden = true;
+  var searchRoot = document.createElement("div");
+  searchRoot.className = "picker-search";
+  searchRoot.hidden = true;
+  var pickerQuery = "";
+  var pickerSearch = mountSearchField(searchRoot, {
+    value: "",
+    placeholder: "Search changes",
+    label: "Search changes",
+    onChange: (value) => {
+      pickerQuery = value;
+      pickerSearch.update({ value });
+      renderPickerRows();
+    }
+  });
+  var searchInput = searchRoot.querySelector("input");
   var choices = document.createElement("ul");
   choices.setAttribute("aria-label", "Changes");
   var emptyChoices = document.createElement("p");
   emptyChoices.className = "note";
-  emptyChoices.textContent = "No untracked changes.";
-  picker.append(choices, emptyChoices);
+  var modifiedDescription = document.createElement("span");
+  modifiedDescription.id = "picker-modified-description";
+  modifiedDescription.textContent = "Modified in this checkout";
+  modifiedDescription.hidden = true;
+  picker.append(searchRoot, choices, emptyChoices, modifiedDescription);
   panelRoot.append(picker);
   var footerActions = document.createElement("div");
   footerActions.className = "footer-actions";
@@ -3169,7 +3295,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   pickerTrigger.classList.add("status-link");
   pickerTrigger.setAttribute("aria-controls", picker.id);
   pickerTrigger.setAttribute("aria-expanded", "false");
-  var optionButtons = [];
+  var pickerRows = /* @__PURE__ */ new Map();
   var cancelRoot = document.createElement("div");
   picker.append(cancelRoot);
   var cancelPicker = mountButton(cancelRoot, {
@@ -3178,19 +3304,44 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     variant: "secondary",
     onClick: () => setPickerOpen(false)
   });
-  var pickerKey = "";
+  var pickerItems = [];
+  var pickerScope = null;
+  var latestPickerScope = null;
+  var hintOpening = null;
   var viewKey = "";
   var showingLive = false;
   var readError;
   var mountedCards = /* @__PURE__ */ new Map();
   function setPickerOpen(open, restoreFocus = true) {
+    hintOpening = null;
     picker.hidden = !open;
     pickerTrigger.setAttribute("aria-expanded", String(open));
-    if (open) choices.querySelector("button:enabled")?.focus();
-    else if (restoreFocus) pickerTrigger.focus();
+    if (open) {
+      pickerQuery = "";
+      pickerSearch.update({ value: "" });
+      renderPickerRows();
+      if (!searchRoot.hidden) searchInput.focus();
+      else choices.querySelector("button:enabled")?.focus();
+      const scope = pickerScope;
+      if (scope && pickerItems.length && samePickerScope(scope, latestPickerScope)) {
+        const opening = { hints: /* @__PURE__ */ new Set() };
+        hintOpening = opening;
+        const current = captureContext();
+        void client.modifiedChanges(scope).then(
+          (ids) => {
+            if (hintOpening !== opening || !current() || !samePickerScope(scope, latestPickerScope))
+              return;
+            opening.hints = new Set(ids);
+            renderPickerRows();
+          },
+          () => {
+          }
+        );
+      }
+    } else if (restoreFocus) pickerTrigger.focus();
   }
   function escapePicker(event) {
-    if (event.key !== "Escape" || picker.hidden) return;
+    if (event.key !== "Escape" || event.defaultPrevented || picker.hidden) return;
     event.preventDefault();
     event.stopPropagation();
     setPickerOpen(false);
@@ -3240,52 +3391,89 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     notes.hidden = !notes.childElementCount;
     pickerButton.update({ disabled: view.kind !== "ready" || !sessionId });
     cancelRoot.hidden = !cards.length;
-    if (view.kind === "ready")
-      updatePicker(
-        view.listing,
-        cards.map(({ id }) => id)
-      );
-    else setPickerOpen(false, false);
+    if (view.kind !== "ready") setPickerOpen(false, false);
   }
   function pickerPriority({ completedTasks, totalTasks }) {
     if (!totalTasks) return 2;
     if (!completedTasks) return 1;
     return completedTasks < totalTasks ? 0 : 3;
   }
+  function samePickerScope(left, right) {
+    return left.directory === right?.directory && left.root === right.root && left.planning === right.planning;
+  }
+  function updateLatestPickerScope(scope) {
+    if (samePickerScope(scope, latestPickerScope)) return;
+    latestPickerScope = scope;
+    if (!hintOpening) return;
+    hintOpening = null;
+    renderPickerRows();
+  }
   function updatePicker(listing, tracked) {
-    const items = [...listing.changes].filter(({ id }) => !tracked.includes(id)).sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => id);
-    const nextKey = JSON.stringify([sessionId, items]);
-    if (pickerKey === nextKey) return;
-    pickerKey = nextKey;
-    emptyChoices.hidden = items.length !== 0;
-    const focused = choices.contains(document.activeElement) ? document.activeElement?.textContent : null;
-    for (const button2 of optionButtons) button2.dispose();
-    choices.replaceChildren();
-    optionButtons = items.map((id) => {
-      const row = document.createElement("li");
-      choices.append(row);
-      const button2 = mountButton(row, {
-        label: id,
-        size: "sm",
-        variant: "secondary",
-        onClick: () => {
-          const session = sessionId;
-          const current = captureContext();
-          if (!session || !current()) return;
-          setPickerOpen(false);
-          void (async () => {
-            const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
-            if (!current()) return;
-            if (saved) read();
-            else await showError(current, null, "Could not track the OpenSpec change. Try again.");
-          })();
-        }
-      });
-      if (focused === id) row.querySelector("button")?.focus();
-      return button2;
+    pickerScope = listing;
+    pickerItems = listing.changes.filter(({ id }) => !tracked.includes(id)).sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => id);
+    renderPickerRows();
+  }
+  function mountPickerRow(id) {
+    const row = document.createElement("li");
+    const button2 = mountButton(row, {
+      label: id,
+      size: "sm",
+      variant: "secondary",
+      onClick: () => {
+        const session = sessionId;
+        const current = captureContext();
+        if (!session || !current()) return;
+        setPickerOpen(false);
+        void (async () => {
+          const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
+          if (!current()) return;
+          if (saved) read();
+          else await showError(current, null, "Could not track the OpenSpec change. Try again.");
+        })();
+      }
     });
-    if (focused && !choices.contains(document.activeElement))
-      (choices.querySelector("button:enabled") ?? pickerTrigger).focus();
+    const control = row.querySelector("button");
+    return { row, button: button2, control };
+  }
+  function renderPickerRows() {
+    const query = pickerQuery.trim().toLocaleLowerCase();
+    const hints = hintOpening?.hints;
+    const items = pickerItems.filter((id) => id.toLocaleLowerCase().includes(query)).sort((left, right) => Number(hints?.has(right) ?? false) - Number(hints?.has(left) ?? false));
+    searchRoot.hidden = pickerItems.length <= 1 && pickerQuery === "";
+    emptyChoices.hidden = items.length !== 0;
+    emptyChoices.textContent = pickerItems.length ? "No matching changes." : "No untracked changes.";
+    const focused = document.activeElement;
+    const hadChoiceFocus = choices.contains(focused);
+    const visible = new Set(items);
+    for (const [id, { row, button: button2 }] of pickerRows) {
+      if (visible.has(id)) continue;
+      button2.dispose();
+      row.remove();
+      pickerRows.delete(id);
+    }
+    for (const [index, id] of items.entries()) {
+      let mounted = pickerRows.get(id);
+      if (!mounted) {
+        mounted = mountPickerRow(id);
+        pickerRows.set(id, mounted);
+      }
+      const { row, control } = mounted;
+      if (hints?.has(id)) {
+        control.setAttribute("aria-describedby", modifiedDescription.id);
+      } else control.removeAttribute("aria-describedby");
+      let previous = choices.children.item(index);
+      if (previous === row) continue;
+      if (control === focused) {
+        while (previous && previous !== row) {
+          choices.append(previous);
+          previous = choices.children.item(index);
+        }
+      } else choices.insertBefore(row, previous);
+    }
+    if (hadChoiceFocus && !choices.contains(document.activeElement)) {
+      if (!searchRoot.hidden) searchInput.focus();
+      else (choices.querySelector("button:enabled") ?? pickerTrigger).focus();
+    }
   }
   function seedTrackedChanges() {
     return selection2 ? resolveSessionChanges(sessionId, sessions, null, selection2.active) : [];
@@ -3927,6 +4115,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         if (!current()) return;
         if (listingResult.status === "rejected") throw listingResult.reason;
         const listing = listingResult.value;
+        updateLatestPickerScope(listing);
         const saved = capturedSession ? await readTrackedChanges(host, capturedSession) : null;
         if (!current()) return;
         if (capturedSession && saved === null) {
@@ -3937,6 +4126,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         const active2 = new Set(byId.keys());
         const changes = resolveSessionChanges(capturedSession, sessions, saved, active2) ?? [];
         selection2 = { active: active2, saved, changes };
+        updatePicker(listing, changes);
         const cards = await Promise.all(
           changes.map(async (id) => {
             try {
@@ -4159,8 +4349,9 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         newButton,
         boardButton,
         pickerButton,
+        pickerSearch,
         cancelPicker,
-        ...optionButtons
+        ...Array.from(pickerRows.values(), ({ button: button2 }) => button2)
       ])
         handle.dispose();
       panelRoot.removeEventListener("keydown", escapePicker);
