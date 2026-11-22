@@ -2007,13 +2007,6 @@ ${GUEST_UI_LOOK_CSS}`;
       node.textContent = next;
     }
   };
-  var setAttr = (node, name, value) => {
-    if (value === void 0 || value === null || value === "") {
-      node.removeAttribute(name);
-    } else if (node.getAttribute(name) !== value) {
-      node.setAttribute(name, value);
-    }
-  };
 
   // node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
@@ -2058,106 +2051,6 @@ ${GUEST_UI_LOOK_CSS}`;
       },
       dispose: () => {
         node.removeEventListener("click", onClick);
-        node.remove();
-      }
-    };
-  };
-
-  // node_modules/@openchamber/sdk/dist/ui/icons.js
-  var SVG_NS = "http://www.w3.org/2000/svg";
-  var ICON_PATH = {
-    search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
-    chevron: "M12 13.172l4.95-4.95 1.414 1.414L12 16 5.636 9.636 7.05 8.222z",
-    check: "M10 15.172l9.192-9.193 1.415 1.414L10 18l-6.364-6.364 1.414-1.414z",
-    close: "M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636z"
-  };
-  var icon = (name, size, className) => {
-    const node = document.createElementNS(SVG_NS, "svg");
-    node.setAttribute("viewBox", "0 0 24 24");
-    node.setAttribute("width", String(size));
-    node.setAttribute("height", String(size));
-    node.style.width = len(size);
-    node.style.height = len(size);
-    node.setAttribute("aria-hidden", "true");
-    node.setAttribute("fill", "currentColor");
-    if (className) {
-      node.setAttribute("class", className);
-    }
-    const path = document.createElementNS(SVG_NS, "path");
-    path.setAttribute("d", ICON_PATH[name]);
-    node.append(path);
-    return node;
-  };
-
-  // node_modules/@openchamber/sdk/dist/ui/badge.js
-  var applyTone = (node, tone2) => {
-    setAttr(node, "data-tone", tone2 && tone2 !== "neutral" ? tone2 : null);
-  };
-  var mountBadge = (root2, initial) => {
-    ensureStyle(UI_CSS);
-    let props = initial;
-    const node = el("span", "oc-sdk oc-sdk-badge");
-    root2.append(node);
-    const paint = () => {
-      setText(node, props.label);
-      applyTone(node, props.tone);
-    };
-    paint();
-    return {
-      update: (next) => {
-        props = { ...props, ...next };
-        paint();
-      },
-      dispose: () => {
-        node.remove();
-      }
-    };
-  };
-
-  // node_modules/@openchamber/sdk/dist/ui/progress.js
-  var clampProgress = (value) => Number.isFinite(value) ? Math.min(100, Math.max(0, Math.floor(value))) : 0;
-  var mountProgress = (root2, initial) => {
-    ensureStyle(UI_CSS);
-    let props = initial;
-    const node = el("div", "oc-sdk oc-sdk-progress");
-    const caption = el("div", "oc-sdk-progress-label");
-    const label = el("span");
-    const percent = el("span", "oc-sdk-progress-value");
-    const percentText = el("span");
-    const doneMark = icon("check", 14);
-    percent.append(doneMark, percentText);
-    caption.append(label, percent);
-    const track = el("div", "oc-sdk-progress-track");
-    track.setAttribute("role", "progressbar");
-    track.setAttribute("aria-valuemin", "0");
-    track.setAttribute("aria-valuemax", "100");
-    const fill = el("div", "oc-sdk-progress-fill");
-    track.append(fill);
-    node.append(caption, track);
-    root2.append(node);
-    const paint = () => {
-      const value = clampProgress(props.value);
-      applyTone(fill, props.tone);
-      fill.style.transform = `scaleX(${value / 100})`;
-      track.setAttribute("aria-valuenow", String(value));
-      if (props.label)
-        track.setAttribute("aria-label", props.label);
-      else
-        track.removeAttribute("aria-label");
-      setText(label, props.label);
-      setText(percentText, `${value}%`);
-      const done = value === 100 && (!props.tone || props.tone === "neutral");
-      setAttr(node, "data-done", done ? "true" : null);
-      doneMark.style.display = done ? "" : "none";
-      caption.hidden = !props.label;
-    };
-    paint();
-    return {
-      update: (next) => {
-        props = { ...props, ...next };
-        paint();
-      },
-      dispose: () => {
         node.remove();
       }
     };
@@ -2437,6 +2330,12 @@ ${GUEST_UI_LOOK_CSS}`;
     if (worktreeName !== null && active2.has(worktreeName))
       return { changes: [worktreeName], source: "worktree" };
     return { changes: [], source: "none" };
+  }
+  function taskWindow(tasks, size = 5) {
+    const incomplete = tasks.findIndex((task) => !task.done);
+    const current = incomplete === -1 ? tasks.length - 1 : incomplete;
+    const start = Math.max(0, Math.min(current - Math.floor(size / 2), tasks.length - size));
+    return tasks.slice(start, start + size);
   }
 
   // src/contracts.ts
@@ -2940,7 +2839,6 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     { id: "progress", label: "In Progress", action: "continue" },
     { id: "complete", label: "Complete", action: "archive" }
   ];
-  var workflowLabel = (stage) => stages.find((item) => item.id === stage).action;
   var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
 
   // src/status.ts
@@ -2987,15 +2885,6 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   panelRoot.append(picker);
   controls.append(bodyRefresh);
   var refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
-  var openBoard = mountButton(controls, {
-    label: "Open board",
-    size: "sm",
-    variant: "secondary",
-    onClick: () => {
-      const current = captureContext();
-      void host.openSurface("plugin:openspec-board").catch((caught) => showError(current, caught, "Could not open the OpenSpec board."));
-    }
-  });
   controls.append(pickerRoot);
   var pickerButton = mountButton(pickerRoot, {
     label: "\uFF0B Track a change",
@@ -3127,11 +3016,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       message: caught instanceof HostRequestError ? caught.message : fallback
     }).catch((error) => console.warn("Could not show the OpenSpec error.", error));
   }
-  async function preparePrompt(change, intent, current) {
+  async function preparePrompt(change, current) {
     if (!current()) return;
     const session = sessionId;
     try {
-      await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
+      await host.compose({ text: actionPrompt(change, "primary"), mode: "replace" });
       if (!current()) return;
       if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
       await host.toast({
@@ -3142,9 +3031,31 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       await showError(current, caught, "The workflow prompt could not be prepared.");
     }
   }
+  function mountTaskTitle() {
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "flyout-trigger task-title";
+    const inline = document.createElement("div");
+    inline.hidden = true;
+    let task = null;
+    const flyout = mountFlyout(button2, inline, () => task ? taskFlyout(task) : null);
+    return {
+      button: button2,
+      inline,
+      update(next) {
+        if (task?.id !== next?.id) flyout.reset();
+        task = next;
+        const title = task?.description.split("\n", 1)[0] ?? "";
+        if (button2.textContent !== title) button2.textContent = title;
+        if (task) flyout.update();
+      },
+      refreshAnchor: flyout.update,
+      dispose: flyout.dispose
+    };
+  }
   function mountTrackedCard(id) {
     const element = document.createElement("article");
-    element.className = "section-content";
+    element.className = "status-card";
     const heading = document.createElement("div");
     heading.className = "section-heading";
     const title = document.createElement("h1");
@@ -3158,51 +3069,73 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     inline.hidden = true;
     let change = null;
     const nameAnchor = mountFlyout(nameButton, inline, () => change ? changeFlyout(change) : null);
-    const stage = mountBadge(heading, { label: "" });
-    const meter = document.createElement("div");
-    meter.className = "section-progress";
-    const progress = mountProgress(meter, { value: 0 });
-    meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
     const count2 = document.createElement("span");
-    meter.append(count2);
+    heading.append(count2);
+    const meter = document.createElement("progress");
+    meter.className = "section-progress";
+    meter.setAttribute("aria-label", "Task completion");
+    meter.max = 100;
     const disclosure = document.createElement("details");
     const summary = document.createElement("summary");
-    const description = document.createElement("p");
-    disclosure.append(summary, description);
-    let taskKey = "";
-    const artifacts = document.createElement("ul");
-    artifacts.className = "section-artefacts";
-    artifacts.setAttribute("aria-label", "Planning artefacts");
-    let artifactKey = "";
-    let artifactBadges = [];
+    const tasksLabel = document.createElement("span");
+    tasksLabel.className = "tasks-label";
+    tasksLabel.textContent = "Tasks:";
+    const currentTask = mountTaskTitle();
+    summary.append(tasksLabel, currentTask.button);
+    const taskList = document.createElement("ul");
+    taskList.className = "task-window";
+    disclosure.append(summary, taskList);
+    let taskKey = null;
+    let taskRows = /* @__PURE__ */ new Map();
     const actions = document.createElement("div");
-    actions.className = "section-controls";
+    actions.className = "card-actions";
     const primary2 = mountButton(actions, {
       label: "",
       size: "sm",
       onClick: () => {
-        if (change) void preparePrompt(change, "primary", captureContext());
+        if (change) void preparePrompt(change, captureContext());
       }
     });
-    const verifyRoot = document.createElement("div");
-    actions.append(verifyRoot);
-    const verify = mountButton(verifyRoot, {
-      label: "verify",
+    const sync = mountButton(actions, {
+      label: "sync",
+      size: "sm",
+      variant: "secondary",
+      disabled: true,
+      onClick: () => {
+      }
+    });
+    const validate = mountButton(actions, {
+      label: "validate",
+      size: "sm",
+      variant: "secondary",
+      disabled: true,
+      onClick: () => {
+      }
+    });
+    const board = mountButton(actions, {
+      label: "board",
       size: "sm",
       variant: "secondary",
       onClick: () => {
-        if (change) void preparePrompt(change, "verify", captureContext());
+        const current = captureContext();
+        void host.openSurface("plugin:openspec-board").catch(
+          (caught) => showError(current, caught, "Could not open the OpenSpec board.")
+        );
       }
     });
     const details = document.createElement("div");
     details.className = "section-content";
-    details.append(heading, inline, meter, disclosure, artifacts, actions);
+    details.append(heading, inline, meter, disclosure, currentTask.inline, actions);
     const error = document.createElement("p");
     error.setAttribute("role", "alert");
     element.append(details, error);
     return {
       element,
-      refreshAnchor: nameAnchor.update,
+      refreshAnchor() {
+        nameAnchor.update();
+        if (taskKey !== null) currentTask.refreshAnchor();
+        for (const { title: title2 } of taskRows.values()) title2.refreshAnchor();
+      },
       update(card) {
         details.hidden = "message" in card;
         error.hidden = !details.hidden;
@@ -3213,41 +3146,51 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         }
         change = card.change;
         nameAnchor.update();
-        stage.update({ label: stageLabel(change.stage) });
-        primary2.update({ label: workflowLabel(change.stage) });
-        verifyRoot.hidden = change.stage !== "complete";
+        primary2.update({
+          label: change.stage === "planning" ? "propose" : change.stage === "complete" ? "archive" : "apply"
+        });
         const { completedTasks, totalTasks } = change;
-        progress.update({ value: totalTasks ? 100 * completedTasks / totalTasks : 0 });
+        const percentage = totalTasks ? 100 * completedTasks / totalTasks : 0;
+        meter.value = percentage;
+        meter.setAttribute("aria-valuenow", String(percentage));
         count2.textContent = `${completedTasks}/${totalTasks}`;
-        const next = completedTasks < totalTasks ? card.tasks.find((task) => !task.done) : void 0;
-        const nextKey = next?.id ?? "";
+        const next = card.tasks.find((task) => !task.done) ?? card.tasks.at(-1) ?? null;
+        const nextKey = next?.id ?? null;
         if (nextKey !== taskKey) disclosure.open = false;
         taskKey = nextKey;
         disclosure.hidden = !next;
-        if (next) {
-          if (summary.textContent !== next.description) summary.textContent = next.description;
-          if (description.textContent !== next.description)
-            description.textContent = next.description;
+        currentTask.update(next);
+        const rows = /* @__PURE__ */ new Map();
+        for (const [index, task] of taskWindow(card.tasks).entries()) {
+          let item = taskRows.get(task.id);
+          if (!item) {
+            const row = document.createElement("li");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.disabled = true;
+            checkbox.setAttribute("aria-label", "Task completion");
+            const title2 = mountTaskTitle();
+            row.append(checkbox, title2.button, title2.inline);
+            item = { row, checkbox, title: title2 };
+          }
+          item.checkbox.checked = task.done;
+          item.title.update(task);
+          rows.set(task.id, item);
+          const previous = taskList.children.item(index);
+          if (previous !== item.row) taskList.insertBefore(item.row, previous);
         }
-        const required = requiredArtifactIds(change);
-        const applicable = change.artifacts.filter(({ id: id2 }) => required.has(id2));
-        const nextArtifactKey = JSON.stringify(applicable.map(({ id: id2, status }) => [id2, status]));
-        if (artifactKey === nextArtifactKey) return;
-        artifactKey = nextArtifactKey;
-        for (const badge of artifactBadges) badge.dispose();
-        artifactBadges = [];
-        artifacts.replaceChildren();
-        artifacts.hidden = !applicable.length;
-        for (const artifact of applicable) {
-          const item = document.createElement("li");
-          item.append(`${artifact.id} `);
-          artifactBadges.push(mountBadge(item, { label: artifact.status }));
-          artifacts.append(item);
+        for (const [id2, item] of taskRows) {
+          if (rows.has(id2)) continue;
+          item.title.dispose();
+          item.row.remove();
         }
+        taskRows = rows;
       },
       dispose() {
         nameAnchor.dispose();
-        for (const handle of [stage, progress, primary2, verify, ...artifactBadges]) handle.dispose();
+        currentTask.dispose();
+        for (const { title: title2 } of taskRows.values()) title2.dispose();
+        for (const handle of [primary2, sync, validate, board]) handle.dispose();
         element.remove();
       }
     };
@@ -3280,20 +3223,41 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     return data;
   }
+  function taskFlyout(task) {
+    const data = { kind: "task", id: "", description: "" };
+    data.id = fitText(
+      task.id,
+      FLYOUT_DATA_LIMIT,
+      (id) => JSON.stringify({ ...data, id, description: "\u2026" }).length
+    );
+    data.description = fitText(
+      task.description,
+      4e3,
+      (description) => JSON.stringify({ ...data, description }).length
+    );
+    return data;
+  }
   function decodeFlyout(value) {
-    if (!value || typeof value !== "object" || !("kind" in value) || value.kind !== "change")
-      return null;
-    if (!("name" in value) || typeof value.name !== "string" || !("goal" in value) || value.goal !== null && typeof value.goal !== "string" || !("stage" in value) || value.stage !== "planning" && value.stage !== "ready" && value.stage !== "progress" && value.stage !== "complete")
+    if (!value || typeof value !== "object" || !("kind" in value)) return null;
+    if (value.kind === "task")
+      return "id" in value && typeof value.id === "string" && "description" in value && typeof value.description === "string" ? { kind: "task", id: value.id, description: value.description } : null;
+    if (value.kind !== "change" || !("name" in value) || typeof value.name !== "string" || !("goal" in value) || value.goal !== null && typeof value.goal !== "string" || !("stage" in value) || value.stage !== "planning" && value.stage !== "ready" && value.stage !== "progress" && value.stage !== "complete")
       return null;
     return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
   }
   function renderFlyout(container, data, untrack) {
+    container.classList.add("flyout");
+    if (data.kind === "task") {
+      const description = document.createElement("p");
+      description.textContent = data.description;
+      container.replaceChildren(description);
+      return;
+    }
     const heading = document.createElement(container === panelRoot ? "h1" : "p");
     heading.className = "flyout-heading";
     heading.textContent = data.name;
     const stage = document.createElement("p");
     stage.textContent = stageLabel(data.stage);
-    container.classList.add("flyout");
     container.replaceChildren(heading, stage);
     if (data.goal) {
       const goal = document.createElement("p");
@@ -3317,9 +3281,10 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       inline.hidden = true;
       if (!anchor) button2.setAttribute("aria-expanded", "false");
     }
-    function onClick() {
+    function onClick(event) {
       const data = getData();
       if (!data) return;
+      event.preventDefault();
       if (anchor) {
         if (button2.getAttribute("aria-expanded") !== "true")
           button2.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
@@ -3331,7 +3296,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         action = renderFlyout(
           inline,
           data,
-          session ? () => void untrackChange(session, data.name, current, seedTrackedChanges, () => {
+          session && data.kind === "change" ? () => void untrackChange(session, data.name, current, seedTrackedChanges, () => {
             closeInline();
             read();
           }) : void 0
@@ -3341,6 +3306,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     button2.addEventListener("click", onClick);
     return {
+      reset() {
+        anchor?.dispose();
+        anchor = void 0;
+        closeInline();
+      },
       update() {
         if (anchor && !hasPopovers) {
           anchor.dispose();
@@ -3540,7 +3510,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           popoverAction = renderFlyout(
             panelRoot,
             data,
-            nextSession && popoverId ? () => void untrackChange(
+            nextSession && popoverId && data.kind === "change" ? () => void untrackChange(
               nextSession,
               data.name,
               () => !disposed && popoverSession === nextSession,
@@ -3609,7 +3579,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       offSessions?.();
       popoverAction?.dispose();
       for (const card of mountedCards.values()) card.dispose();
-      for (const handle of [refreshButton, openBoard, pickerButton, cancelPicker, ...optionButtons])
+      for (const handle of [refreshButton, pickerButton, cancelPicker, ...optionButtons])
         handle.dispose();
       panelRoot.removeEventListener("keydown", escapePicker);
       host.dispose();

@@ -9,7 +9,8 @@
         margin: 0;
       }
       main,
-      .section-content {
+      .section-content,
+      .status-card {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
         gap: 8px;
@@ -49,28 +50,50 @@
         color: var(--oc-muted);
       }
       .section-heading,
-      .section-progress,
-      .section-artefacts,
-      .section-controls {
+      .section-controls,
+      .card-actions {
         display: flex;
         align-items: center;
         gap: 8px;
       }
-      .section-heading,
-      .section-artefacts,
-      .section-controls {
+      .section-controls,
+      .card-actions {
         flex-wrap: wrap;
       }
-      .section-progress .oc-sdk-progress {
-        flex: 1;
+      .status-card {
+        gap: 4px;
+        padding: 6px;
+        border-radius: var(--oc-radius);
+        background: var(--oc-elevated);
       }
-      .section-progress span {
+      .status-card .section-content {
+        gap: 4px;
+      }
+      .section-heading h1 {
+        min-width: 0;
+      }
+      .section-heading span {
         font-variant-numeric: tabular-nums;
       }
-      .section-artefacts {
-        list-style: none;
-        padding: 0;
-        margin: 0;
+      .section-progress {
+        appearance: none;
+        display: block;
+        width: 100%;
+        height: 3px;
+        overflow: hidden;
+        border: 0;
+        border-radius: 2px;
+        background: var(--oc-muted-surface);
+        color: var(--oc-primary-text);
+      }
+      .section-progress::-webkit-progress-bar {
+        background: var(--oc-muted-surface);
+      }
+      .section-progress::-webkit-progress-value {
+        background: currentColor;
+      }
+      .section-progress::-moz-progress-bar {
+        background: currentColor;
       }
       .section-picker ul {
         display: grid;
@@ -94,12 +117,47 @@
       }
       summary {
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        list-style: none;
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary::before {
+        content: "▸";
+      }
+      details[open] > summary::before {
+        content: "▾";
+      }
+      .tasks-label {
+        flex: none;
+        text-decoration: underline;
+      }
+      .section-heading button,
+      .task-title {
+        min-width: 0;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        text-align: start;
       }
-      details p {
-        white-space: pre-wrap;
+      .task-window {
+        display: grid;
+        gap: 2px;
+        padding: 0;
+        margin: 4px 0 0;
+      }
+      .task-window li {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 4px;
+      }
+      .task-window .flyout {
+        grid-column: 1 / -1;
       }
       [data-pointer="coarse"] :is(button, summary) {
         min-height: 44px;

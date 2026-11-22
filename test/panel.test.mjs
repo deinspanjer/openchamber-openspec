@@ -266,8 +266,10 @@ function hostHtml(statusCase, pointer, popovers) {
       if (statusCase === "archive") changes.push({ id: "archive-all", goal: null, completedTasks: 0, totalTasks: 0 });
       if (statusCase === "long-goal") changes[0].goal = "a".repeat(17000);
       if (statusCase === "escaped-goal") changes[0].goal = String.fromCharCode(1).repeat(17000);
-      if (["progress", "complete", "read-error"].includes(statusCase)) {
-        changes[0].completedTasks = statusCase === "complete" ? 7 : 3;
+      if (statusCase.startsWith("compact-"))
+        storage.set("session-change:fixture-session", { changes: ["first-change", "second-change"], savedAt: 1 });
+      if (["progress", "complete", "read-error", "compact-progress", "compact-complete"].includes(statusCase)) {
+        changes[0].completedTasks = statusCase.endsWith("complete") ? 7 : 3;
         changes[0].totalTasks = 7;
         tasks = Array.from({ length: 7 }, (_, index) => ({
           id: String(index + 1),
@@ -276,7 +278,7 @@ function hostHtml(statusCase, pointer, popovers) {
         }));
         failTasks = statusCase === "read-error";
       }
-      if (statusCase === "planning") {
+      if (statusCase === "planning" || statusCase === "compact-planning") {
         changes[0].completedTasks = changes[0].totalTasks = 0;
         tasks = [];
         readinessCase = "blocked-tasks";
@@ -516,7 +518,7 @@ function hostHtml(statusCase, pointer, popovers) {
           if (!item) send({ error: { code: "CHANGE_UNAVAILABLE", message: "Removed" } }, 404);
           else if (failSummary && item.id === "first-change") { failSummary = false;
             send({ error: { code: "UNAVAILABLE", message: "Read failed" } }, 503); }
-           else if (readinessCase) send({ id: item.id, goal: item.goal, root: currentRoot,
+            else if (readinessCase && (statusCase !== "compact-planning" || item.id === "first-change")) send({ id: item.id, goal: item.goal, root: currentRoot,
              artifacts: [
                 { id: "proposal", status: readinessCase === "unknown" ? "done" : "ready", outputPath: "proposal.md", requires: [] },
                  { id: "specs", status: "blocked", outputPath: "specs/**/*.md", requires: ["proposal"] },
@@ -631,7 +633,7 @@ for (const popovers of [true, false]) {
         const flyout = page.frameLocator('iframe[title="OpenSpec test popover"]');
         await flyout.getByText(goal, { exact: true }).waitFor({ timeout: 3000 });
         assert.equal(await section.getByText(goal, { exact: true }).count(), 0);
-        assert.equal(await flyout.getByRole("button", { name: "Open board" }).count(), 0);
+        assert.equal(await flyout.getByRole("button", { name: "board", exact: true }).count(), 0);
         await page.evaluate(() => __closePopover("outside"));
         await page.waitForFunction(
           () => !document.querySelector('iframe[title="OpenSpec test popover"]'),
@@ -666,6 +668,93 @@ test("session section shows the same shortened 17,000-character goal in either f
         .waitFor({ timeout: 3000 });
       await page.close();
     }
+  });
+});
+
+for (const [stage, chip, count, current, percent] of [
+  ["progress", "apply", "3/7", "2.1 Add a section that tracks a change", 3 / 7],
+  ["complete", "archive", "7/7", "Task 7", 1],
+  ["planning", "propose", "0/0", null, 0],
+]) {
+  test(`session section shows compact cards for ${stage} and ready`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=compact-${stage}`);
+      const frame = page.frameLocator("iframe");
+      const first = frame
+        .getByRole("article")
+        .filter({ has: frame.getByRole("heading", { name: "first-change" }) });
+      const second = frame
+        .getByRole("article")
+        .filter({ has: frame.getByRole("heading", { name: "second-change" }) });
+      const bar = first.getByRole("progressbar", { name: "Task completion" });
+      await bar.waitFor({ timeout: 3000 });
+      assert.equal(await first.getByText(count, { exact: true }).isVisible(), true);
+      assert.equal((await bar.boundingBox()).height, 3);
+      const value = Number(await bar.getAttribute("aria-valuenow"));
+      assert.ok(Math.abs(value / 100 - percent) < 0.001);
+      const details = first.locator("details");
+      assert.equal(await details.isVisible(), current !== null);
+      if (current) {
+        const summary = details.locator("summary");
+        assert.equal(await details.getAttribute("open"), null);
+        assert.equal(await summary.getByText("Tasks:", { exact: true }).isVisible(), true);
+        assert.equal(
+          await summary.getByRole("button", { name: current, exact: true }).isVisible(),
+          true,
+        );
+      }
+      for (const [card, action] of [
+        [first, chip],
+        [second, "apply"],
+      ]) {
+        const names = await card.getByRole("button").allTextContents();
+        assert.deepEqual(names.slice(-4), [action, "sync", "validate", "board"]);
+      }
+      assert.equal(await second.getByText("0/0", { exact: true }).isVisible(), true);
+      assert.equal(await second.locator("details").isVisible(), false);
+    });
+  });
+}
+
+test("session section expands the task window and opens a full task flyout", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=compact-progress`);
+    const frame = page.frameLocator("iframe");
+    const card = frame
+      .getByRole("article")
+      .filter({ has: frame.getByRole("heading", { name: "first-change" }) });
+    const details = card.locator("details");
+    const current = "2.1 Add a section that tracks a change";
+    const summary = details.locator("summary");
+    await summary.getByRole("button", { name: current, exact: true }).click({ timeout: 3000 });
+    await card
+      .getByText("Keep the whole description readable when expanded.", { exact: false })
+      .waitFor();
+    assert.equal(await details.getAttribute("open"), null);
+    await summary.getByRole("button", { name: current, exact: true }).click();
+    await summary.getByText("Tasks:", { exact: true }).click();
+    const rows = details.getByRole("listitem");
+    assert.deepEqual(await rows.getByRole("button").allTextContents(), [
+      "Task 2",
+      "Task 3",
+      current,
+      "Task 5",
+      "Task 6",
+    ]);
+    const boxes = await rows
+      .getByRole("checkbox")
+      .evaluateAll((nodes) => nodes.map(({ checked, disabled }) => [checked, disabled]));
+    assert.deepEqual(boxes, [
+      [true, true],
+      [true, true],
+      [false, true],
+      [false, true],
+      [false, true],
+    ]);
+    await rows.getByRole("button", { name: "Task 6", exact: true }).click();
+    await rows.last().getByText("Task 6", { exact: true }).last().waitFor();
   });
 });
 
@@ -726,66 +815,6 @@ for (const scenario of ["saved", "worktree", "archive", "stale", "legacy-value",
       assert.equal(
         await page.evaluate(() => __requests.some((r) => r.path === "/summaries")),
         false,
-      );
-      await page.close();
-    });
-  });
-}
-
-for (const [scenario, count, name, progress] of [
-  ["progress", "3/7", "In Progress", 42],
-  ["planning", "0/0", "Planning", 0],
-  ["complete", "7/7", "Complete", 100],
-]) {
-  test(`session section shows ${scenario} progress without a batch read`, async () => {
-    await withPanel(async (browser, url) => {
-      const page = await browser.newPage();
-      await page.goto(`${url}?status=${scenario}`);
-      const frame = page.frameLocator("iframe");
-      const bar = frame.getByRole("progressbar");
-      await bar.waitFor({ timeout: 3000 });
-      assert.equal(await bar.getAttribute("aria-valuenow"), String(progress));
-      assert.equal(await frame.getByText(count, { exact: true }).isVisible(), true);
-      assert.equal(await frame.getByText(name, { exact: true }).isVisible(), true);
-      assert.ok(
-        (await frame.getByText(count, { exact: true }).boundingBox()).x >
-          (await bar.boundingBox()).x,
-      );
-      const detail = frame.locator("details");
-      if (scenario === "progress") {
-        assert.equal(await detail.getAttribute("open"), null);
-        const summary = detail.locator("summary");
-        assert.match(await summary.innerText(), /^2\.1 Add a section/);
-        assert.equal(await summary.evaluate((node) => getComputedStyle(node).whiteSpace), "nowrap");
-        await summary.click();
-        await detail
-          .getByText("Keep the whole description readable when expanded.", { exact: false })
-          .last()
-          .waitFor();
-        assert.match(
-          await detail.locator("p").innerText(),
-          /2\.1 Add a section.*\nKeep the whole description readable/s,
-        );
-      } else {
-        assert.equal(await detail.isVisible(), false);
-      }
-      const artifacts = frame.getByRole("list", { name: "Planning artefacts" });
-      assert.deepEqual(
-        (await artifacts.getByRole("listitem").allTextContents()).map((line) =>
-          line.trim().replace(/\s+/g, " "),
-        ),
-        scenario === "planning"
-          ? ["proposal ready", "specs blocked", "tasks blocked"]
-          : ["proposal done", "specs done", "tasks done"],
-      );
-      await page.waitForFunction(() => __completed.includes("/tasks"));
-      assert.deepEqual(
-        await page.evaluate(() =>
-          __requests
-            .filter((r) => ["/changes", "/summaries", "/summary", "/tasks"].includes(r.path))
-            .map((r) => r.path),
-        ),
-        ["/changes", "/summary", "/tasks"],
       );
       await page.close();
     });
@@ -983,7 +1012,7 @@ for (const [width, pointer, scenario] of [
   });
 }
 
-test("session section continue prepares the board's unsent prompt and saves the choice", async () => {
+test("session section apply prepares the board's unsent prompt and saves the choice", async () => {
   await withPanel(async (browser, url) => {
     const boardPage = await browser.newPage();
     await boardPage.goto(url);
@@ -1000,7 +1029,7 @@ test("session section continue prepares the board's unsent prompt and saves the 
     const page = await browser.newPage();
     await page.goto(`${url}?status=item`);
     const section = page.frameLocator("iframe");
-    await section.getByRole("button", { name: "continue", exact: true }).click({ timeout: 3000 });
+    await section.getByRole("button", { name: "apply", exact: true }).click({ timeout: 3000 });
     await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
     await page.waitForFunction(
       () => __stored()["session-change:fixture-session"]?.changes?.join() === "first-change",
@@ -1023,13 +1052,15 @@ test("session section discards late composition feedback and saving after a sess
     await page.goto(`${url}?status=item`);
     const frame = page.frameLocator("iframe");
     await page.evaluate(() => __holdCompose());
-    await frame.getByRole("button", { name: "continue", exact: true }).click({ timeout: 3000 });
+    await frame.getByRole("button", { name: "apply", exact: true }).click({ timeout: 3000 });
     await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
     await page.evaluate(() => __session("replacement-session"));
     await frame.getByRole("button", { name: "＋ Track a change" }).waitFor();
-    await page.evaluate(() => __releaseCompose());
-    await frame.getByRole("button", { name: "Open board", exact: true }).click();
-    await page.waitForFunction(() => __requests.some((r) => r.path === "open-surface"));
+    await page.evaluate(() => {
+      __releaseCompose();
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
     assert.deepEqual(await page.evaluate(() => __stored()), {});
     assert.deepEqual(
       await page.evaluate(() =>
@@ -1043,16 +1074,13 @@ test("session section discards late composition feedback and saving after a sess
   });
 });
 
-test("session section Open board opens the extension's plugin surface", async () => {
+test("session section board chip opens the extension's plugin surface", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(`${url}?status=item`);
-    await page
-      .frameLocator("iframe")
-      .getByRole("button", { name: "Open board", exact: true })
-      .click({
-        timeout: 3000,
-      });
+    await page.frameLocator("iframe").getByRole("button", { name: "board", exact: true }).click({
+      timeout: 3000,
+    });
     await page.waitForFunction(() => __requests.some((r) => r.path === "open-surface"));
     assert.deepEqual(
       await page.evaluate(() => __requests.find((r) => r.path === "open-surface").body),
@@ -1136,7 +1164,7 @@ test("session section preserves an open disclosure, focus and picker across fini
     const frame = page.frameLocator("iframe");
     const detail = frame.locator("details");
     const refresh = frame.getByRole("button", { name: "Refresh", exact: true });
-    await detail.locator("summary").click();
+    await detail.locator("summary").getByText("Tasks:", { exact: true }).click();
     await refresh.focus();
     await page.evaluate(() => {
       __lifecycle("fixture-session", "started");
@@ -1167,14 +1195,17 @@ test("session section collapses the disclosure when a finished turn changes the 
     await page.goto(`${url}?status=progress`);
     const frame = page.frameLocator("iframe");
     const detail = frame.locator("details");
-    await detail.locator("summary").click();
+    await detail.locator("summary").getByText("Tasks:", { exact: true }).click();
     await page.evaluate(() => {
       __edit("More tasks complete");
       __lifecycle("fixture-session", "started");
       __lifecycle("fixture-session", "completed");
     });
     await frame.getByText("4/7", { exact: true }).waitFor();
-    assert.equal(await detail.locator("summary").innerText(), "Task 5");
+    assert.equal(
+      await detail.locator("summary").getByRole("button", { name: "Task 5" }).isVisible(),
+      true,
+    );
     assert.equal(await detail.getAttribute("open"), null);
     await page.close();
   });

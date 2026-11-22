@@ -106,7 +106,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       removes, an empty saved list shows nothing even for a worktree session, a value without
       `changes` counts as unsaved, and the board's current-chat compose appends. Update the
       existing tracked-change tests to the list shape.
-- [ ] 7.5 Same seam: compact cards for two tracked changes. Name and `n/m`, the thin bar, the
+- [x] 7.5 Same seam: compact cards for two tracked changes. Name and `n/m`, the thin bar, the
       `▸ Tasks:` line with the current task, the five-task window on expand, task and name
       flyouts, chips in order with the stage chip per stage (`propose` / `apply` / `archive`), and
       `0/0` without the Tasks line. Remove the 1.3.x bar, disclosure, badges and buttons, and their

@@ -1,13 +1,7 @@
 import { connectHost, HostRequestError, type GuestSessionsSnapshot } from "@openchamber/sdk";
-import {
-  applyHostReady,
-  mountBadge,
-  mountButton,
-  mountPopoverAnchor,
-  mountProgress,
-} from "@openchamber/sdk/ui";
+import { applyHostReady, mountButton, mountPopoverAnchor } from "@openchamber/sdk/ui";
 import type { ListingEntry, Task } from "./contracts.js";
-import { deriveChange, requiredArtifactIds, type DerivedChange, type Stage } from "./model.js";
+import { deriveChange, taskWindow, type DerivedChange, type Stage } from "./model.js";
 import { createClient, type Listing } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
@@ -18,7 +12,7 @@ import {
   resolveSessionChanges,
   updateTrackedChanges,
 } from "./panel/tracked-change.js";
-import { stageLabel, workflowLabel } from "./panel/workflow.js";
+import { stageLabel } from "./panel/workflow.js";
 
 type View =
   | { kind: "empty" | "loading" }
@@ -26,6 +20,8 @@ type View =
   | { kind: "ready"; listing: Listing; cards: Card[] };
 type Card = { id: string; change: DerivedChange; tasks: Task[] } | { id: string; message: string };
 type ChangeFlyout = { kind: "change"; name: string; stage: Stage; goal: string | null };
+type TaskFlyout = { kind: "task"; id: string; description: string };
+type Flyout = ChangeFlyout | TaskFlyout;
 
 const root = document.querySelector<HTMLElement>("#root");
 if (!root) throw new Error("Status section root is missing");
@@ -72,17 +68,6 @@ picker.append(choices, emptyChoices);
 panelRoot.append(picker);
 controls.append(bodyRefresh);
 const refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
-const openBoard = mountButton(controls, {
-  label: "Open board",
-  size: "sm",
-  variant: "secondary",
-  onClick: () => {
-    const current = captureContext();
-    void host
-      .openSurface("plugin:openspec-board")
-      .catch((caught: unknown) => showError(current, caught, "Could not open the OpenSpec board."));
-  },
-});
 controls.append(pickerRoot);
 const pickerButton = mountButton(pickerRoot, {
   label: "＋ Track a change",
@@ -231,15 +216,11 @@ async function showError(current: () => boolean, caught: unknown, fallback: stri
     .catch((error: unknown) => console.warn("Could not show the OpenSpec error.", error));
 }
 
-async function preparePrompt(
-  change: DerivedChange,
-  intent: "primary" | "verify",
-  current: () => boolean,
-) {
+async function preparePrompt(change: DerivedChange, current: () => boolean) {
   if (!current()) return;
   const session = sessionId;
   try {
-    await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
+    await host.compose({ text: actionPrompt(change, "primary"), mode: "replace" });
     if (!current()) return;
     if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
     await host.toast({
@@ -251,9 +232,38 @@ async function preparePrompt(
   }
 }
 
+function mountTaskTitle() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "flyout-trigger task-title";
+  const inline = document.createElement("div");
+  inline.hidden = true;
+  let task: Task | null = null;
+  const flyout = mountFlyout(button, inline, () => (task ? taskFlyout(task) : null));
+  return {
+    button,
+    inline,
+    update(next: Task | null) {
+      if (task?.id !== next?.id) flyout.reset();
+      task = next;
+      const title = task?.description.split("\n", 1)[0] ?? "";
+      if (button.textContent !== title) button.textContent = title;
+      if (task) flyout.update();
+    },
+    refreshAnchor: flyout.update,
+    dispose: flyout.dispose,
+  };
+}
+
+type TaskRow = {
+  row: HTMLLIElement;
+  checkbox: HTMLInputElement;
+  title: ReturnType<typeof mountTaskTitle>;
+};
+
 function mountTrackedCard(id: string) {
   const element = document.createElement("article");
-  element.className = "section-content";
+  element.className = "status-card";
   const heading = document.createElement("div");
   heading.className = "section-heading";
   const title = document.createElement("h1");
@@ -267,51 +277,73 @@ function mountTrackedCard(id: string) {
   inline.hidden = true;
   let change: DerivedChange | null = null;
   const nameAnchor = mountFlyout(nameButton, inline, () => (change ? changeFlyout(change) : null));
-  const stage = mountBadge(heading, { label: "" });
-  const meter = document.createElement("div");
-  meter.className = "section-progress";
-  const progress = mountProgress(meter, { value: 0 });
-  meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
   const count = document.createElement("span");
-  meter.append(count);
+  heading.append(count);
+  const meter = document.createElement("progress");
+  meter.className = "section-progress";
+  meter.setAttribute("aria-label", "Task completion");
+  meter.max = 100;
   const disclosure = document.createElement("details");
   const summary = document.createElement("summary");
-  const description = document.createElement("p");
-  disclosure.append(summary, description);
-  let taskKey = "";
-  const artifacts = document.createElement("ul");
-  artifacts.className = "section-artefacts";
-  artifacts.setAttribute("aria-label", "Planning artefacts");
-  let artifactKey = "";
-  let artifactBadges: ReturnType<typeof mountBadge>[] = [];
+  const tasksLabel = document.createElement("span");
+  tasksLabel.className = "tasks-label";
+  tasksLabel.textContent = "Tasks:";
+  const currentTask = mountTaskTitle();
+  summary.append(tasksLabel, currentTask.button);
+  const taskList = document.createElement("ul");
+  taskList.className = "task-window";
+  disclosure.append(summary, taskList);
+  let taskKey: string | null = null;
+  let taskRows = new Map<string, TaskRow>();
   const actions = document.createElement("div");
-  actions.className = "section-controls";
+  actions.className = "card-actions";
   const primary = mountButton(actions, {
     label: "",
     size: "sm",
     onClick: () => {
-      if (change) void preparePrompt(change, "primary", captureContext());
+      if (change) void preparePrompt(change, captureContext());
     },
   });
-  const verifyRoot = document.createElement("div");
-  actions.append(verifyRoot);
-  const verify = mountButton(verifyRoot, {
-    label: "verify",
+  const sync = mountButton(actions, {
+    label: "sync",
+    size: "sm",
+    variant: "secondary",
+    disabled: true,
+    onClick: () => {},
+  });
+  const validate = mountButton(actions, {
+    label: "validate",
+    size: "sm",
+    variant: "secondary",
+    disabled: true,
+    onClick: () => {},
+  });
+  const board = mountButton(actions, {
+    label: "board",
     size: "sm",
     variant: "secondary",
     onClick: () => {
-      if (change) void preparePrompt(change, "verify", captureContext());
+      const current = captureContext();
+      void host
+        .openSurface("plugin:openspec-board")
+        .catch((caught: unknown) =>
+          showError(current, caught, "Could not open the OpenSpec board."),
+        );
     },
   });
   const details = document.createElement("div");
   details.className = "section-content";
-  details.append(heading, inline, meter, disclosure, artifacts, actions);
+  details.append(heading, inline, meter, disclosure, currentTask.inline, actions);
   const error = document.createElement("p");
   error.setAttribute("role", "alert");
   element.append(details, error);
   return {
     element,
-    refreshAnchor: nameAnchor.update,
+    refreshAnchor() {
+      nameAnchor.update();
+      if (taskKey !== null) currentTask.refreshAnchor();
+      for (const { title } of taskRows.values()) title.refreshAnchor();
+    },
     update(card: Card) {
       details.hidden = "message" in card;
       error.hidden = !details.hidden;
@@ -322,43 +354,57 @@ function mountTrackedCard(id: string) {
       }
       change = card.change;
       nameAnchor.update();
-      stage.update({ label: stageLabel(change.stage) });
-      primary.update({ label: workflowLabel(change.stage) });
-      verifyRoot.hidden = change.stage !== "complete";
+      primary.update({
+        label:
+          change.stage === "planning"
+            ? "propose"
+            : change.stage === "complete"
+              ? "archive"
+              : "apply",
+      });
       const { completedTasks, totalTasks } = change;
-      progress.update({ value: totalTasks ? (100 * completedTasks) / totalTasks : 0 });
+      const percentage = totalTasks ? (100 * completedTasks) / totalTasks : 0;
+      meter.value = percentage;
+      meter.setAttribute("aria-valuenow", String(percentage));
       count.textContent = `${completedTasks}/${totalTasks}`;
 
-      const next = completedTasks < totalTasks ? card.tasks.find((task) => !task.done) : undefined;
-      const nextKey = next?.id ?? "";
+      const next = card.tasks.find((task) => !task.done) ?? card.tasks.at(-1) ?? null;
+      const nextKey = next?.id ?? null;
       if (nextKey !== taskKey) disclosure.open = false;
       taskKey = nextKey;
       disclosure.hidden = !next;
-      if (next) {
-        if (summary.textContent !== next.description) summary.textContent = next.description;
-        if (description.textContent !== next.description)
-          description.textContent = next.description;
+      currentTask.update(next);
+      const rows = new Map<string, TaskRow>();
+      for (const [index, task] of taskWindow(card.tasks).entries()) {
+        let item = taskRows.get(task.id);
+        if (!item) {
+          const row = document.createElement("li");
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.disabled = true;
+          checkbox.setAttribute("aria-label", "Task completion");
+          const title = mountTaskTitle();
+          row.append(checkbox, title.button, title.inline);
+          item = { row, checkbox, title };
+        }
+        item.checkbox.checked = task.done;
+        item.title.update(task);
+        rows.set(task.id, item);
+        const previous = taskList.children.item(index);
+        if (previous !== item.row) taskList.insertBefore(item.row, previous);
       }
-
-      const required = requiredArtifactIds(change);
-      const applicable = change.artifacts.filter(({ id }) => required.has(id));
-      const nextArtifactKey = JSON.stringify(applicable.map(({ id, status }) => [id, status]));
-      if (artifactKey === nextArtifactKey) return;
-      artifactKey = nextArtifactKey;
-      for (const badge of artifactBadges) badge.dispose();
-      artifactBadges = [];
-      artifacts.replaceChildren();
-      artifacts.hidden = !applicable.length;
-      for (const artifact of applicable) {
-        const item = document.createElement("li");
-        item.append(`${artifact.id} `);
-        artifactBadges.push(mountBadge(item, { label: artifact.status }));
-        artifacts.append(item);
+      for (const [id, item] of taskRows) {
+        if (rows.has(id)) continue;
+        item.title.dispose();
+        item.row.remove();
       }
+      taskRows = rows;
     },
     dispose() {
       nameAnchor.dispose();
-      for (const handle of [stage, progress, primary, verify, ...artifactBadges]) handle.dispose();
+      currentTask.dispose();
+      for (const { title } of taskRows.values()) title.dispose();
+      for (const handle of [primary, sync, validate, board]) handle.dispose();
       element.remove();
     },
   };
@@ -396,10 +442,32 @@ function changeFlyout(change: DerivedChange): ChangeFlyout {
   return data;
 }
 
-function decodeFlyout(value: unknown): ChangeFlyout | null {
-  if (!value || typeof value !== "object" || !("kind" in value) || value.kind !== "change")
-    return null;
+function taskFlyout(task: Task): TaskFlyout {
+  const data: TaskFlyout = { kind: "task", id: "", description: "" };
+  data.id = fitText(
+    task.id,
+    FLYOUT_DATA_LIMIT,
+    (id) => JSON.stringify({ ...data, id, description: "…" }).length,
+  );
+  data.description = fitText(
+    task.description,
+    4_000,
+    (description) => JSON.stringify({ ...data, description }).length,
+  );
+  return data;
+}
+
+function decodeFlyout(value: unknown): Flyout | null {
+  if (!value || typeof value !== "object" || !("kind" in value)) return null;
+  if (value.kind === "task")
+    return "id" in value &&
+      typeof value.id === "string" &&
+      "description" in value &&
+      typeof value.description === "string"
+      ? { kind: "task", id: value.id, description: value.description }
+      : null;
   if (
+    value.kind !== "change" ||
     !("name" in value) ||
     typeof value.name !== "string" ||
     !("goal" in value) ||
@@ -414,13 +482,19 @@ function decodeFlyout(value: unknown): ChangeFlyout | null {
   return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
 }
 
-function renderFlyout(container: HTMLElement, data: ChangeFlyout, untrack?: () => void) {
+function renderFlyout(container: HTMLElement, data: Flyout, untrack?: () => void) {
+  container.classList.add("flyout");
+  if (data.kind === "task") {
+    const description = document.createElement("p");
+    description.textContent = data.description;
+    container.replaceChildren(description);
+    return;
+  }
   const heading = document.createElement(container === panelRoot ? "h1" : "p");
   heading.className = "flyout-heading";
   heading.textContent = data.name;
   const stage = document.createElement("p");
   stage.textContent = stageLabel(data.stage);
-  container.classList.add("flyout");
   container.replaceChildren(heading, stage);
   if (data.goal) {
     const goal = document.createElement("p");
@@ -436,11 +510,7 @@ function renderFlyout(container: HTMLElement, data: ChangeFlyout, untrack?: () =
     });
 }
 
-function mountFlyout(
-  button: HTMLButtonElement,
-  inline: HTMLElement,
-  getData: () => ChangeFlyout | null,
-) {
+function mountFlyout(button: HTMLButtonElement, inline: HTMLElement, getData: () => Flyout | null) {
   let anchor: ReturnType<typeof mountPopoverAnchor> | undefined;
   let action: ReturnType<typeof mountButton> | undefined;
   function closeInline() {
@@ -449,9 +519,10 @@ function mountFlyout(
     inline.hidden = true;
     if (!anchor) button.setAttribute("aria-expanded", "false");
   }
-  function onClick() {
+  function onClick(event: MouseEvent) {
     const data = getData();
     if (!data) return;
+    event.preventDefault();
     if (anchor) {
       if (button.getAttribute("aria-expanded") !== "true")
         button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
@@ -463,7 +534,7 @@ function mountFlyout(
       action = renderFlyout(
         inline,
         data,
-        session
+        session && data.kind === "change"
           ? () =>
               void untrackChange(session, data.name, current, seedTrackedChanges, () => {
                 closeInline();
@@ -476,6 +547,11 @@ function mountFlyout(
   }
   button.addEventListener("click", onClick);
   return {
+    reset() {
+      anchor?.dispose();
+      anchor = undefined;
+      closeInline();
+    },
     update() {
       if (anchor && !hasPopovers) {
         anchor.dispose();
@@ -701,7 +777,7 @@ const offReady = host.onReady((ready) => {
         popoverAction = renderFlyout(
           panelRoot,
           data,
-          nextSession && popoverId
+          nextSession && popoverId && data.kind === "change"
             ? () =>
                 void untrackChange(
                   nextSession,
@@ -776,7 +852,7 @@ window.addEventListener(
     offSessions?.();
     popoverAction?.dispose();
     for (const card of mountedCards.values()) card.dispose();
-    for (const handle of [refreshButton, openBoard, pickerButton, cancelPicker, ...optionButtons])
+    for (const handle of [refreshButton, pickerButton, cancelPicker, ...optionButtons])
       handle.dispose();
     panelRoot.removeEventListener("keydown", escapePicker);
     host.dispose();
