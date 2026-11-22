@@ -2602,6 +2602,23 @@ ${GUEST_UI_LOOK_CSS}`;
   function isChangeName(value) {
     return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
   }
+  function resolveTrackedChanges({
+    saved,
+    items,
+    worktreeName,
+    active: active2
+  }) {
+    if (saved !== null) return { changes: saved.filter((name) => active2.has(name)), source: "saved" };
+    for (const { data } of items) {
+      if (data && typeof data === "object" && "kind" in data && data.kind === "change" && "change" in data && typeof data.change === "string" && active2.has(data.change))
+        return { changes: [data.change], source: "item" };
+    }
+    const legacy = items.find(({ id, data }) => data === void 0 && active2.has(id));
+    if (legacy) return { changes: [legacy.id], source: "item" };
+    if (worktreeName !== null && active2.has(worktreeName))
+      return { changes: [worktreeName], source: "worktree" };
+    return { changes: [], source: "none" };
+  }
 
   // src/contracts.ts
   function decodePlanning(value) {
@@ -7909,8 +7926,34 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   // src/panel/tracked-change.ts
   var prefix = "session-change:";
   var readBatchSize = 32;
-  async function saveTrackedChange(host2, sessionId, change, current) {
+  async function readTrackedChanges(host2, sessionId) {
+    const value = await host2.storage.get(`${prefix}${sessionId}`);
+    if (!value || typeof value !== "object" || !("changes" in value) || !Array.isArray(value.changes))
+      return null;
+    if (!value.changes.every((name) => typeof name === "string" && isChangeName(name)))
+      throw new Error("Invalid tracked OpenSpec changes.");
+    return [...new Set(value.changes)];
+  }
+  function resolveSessionChanges(sessionId, sessions, saved, active2) {
+    const candidate = sessions?.sessions.find(({ id }) => id === sessionId);
+    const coverage = sessions?.coverage.find(({ directory }) => directory === candidate?.directory);
+    const record2 = coverage?.state === "ready" ? candidate : void 0;
+    return resolveTrackedChanges({
+      saved,
+      items: record2?.items ?? [],
+      worktreeName: record2?.worktree?.name ?? null,
+      active: active2
+    }).changes;
+  }
+  async function updateTrackedChanges(host2, sessionId, current, seed, update) {
     try {
+      if (!current()) return false;
+      const saved = await readTrackedChanges(host2, sessionId);
+      if (!current()) return false;
+      const base = saved ?? await seed();
+      if (!current()) return false;
+      const changes = update(base);
+      if (saved && changes === saved) return true;
       const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));
       if (keys.length >= 1900) {
         const choices = [];
@@ -7932,12 +7975,21 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         }
       }
       if (!current()) return false;
-      await host2.storage.set(`${prefix}${sessionId}`, { change, savedAt: Date.now() });
+      await host2.storage.set(`${prefix}${sessionId}`, { changes, savedAt: Date.now() });
       return true;
     } catch (caught) {
       console.warn("Could not save the tracked OpenSpec change.", caught);
       return false;
     }
+  }
+  function appendTrackedChange(host2, sessionId, change, current, seed) {
+    return updateTrackedChanges(
+      host2,
+      sessionId,
+      current,
+      seed,
+      (choices) => choices.includes(change) ? choices : [...choices, change]
+    );
   }
 
   // src/panel/project.ts
@@ -8039,6 +8091,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     let reconcileQueued = false;
     let pendingInspection = null;
     let changes = [];
+    let listedIds = /* @__PURE__ */ new Set();
     let staleIds = /* @__PURE__ */ new Set();
     let unavailableIds = /* @__PURE__ */ new Set();
     let failures = [];
@@ -8072,6 +8125,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       scope = null;
       resources.setContext(null);
       changes = [];
+      listedIds = /* @__PURE__ */ new Set();
       staleIds = /* @__PURE__ */ new Set();
       unavailableIds = /* @__PURE__ */ new Set();
       failures = [];
@@ -8132,6 +8186,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           const current = scope;
           resources.setContext(current);
           const listed = new Set(listing.changes.map((entry) => entry.id));
+          listedIds = listed;
           if (selectedChange && !listed.has(selectedChange.id)) {
             unavailableIds.add(selectedChange.id);
             detailOpening++;
@@ -8261,7 +8316,16 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         await host2.compose({ text: actionPrompt(change, intent), mode: "replace" });
         if (!currentContext()) return;
         if (expectedSession !== null)
-          void saveTrackedChange(host2, expectedSession, change.id, currentContext);
+          void appendTrackedChange(host2, expectedSession, change.id, currentContext, async () => {
+            const project = await findProject(host2, captured.directory);
+            if (!project || !currentContext()) return [];
+            return resolveSessionChanges(
+              expectedSession,
+              await host2.listSessions(project.id),
+              null,
+              listedIds
+            );
+          });
         await host2.toast({
           kind: "success",
           message: "Workflow prompt prepared in the open composer."

@@ -102,7 +102,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       and apply `setHeight` to the frame with the 24–480 clamp. Add a failing test that a flyout
       opens as a popover when supported and inline otherwise, then implement popover mode in
       `src/status.ts`.
-- [ ] 7.4 Same seam: saved tracked lists. Track adds (seeding the derived change first), Untrack
+- [x] 7.4 Same seam: saved tracked lists. Track adds (seeding the derived change first), Untrack
       removes, an empty saved list shows nothing even for a worktree session, a value without
       `changes` counts as unsaved, and the board's current-chat compose appends. Update the
       existing tracked-change tests to the list shape.

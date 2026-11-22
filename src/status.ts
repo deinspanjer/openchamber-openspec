@@ -7,25 +7,24 @@ import {
   mountProgress,
 } from "@openchamber/sdk/ui";
 import type { ListingEntry, Task } from "./contracts.js";
-import {
-  deriveChange,
-  requiredArtifactIds,
-  resolveTrackedChanges,
-  type DerivedChange,
-  type Stage,
-} from "./model.js";
+import { deriveChange, requiredArtifactIds, type DerivedChange, type Stage } from "./model.js";
 import { createClient, type Listing } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
 import { actionPrompt } from "./panel/prompts.js";
-import { readTrackedChange, saveTrackedChange } from "./panel/tracked-change.js";
+import {
+  appendTrackedChange,
+  readTrackedChanges,
+  resolveSessionChanges,
+  updateTrackedChanges,
+} from "./panel/tracked-change.js";
 import { stageLabel, workflowLabel } from "./panel/workflow.js";
 
 type View =
   | { kind: "empty" | "loading" }
   | { kind: "error"; message: string }
-  | { kind: "picker"; listing: Listing; staleSaved: string | null }
-  | { kind: "tracked"; listing: Listing; change: DerivedChange; tasks: Task[] };
+  | { kind: "ready"; listing: Listing; cards: Card[] };
+type Card = { id: string; change: DerivedChange; tasks: Task[] } | { id: string; message: string };
 type ChangeFlyout = { kind: "change"; name: string; stage: Stage; goal: string | null };
 
 const root = document.querySelector<HTMLElement>("#root");
@@ -45,7 +44,7 @@ let workspace: Promise<void> | undefined;
 let disposed = false;
 let reading = false;
 let queued = false;
-let selection: { listing: Listing; saved: string | null; change: string | null } | null = null;
+let selection: { active: Set<string>; saved: string[] | null; changes: string[] } | null = null;
 let hasStatusControls = false;
 let hasPopovers = false;
 let popoverFrame = false;
@@ -59,8 +58,6 @@ for (const element of [notes, content, controls]) element.hidden = true;
 panelRoot.append(notes, content, controls);
 
 const bodyRefresh = document.createElement("div");
-const primaryRoot = document.createElement("div");
-const verifyRoot = document.createElement("div");
 const pickerRoot = document.createElement("div");
 const picker = document.createElement("div");
 picker.className = "section-picker";
@@ -68,7 +65,10 @@ picker.id = "section-picker";
 picker.hidden = true;
 const choices = document.createElement("ul");
 choices.setAttribute("aria-label", "Changes");
-picker.append(choices);
+const emptyChoices = document.createElement("p");
+emptyChoices.className = "note";
+emptyChoices.textContent = "No untracked changes.";
+picker.append(choices, emptyChoices);
 panelRoot.append(picker);
 controls.append(bodyRefresh);
 const refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
@@ -83,25 +83,9 @@ const openBoard = mountButton(controls, {
       .catch((caught: unknown) => showError(current, caught, "Could not open the OpenSpec board."));
   },
 });
-controls.append(primaryRoot, verifyRoot, pickerRoot);
-let trackedChange: DerivedChange | null = null;
-const primary = mountButton(primaryRoot, {
-  label: "",
-  size: "sm",
-  onClick: () => {
-    if (trackedChange) void preparePrompt(trackedChange, "primary", captureContext());
-  },
-});
-const verify = mountButton(verifyRoot, {
-  label: "verify",
-  size: "sm",
-  variant: "secondary",
-  onClick: () => {
-    if (trackedChange) void preparePrompt(trackedChange, "verify", captureContext());
-  },
-});
+controls.append(pickerRoot);
 const pickerButton = mountButton(pickerRoot, {
-  label: "",
+  label: "＋ Track a change",
   size: "sm",
   variant: "secondary",
   onClick: () => setPickerOpen(picker.hidden === true),
@@ -120,6 +104,7 @@ const cancelPicker = mountButton(cancelRoot, {
 });
 let pickerKey = "";
 let viewKey = "";
+const mountedCards = new Map<string, ReturnType<typeof mountTrackedCard>>();
 
 function setPickerOpen(open: boolean, restoreFocus = true) {
   picker.hidden = !open;
@@ -147,17 +132,26 @@ function render(view: View) {
   if (viewKey === nextViewKey) return;
   viewKey = nextViewKey;
   controls.hidden = view.kind === "empty" || view.kind === "loading";
-  content.hidden = view.kind !== "tracked";
-  trackedChange = view.kind === "tracked" ? view.change : null;
-  primaryRoot.hidden = !trackedChange;
-  verifyRoot.hidden = trackedChange?.stage !== "complete";
+  const cards = view.kind === "ready" ? view.cards : [];
+  content.hidden = !cards.length;
+  for (const [id, mounted] of mountedCards) {
+    if (cards.some((card) => card.id === id)) continue;
+    mounted.dispose();
+    mountedCards.delete(id);
+  }
+  for (const [index, card] of cards.entries()) {
+    let mounted = mountedCards.get(card.id);
+    if (!mounted) {
+      mounted = mountTrackedCard(card.id);
+      mountedCards.set(card.id, mounted);
+    }
+    const previous = content.children.item(index);
+    if (previous !== mounted.element) content.insertBefore(mounted.element, previous);
+    mounted.update(card);
+  }
   notes.replaceChildren();
-  if (view.kind === "tracked") {
-    renderTracked(view.change, view.tasks);
-    primary.update({ label: workflowLabel(view.change.stage) });
-  } else if (view.kind === "picker") {
-    if (view.staleSaved) note(`Saved change ${view.staleSaved} is no longer active.`);
-    if (!sessionId) note("Start a session to choose a change.");
+  if (view.kind === "ready") {
+    if (!sessionId) note("Start a session to track a change.");
     if (!view.listing.changes.length) note("No active changes.");
   } else if (view.kind === "error") {
     note(view.message, "alert");
@@ -165,18 +159,14 @@ function render(view: View) {
     note("Loading OpenSpec change…", "status");
   }
   notes.hidden = !notes.childElementCount;
-  const listing = view.kind === "tracked" || view.kind === "picker" ? view.listing : null;
-  pickerRoot.hidden = !listing?.changes.length;
-  cancelRoot.hidden = view.kind !== "tracked";
-  if (listing?.changes.length)
-    updatePicker(listing, view.kind === "tracked" ? "Change…" : "Choose a change");
+  pickerRoot.hidden = view.kind !== "ready";
+  cancelRoot.hidden = !cards.length;
+  if (view.kind === "ready")
+    updatePicker(
+      view.listing,
+      cards.map(({ id }) => id),
+    );
   else setPickerOpen(false, false);
-  if (view.kind === "empty" || view.kind === "loading") {
-    nameAnchor.dispose();
-    closeInlineFlyout();
-    disclosure.open = false;
-    taskKey = "";
-  }
 }
 
 function pickerPriority({ completedTasks, totalTasks }: ListingEntry) {
@@ -185,25 +175,26 @@ function pickerPriority({ completedTasks, totalTasks }: ListingEntry) {
   return completedTasks < totalTasks ? 0 : 3;
 }
 
-function updatePicker(listing: Listing, label: string) {
+function updatePicker(listing: Listing, tracked: string[]) {
   const items = [...listing.changes]
+    .filter(({ id }) => !tracked.includes(id))
     .sort((left, right) => pickerPriority(left) - pickerPriority(right))
-    .map(({ id }) => ({ id, label: id, disabled: !sessionId }));
-  const nextKey = JSON.stringify([label, items]);
+    .map(({ id }) => id);
+  const nextKey = JSON.stringify([sessionId, items]);
   if (pickerKey === nextKey) return;
   pickerKey = nextKey;
-  pickerButton.update({ label });
+  pickerButton.update({ disabled: !sessionId });
+  emptyChoices.hidden = items.length !== 0;
   const focused = choices.contains(document.activeElement)
     ? document.activeElement?.textContent
     : null;
   for (const button of optionButtons) button.dispose();
   choices.replaceChildren();
-  optionButtons = items.map(({ id, label, disabled }) => {
+  optionButtons = items.map((id) => {
     const row = document.createElement("li");
     choices.append(row);
     const button = mountButton(row, {
-      label,
-      disabled,
+      label: id,
       size: "sm",
       variant: "secondary",
       onClick: () => {
@@ -212,18 +203,22 @@ function updatePicker(listing: Listing, label: string) {
         if (!session || !current()) return;
         setPickerOpen(false);
         void (async () => {
-          const saved = await saveTrackedChange(host, session, id, current);
+          const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
           if (!current()) return;
           if (saved) read();
           else await showError(current, null, "Could not save the tracked OpenSpec change.");
         })();
       },
     });
-    if (focused === label) row.querySelector("button")?.focus();
+    if (focused === id) row.querySelector("button")?.focus();
     return button;
   });
   if (focused && !choices.contains(document.activeElement))
     (choices.querySelector<HTMLElement>("button:enabled") ?? pickerTrigger).focus();
+}
+
+function seedTrackedChanges() {
+  return selection ? resolveSessionChanges(sessionId, sessions, null, selection.active) : [];
 }
 
 async function showError(current: () => boolean, caught: unknown, fallback: string) {
@@ -246,7 +241,7 @@ async function preparePrompt(
   try {
     await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
     if (!current()) return;
-    if (session) void saveTrackedChange(host, session, change.id, current);
+    if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
     await host.toast({
       kind: "success",
       message: "Workflow prompt prepared in the open composer.",
@@ -256,74 +251,117 @@ async function preparePrompt(
   }
 }
 
-const heading = document.createElement("div");
-heading.className = "section-heading";
-const title = document.createElement("h1");
-const nameButton = document.createElement("button");
-nameButton.type = "button";
-nameButton.className = "flyout-trigger";
-title.append(nameButton);
-heading.append(title);
-const inlineFlyout = document.createElement("div");
-inlineFlyout.hidden = true;
-const nameAnchor = mountFlyout(nameButton, inlineFlyout, () =>
-  trackedChange ? changeFlyout(trackedChange) : null,
-);
-const stage = mountBadge(heading, { label: "" });
-const meter = document.createElement("div");
-meter.className = "section-progress";
-const progress = mountProgress(meter, { value: 0 });
-meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
-const count = document.createElement("span");
-meter.append(count);
-const disclosure = document.createElement("details");
-const summary = document.createElement("summary");
-const description = document.createElement("p");
-disclosure.append(summary, description);
-let taskKey = "";
-const artifacts = document.createElement("ul");
-artifacts.className = "section-artefacts";
-artifacts.setAttribute("aria-label", "Planning artefacts");
-let artifactKey = "";
-let artifactBadges: ReturnType<typeof mountBadge>[] = [];
-content.append(heading, inlineFlyout, meter, disclosure, artifacts);
+function mountTrackedCard(id: string) {
+  const element = document.createElement("article");
+  element.className = "section-content";
+  const heading = document.createElement("div");
+  heading.className = "section-heading";
+  const title = document.createElement("h1");
+  const nameButton = document.createElement("button");
+  nameButton.type = "button";
+  nameButton.className = "flyout-trigger";
+  nameButton.textContent = id;
+  title.append(nameButton);
+  heading.append(title);
+  const inline = document.createElement("div");
+  inline.hidden = true;
+  let change: DerivedChange | null = null;
+  const nameAnchor = mountFlyout(nameButton, inline, () => (change ? changeFlyout(change) : null));
+  const stage = mountBadge(heading, { label: "" });
+  const meter = document.createElement("div");
+  meter.className = "section-progress";
+  const progress = mountProgress(meter, { value: 0 });
+  meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
+  const count = document.createElement("span");
+  meter.append(count);
+  const disclosure = document.createElement("details");
+  const summary = document.createElement("summary");
+  const description = document.createElement("p");
+  disclosure.append(summary, description);
+  let taskKey = "";
+  const artifacts = document.createElement("ul");
+  artifacts.className = "section-artefacts";
+  artifacts.setAttribute("aria-label", "Planning artefacts");
+  let artifactKey = "";
+  let artifactBadges: ReturnType<typeof mountBadge>[] = [];
+  const actions = document.createElement("div");
+  actions.className = "section-controls";
+  const primary = mountButton(actions, {
+    label: "",
+    size: "sm",
+    onClick: () => {
+      if (change) void preparePrompt(change, "primary", captureContext());
+    },
+  });
+  const verifyRoot = document.createElement("div");
+  actions.append(verifyRoot);
+  const verify = mountButton(verifyRoot, {
+    label: "verify",
+    size: "sm",
+    variant: "secondary",
+    onClick: () => {
+      if (change) void preparePrompt(change, "verify", captureContext());
+    },
+  });
+  const details = document.createElement("div");
+  details.className = "section-content";
+  details.append(heading, inline, meter, disclosure, artifacts, actions);
+  const error = document.createElement("p");
+  error.setAttribute("role", "alert");
+  element.append(details, error);
+  return {
+    element,
+    refreshAnchor: nameAnchor.update,
+    update(card: Card) {
+      details.hidden = "message" in card;
+      error.hidden = !details.hidden;
+      if ("message" in card) {
+        error.textContent = card.message;
+        change = null;
+        return;
+      }
+      change = card.change;
+      nameAnchor.update();
+      stage.update({ label: stageLabel(change.stage) });
+      primary.update({ label: workflowLabel(change.stage) });
+      verifyRoot.hidden = change.stage !== "complete";
+      const { completedTasks, totalTasks } = change;
+      progress.update({ value: totalTasks ? (100 * completedTasks) / totalTasks : 0 });
+      count.textContent = `${completedTasks}/${totalTasks}`;
 
-function renderTracked(change: DerivedChange, tasks: Task[]) {
-  if (nameButton.textContent !== change.id) {
-    nameButton.textContent = change.id;
-    closeInlineFlyout();
-  }
-  nameAnchor.update();
-  stage.update({ label: stageLabel(change.stage) });
-  const { completedTasks, totalTasks } = change;
-  progress.update({ value: totalTasks ? (100 * completedTasks) / totalTasks : 0 });
-  count.textContent = `${completedTasks}/${totalTasks}`;
+      const next = completedTasks < totalTasks ? card.tasks.find((task) => !task.done) : undefined;
+      const nextKey = next?.id ?? "";
+      if (nextKey !== taskKey) disclosure.open = false;
+      taskKey = nextKey;
+      disclosure.hidden = !next;
+      if (next) {
+        if (summary.textContent !== next.description) summary.textContent = next.description;
+        if (description.textContent !== next.description)
+          description.textContent = next.description;
+      }
 
-  const next = completedTasks < totalTasks ? tasks.find((task) => !task.done) : undefined;
-  const nextKey = next ? JSON.stringify([change.id, next.id]) : "";
-  if (nextKey !== taskKey) disclosure.open = false;
-  taskKey = nextKey;
-  disclosure.hidden = !next;
-  if (next) {
-    if (summary.textContent !== next.description) summary.textContent = next.description;
-    if (description.textContent !== next.description) description.textContent = next.description;
-  }
-
-  const required = requiredArtifactIds(change);
-  const applicable = change.artifacts.filter(({ id }) => required.has(id));
-  const nextArtifactKey = JSON.stringify(applicable.map(({ id, status }) => [id, status]));
-  if (artifactKey === nextArtifactKey) return;
-  artifactKey = nextArtifactKey;
-  for (const badge of artifactBadges) badge.dispose();
-  artifactBadges = [];
-  artifacts.replaceChildren();
-  artifacts.hidden = !applicable.length;
-  for (const artifact of applicable) {
-    const item = document.createElement("li");
-    item.append(`${artifact.id} `);
-    artifactBadges.push(mountBadge(item, { label: artifact.status }));
-    artifacts.append(item);
-  }
+      const required = requiredArtifactIds(change);
+      const applicable = change.artifacts.filter(({ id }) => required.has(id));
+      const nextArtifactKey = JSON.stringify(applicable.map(({ id, status }) => [id, status]));
+      if (artifactKey === nextArtifactKey) return;
+      artifactKey = nextArtifactKey;
+      for (const badge of artifactBadges) badge.dispose();
+      artifactBadges = [];
+      artifacts.replaceChildren();
+      artifacts.hidden = !applicable.length;
+      for (const artifact of applicable) {
+        const item = document.createElement("li");
+        item.append(`${artifact.id} `);
+        artifactBadges.push(mountBadge(item, { label: artifact.status }));
+        artifacts.append(item);
+      }
+    },
+    dispose() {
+      nameAnchor.dispose();
+      for (const handle of [stage, progress, primary, verify, ...artifactBadges]) handle.dispose();
+      element.remove();
+    },
+  };
 }
 
 const FLYOUT_DATA_LIMIT = 15_000;
@@ -352,11 +390,6 @@ function changeFlyout(change: DerivedChange): ChangeFlyout {
     stage: change.stage,
     goal: null,
   };
-  data.name = fitText(
-    data.name,
-    FLYOUT_DATA_LIMIT,
-    (name) => JSON.stringify({ ...data, name }).length,
-  );
   if (change.goal) {
     data.goal = fitText(change.goal, 4_000, (goal) => JSON.stringify({ ...data, goal }).length);
   }
@@ -381,8 +414,9 @@ function decodeFlyout(value: unknown): ChangeFlyout | null {
   return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
 }
 
-function renderFlyout(container: HTMLElement, data: ChangeFlyout) {
-  const heading = document.createElement("h1");
+function renderFlyout(container: HTMLElement, data: ChangeFlyout, untrack?: () => void) {
+  const heading = document.createElement(container === panelRoot ? "h1" : "p");
+  heading.className = "flyout-heading";
   heading.textContent = data.name;
   const stage = document.createElement("p");
   stage.textContent = stageLabel(data.stage);
@@ -393,11 +427,13 @@ function renderFlyout(container: HTMLElement, data: ChangeFlyout) {
     goal.textContent = data.goal;
     container.append(goal);
   }
-}
-
-function closeInlineFlyout() {
-  inlineFlyout.hidden = true;
-  if (!hasPopovers) nameButton.setAttribute("aria-expanded", "false");
+  if (untrack)
+    return mountButton(container, {
+      label: "Untrack",
+      variant: "secondary",
+      size: "sm",
+      onClick: untrack,
+    });
 }
 
 function mountFlyout(
@@ -406,6 +442,13 @@ function mountFlyout(
   getData: () => ChangeFlyout | null,
 ) {
   let anchor: ReturnType<typeof mountPopoverAnchor> | undefined;
+  let action: ReturnType<typeof mountButton> | undefined;
+  function closeInline() {
+    action?.dispose();
+    action = undefined;
+    inline.hidden = true;
+    if (!anchor) button.setAttribute("aria-expanded", "false");
+  }
   function onClick() {
     const data = getData();
     if (!data) return;
@@ -413,9 +456,22 @@ function mountFlyout(
       if (button.getAttribute("aria-expanded") !== "true")
         button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
     } else {
-      inline.hidden = !inline.hidden;
-      if (!inline.hidden) renderFlyout(inline, data);
-      button.setAttribute("aria-expanded", String(!inline.hidden));
+      if (!inline.hidden) return closeInline();
+      inline.hidden = false;
+      const session = sessionId;
+      const current = captureContext();
+      action = renderFlyout(
+        inline,
+        data,
+        session
+          ? () =>
+              void untrackChange(session, data.name, current, seedTrackedChanges, () => {
+                closeInline();
+                read();
+              })
+          : undefined,
+      );
+      button.setAttribute("aria-expanded", "true");
     }
   }
   button.addEventListener("click", onClick);
@@ -428,7 +484,7 @@ function mountFlyout(
       if (!hasPopovers) {
         button.setAttribute("aria-expanded", String(!inline.hidden));
       } else if (!anchor) {
-        inline.hidden = true;
+        closeInline();
         button.removeAttribute("aria-expanded");
         anchor = mountPopoverAnchor(button, {
           host,
@@ -447,6 +503,8 @@ function mountFlyout(
     dispose() {
       anchor?.dispose();
       anchor = undefined;
+      closeInline();
+      button.removeEventListener("click", onClick);
     },
   };
 }
@@ -459,17 +517,29 @@ function note(text: string, role?: string) {
   notes.append(line);
 }
 
-function resolve(listing: Listing, saved: string | null) {
-  const candidate = sessions?.sessions.find((item) => item.id === sessionId);
-  const coverage = sessions?.coverage.find((item) => item.directory === candidate?.directory);
-  const record = coverage?.state === "ready" ? candidate : undefined;
-  // The single-choice storage format still falls back when the choice is stale.
-  return resolveTrackedChanges({
-    saved: saved !== null && listing.changes.some(({ id }) => id === saved) ? [saved] : null,
-    items: record?.items ?? [],
-    worktreeName: record?.worktree?.name ?? null,
-    active: new Set(listing.changes.map(({ id }) => id)),
-  });
+async function untrackChange(
+  session: string,
+  change: string,
+  current: () => boolean,
+  seed: () => string[],
+  onSaved: () => void,
+) {
+  const saved = await updateTrackedChanges(host, session, current, seed, (changes) =>
+    changes.filter((name) => name !== change),
+  );
+  if (!current()) return;
+  if (saved) onSaved();
+  else await showError(current, null, "Could not untrack the OpenSpec change.");
+}
+
+function sameChanges(left: string[] | null, right: string[] | null) {
+  return (
+    left === right ||
+    (left !== null &&
+      right !== null &&
+      left.length === right.length &&
+      left.every((id, index) => id === right[index]))
+  );
 }
 
 function read() {
@@ -488,24 +558,33 @@ function read() {
     try {
       const listing = await client.list(capturedDirectory);
       if (!current()) return;
-      const saved = capturedSession ? await readTrackedChange(host, capturedSession) : null;
+      const saved = capturedSession ? await readTrackedChanges(host, capturedSession) : null;
       if (!current()) return;
-      if (capturedSession && !listing.changes.some(({ id }) => id === saved)) {
+      if (capturedSession && saved === null) {
         await capturedWorkspace;
         if (!current()) return;
       }
-      const change = resolve(listing, saved).changes[0] ?? null;
-      selection = { listing, saved, change };
-      if (change === null) {
-        render({ kind: "picker", listing, staleSaved: saved });
-      } else {
-        const entry = listing.changes.find(({ id }) => id === change)!;
-        const summary = await client.summary(listing, entry.id);
-        if (!current()) return;
-        const tasks = await client.tasks(listing, entry.id);
-        if (!current()) return;
-        render({ kind: "tracked", listing, change: deriveChange({ ...summary, ...entry }), tasks });
-      }
+      const byId = new Map(listing.changes.map((item) => [item.id, item]));
+      const active = new Set(byId.keys());
+      const changes = resolveSessionChanges(capturedSession, sessions, saved, active);
+      selection = { active, saved, changes };
+      const cards = await Promise.all(
+        changes.map(async (id): Promise<Card> => {
+          try {
+            const summary = await client.summary(listing, id);
+            if (!current()) return { id, message: "" };
+            const tasks = await client.tasks(listing, id);
+            return { id, change: deriveChange({ ...summary, ...byId.get(id)! }), tasks };
+          } catch (caught) {
+            return {
+              id,
+              message:
+                caught instanceof Error ? caught.message : "Could not read the OpenSpec change.",
+            };
+          }
+        }),
+      );
+      if (current()) render({ kind: "ready", listing, cards });
     } catch (caught) {
       if (current())
         render({
@@ -534,7 +613,10 @@ function subscribeToProject(capturedDirectory: string) {
         sessions = snapshot;
         if (
           selection &&
-          (resolve(selection.listing, selection.saved).changes[0] ?? null) !== selection.change
+          !sameChanges(
+            resolveSessionChanges(sessionId, sessions, selection.saved, selection.active),
+            selection.changes,
+          )
         ) {
           epoch++;
           selection = null;
@@ -590,6 +672,8 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
 }
 
 let lastHeight = 0;
+let popoverSession: string | null = null;
+let popoverAction: ReturnType<typeof mountButton> | undefined;
 const resize = new ResizeObserver(() => {
   const height = Math.ceil(panelRoot.getBoundingClientRect().height);
   if (height === lastHeight) return;
@@ -606,19 +690,42 @@ const offReady = host.onReady((ready) => {
   applyHostReady(ready, document.documentElement);
   applyDevice(ready.device);
   if (ready.surface === "popover") {
+    const nextSession = ready.session?.id ?? null;
     if (!popoverFrame) {
       popoverFrame = true;
+      popoverSession = nextSession;
       panelRoot.replaceChildren();
       const data = decodeFlyout(ready.popover?.data);
-      if (data) renderFlyout(panelRoot, data);
-      else panelRoot.textContent = "OpenSpec details are unavailable.";
+      const popoverId = ready.popover?.id;
+      if (data) {
+        popoverAction = renderFlyout(
+          panelRoot,
+          data,
+          nextSession && popoverId
+            ? () =>
+                void untrackChange(
+                  nextSession,
+                  data.name,
+                  () => !disposed && popoverSession === nextSession,
+                  () => [data.name],
+                  () =>
+                    void host.closePopover(popoverId).catch((caught: unknown) => {
+                      console.warn("Could not close the OpenSpec flyout.", caught);
+                    }),
+                )
+            : undefined,
+        );
+      } else panelRoot.textContent = "OpenSpec details are unavailable.";
+    } else if (nextSession !== popoverSession) {
+      popoverSession = null;
+      popoverAction?.update({ disabled: true });
     }
     resize.observe(panelRoot);
     return;
   }
   if (hasPopovers !== (ready.features?.popovers === true)) {
     hasPopovers = ready.features?.popovers === true;
-    nameAnchor.update();
+    for (const card of mountedCards.values()) card.refreshAnchor();
   }
   updateContext(ready.directory, ready.session?.id ?? null);
   if (statusControlsChanged && !directoryChanged) publishRefreshControl();
@@ -629,6 +736,10 @@ const offDirectory = host.onDirectory((next) => {
 });
 const offSession = host.onSession((next) => {
   if (!popoverFrame) updateContext(directory, next?.id ?? null);
+  else if (next?.id !== popoverSession) {
+    popoverSession = null;
+    popoverAction?.update({ disabled: true });
+  }
 });
 const offLifecycle = host.onSessionLifecycle((event) => {
   if (event.sessionId !== sessionId) return;
@@ -638,6 +749,18 @@ const offLifecycle = host.onSessionLifecycle((event) => {
 });
 const offStatusControl = host.onStatusControl(({ id }) => {
   if (id === "refresh") refresh();
+});
+const offPopover = host.onPopoverClosed(({ reason }) => {
+  const session = sessionId;
+  if (reason !== "closed" || !session || !selection) return;
+  const current = captureContext();
+  void readTrackedChanges(host, session)
+    .then((saved) => {
+      if (current() && selection && !sameChanges(saved, selection.saved)) read();
+    })
+    .catch((caught: unknown) => {
+      console.warn("Could not check the tracked OpenSpec changes.", caught);
+    });
 });
 window.addEventListener(
   "pagehide",
@@ -649,20 +772,11 @@ window.addEventListener(
     offSession();
     offLifecycle();
     offStatusControl();
+    offPopover();
     offSessions?.();
-    nameAnchor.dispose();
-    for (const handle of [
-      refreshButton,
-      openBoard,
-      primary,
-      verify,
-      pickerButton,
-      cancelPicker,
-      stage,
-      progress,
-      ...artifactBadges,
-      ...optionButtons,
-    ])
+    popoverAction?.dispose();
+    for (const card of mountedCards.values()) card.dispose();
+    for (const handle of [refreshButton, openBoard, pickerButton, cancelPicker, ...optionButtons])
       handle.dispose();
     panelRoot.removeEventListener("keydown", escapePicker);
     host.dispose();

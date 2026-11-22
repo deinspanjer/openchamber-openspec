@@ -1,25 +1,53 @@
-import type { HostClient } from "@openchamber/sdk";
+import type { GuestSessionsSnapshot, HostClient } from "@openchamber/sdk";
+import { isChangeName, resolveTrackedChanges } from "../model.js";
 
 const prefix = "session-change:";
 const readBatchSize = 32;
 
-export async function readTrackedChange(
+export async function readTrackedChanges(
   host: HostClient,
   sessionId: string,
-): Promise<string | null> {
+): Promise<string[] | null> {
   const value = await host.storage.get(`${prefix}${sessionId}`);
-  return value && typeof value === "object" && "change" in value && typeof value.change === "string"
-    ? value.change
-    : null;
+  if (!value || typeof value !== "object" || !("changes" in value) || !Array.isArray(value.changes))
+    return null;
+  if (!value.changes.every((name) => typeof name === "string" && isChangeName(name)))
+    throw new Error("Invalid tracked OpenSpec changes.");
+  return [...new Set(value.changes as string[])];
 }
 
-export async function saveTrackedChange(
+export function resolveSessionChanges(
+  sessionId: string | null,
+  sessions: GuestSessionsSnapshot | null,
+  saved: string[] | null,
+  active: ReadonlySet<string>,
+) {
+  const candidate = sessions?.sessions.find(({ id }) => id === sessionId);
+  const coverage = sessions?.coverage.find(({ directory }) => directory === candidate?.directory);
+  const record = coverage?.state === "ready" ? candidate : undefined;
+  return resolveTrackedChanges({
+    saved,
+    items: record?.items ?? [],
+    worktreeName: record?.worktree?.name ?? null,
+    active,
+  }).changes;
+}
+
+export async function updateTrackedChanges(
   host: HostClient,
   sessionId: string,
-  change: string,
   current: () => boolean,
+  seed: () => string[] | Promise<string[]>,
+  update: (changes: string[]) => string[],
 ) {
   try {
+    if (!current()) return false;
+    const saved = await readTrackedChanges(host, sessionId);
+    if (!current()) return false;
+    const base = saved ?? (await seed());
+    if (!current()) return false;
+    const changes = update(base);
+    if (saved && changes === saved) return true;
     const keys = (await host.storage.keys()).filter((key) => key.startsWith(prefix));
     if (keys.length >= 1900) {
       const choices: { key: string; savedAt: number }[] = [];
@@ -48,10 +76,22 @@ export async function saveTrackedChange(
       }
     }
     if (!current()) return false;
-    await host.storage.set(`${prefix}${sessionId}`, { change, savedAt: Date.now() });
+    await host.storage.set(`${prefix}${sessionId}`, { changes, savedAt: Date.now() });
     return true;
   } catch (caught) {
     console.warn("Could not save the tracked OpenSpec change.", caught);
     return false;
   }
+}
+
+export function appendTrackedChange(
+  host: HostClient,
+  sessionId: string,
+  change: string,
+  current: () => boolean,
+  seed: () => string[] | Promise<string[]>,
+) {
+  return updateTrackedChanges(host, sessionId, current, seed, (choices) =>
+    choices.includes(change) ? choices : [...choices, change],
+  );
 }

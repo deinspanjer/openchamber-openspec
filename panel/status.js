@@ -94,10 +94,10 @@
         let written = 0;
         while (written < out.length && chunks.length > 0) {
           const head = chunks[0];
-          const count3 = Math.min(out.length - written, head.length - offset);
-          out.set(head.subarray(offset, offset + count3), written);
-          written += count3;
-          offset += count3;
+          const count2 = Math.min(out.length - written, head.length - offset);
+          out.set(head.subarray(offset, offset + count2), written);
+          written += count2;
+          offset += count2;
           if (offset >= head.length) {
             chunks.shift();
             queued2 -= head.length;
@@ -320,7 +320,7 @@
   var clampBranch = (value) => value?.trim().slice(0, GUEST_ATTACH_BRANCH_MAX) ?? "";
   var clampAttachRequest = (request) => {
     const id = request.id.trim().slice(0, GUEST_ATTACH_ID_MAX);
-    const title2 = request.title.trim().slice(0, GUEST_ATTACH_TITLE_MAX);
+    const title = request.title.trim().slice(0, GUEST_ATTACH_TITLE_MAX);
     const url = request.url.trim().slice(0, GUEST_ATTACH_URL_MAX);
     const text = request.text?.trim().slice(0, GUEST_ATTACH_TEXT_MAX);
     const author = request.author?.trim().slice(0, GUEST_ATTACH_AUTHOR_MAX);
@@ -328,7 +328,7 @@
     const next = {
       providerId: request.providerId.trim(),
       id,
-      title: title2 || id,
+      title: title || id,
       url,
       kind
     };
@@ -370,10 +370,10 @@
     }
     return next;
   };
-  var clampBadgeCount = (count3) => {
-    if (count3 === null || !Number.isFinite(count3))
+  var clampBadgeCount = (count2) => {
+    if (count2 === null || !Number.isFinite(count2))
       return null;
-    return Math.min(GUEST_BADGE_MAX, Math.max(0, Math.round(count3)));
+    return Math.min(GUEST_BADGE_MAX, Math.max(0, Math.round(count2)));
   };
   var clampFrameHeight = (height) => {
     if (!Number.isFinite(height))
@@ -772,12 +772,12 @@
       if (disposed2 || target.parent === target) {
         return Promise.reject(new HostRequestError("HOST_UNAVAILABLE", "No host frame. This page is not in an iframe."));
       }
-      return new Promise((resolve2, reject) => {
+      return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           pending.delete(message.id);
           reject(new HostRequestError("HOST_TIMEOUT", "Host did not answer in time."));
         }, timeoutMs);
-        pending.set(message.id, { resolve: resolve2, reject, timer });
+        pending.set(message.id, { resolve, reject, timer });
         post(message);
       });
     };
@@ -1453,12 +1453,12 @@
         };
       },
       openMicrophone,
-      setBadge: (count3) => request({
+      setBadge: (count2) => request({
         channel: OPENCHAMBER_SDK_CHANNEL,
         v: OPENCHAMBER_SDK_API_VERSION,
         type: "badge",
         id: nextId(ids),
-        payload: { count: clampBadgeCount(count3) }
+        payload: { count: clampBadgeCount(count2) }
       }),
       setHeight: (height) => request({
         channel: OPENCHAMBER_SDK_CHANNEL,
@@ -2409,10 +2409,10 @@ ${GUEST_UI_LOOK_CSS}`;
     const pendingCondition = applicable.some(
       (artifact) => artifact.status !== "done" && artifact.status !== "skipped"
     );
-    const stage2 = pendingCondition ? "planning" : change.totalTasks === 0 || change.completedTasks === 0 ? "ready" : change.completedTasks === change.totalTasks ? "complete" : "progress";
+    const stage = pendingCondition ? "planning" : change.totalTasks === 0 || change.completedTasks === 0 ? "ready" : change.completedTasks === change.totalTasks ? "complete" : "progress";
     return {
       ...change,
-      stage: stage2,
+      stage,
       completedArtifacts,
       totalArtifacts: applicable.length,
       pendingCondition
@@ -2484,7 +2484,7 @@ ${GUEST_UI_LOOK_CSS}`;
   }
   function decodeArtifacts(value, requires) {
     if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
-    const artifacts2 = value.map((value2) => {
+    const artifacts = value.map((value2) => {
       const item = record(value2);
       const id = string(item.id);
       const status = item.status;
@@ -2492,8 +2492,8 @@ ${GUEST_UI_LOOK_CSS}`;
         throw new Error("Invalid artefact status.");
       return { id, status, outputPath: string(item.outputPath), requires: names(item.requires) };
     });
-    const byId = new Map(artifacts2.map((item) => [item.id, item]));
-    if (byId.size !== artifacts2.length) throw new Error("Duplicate artefact.");
+    const byId = new Map(artifacts.map((item) => [item.id, item]));
+    if (byId.size !== artifacts.length) throw new Error("Duplicate artefact.");
     const visiting = /* @__PURE__ */ new Set();
     const visited = /* @__PURE__ */ new Set();
     function visit(id) {
@@ -2505,23 +2505,23 @@ ${GUEST_UI_LOOK_CSS}`;
       visiting.delete(id);
       visited.add(id);
     }
-    artifacts2.forEach((item) => visit(item.id));
+    artifacts.forEach((item) => visit(item.id));
     names(requires).forEach((id) => {
       if (!byId.has(id)) throw new Error("Invalid apply requirement.");
     });
-    return artifacts2;
+    return artifacts;
   }
   function decodeSummary(value) {
     const item = record(value);
     const id = string(item.id);
     if (!isChangeName(id)) throw new Error("Invalid change name.");
     if (item.goal !== null && typeof item.goal !== "string") throw new Error("Invalid goal.");
-    const artifacts2 = decodeArtifacts(item.artifacts, item.applyRequires);
+    const artifacts = decodeArtifacts(item.artifacts, item.applyRequires);
     if (!Array.isArray(item.documents)) throw new Error("Invalid documents.");
     const documents = item.documents.map((value2) => {
       const document2 = record(value2);
       const artifactId = string(document2.artifactId);
-      if (!artifacts2.some((item2) => item2.id === artifactId))
+      if (!artifacts.some((item2) => item2.id === artifactId))
         throw new Error("Unknown document artefact.");
       return { artifactId, selector: string(document2.selector), label: string(document2.label) };
     });
@@ -2532,7 +2532,7 @@ ${GUEST_UI_LOOK_CSS}`;
       root: string(item.root),
       goal: item.goal,
       affectedAreas: names(item.affectedAreas),
-      artifacts: artifacts2,
+      artifacts,
       applyRequires: names(item.applyRequires),
       documents
     };
@@ -2562,9 +2562,9 @@ ${GUEST_UI_LOOK_CSS}`;
       if (!isChangeName(id) || "summary" in item === "error" in item)
         throw new Error("Invalid summary entry.");
       if ("summary" in item) {
-        const summary2 = decodeSummary(item.summary);
-        if (summary2.id !== id || summary2.root !== root2) throw new Error("Invalid summary scope.");
-        return { id, summary: summary2 };
+        const summary = decodeSummary(item.summary);
+        if (summary.id !== id || summary.root !== root2) throw new Error("Invalid summary scope.");
+        return { id, summary };
       }
       const error = record(item.error);
       return { id, error: { code: string(error.code), message: string(error.message) } };
@@ -2795,7 +2795,7 @@ ${GUEST_UI_LOOK_CSS}`;
     let settled = false;
     let timer;
     try {
-      return await new Promise((resolve2, reject) => {
+      return await new Promise((resolve, reject) => {
         timer = setTimeout(() => {
           settled = true;
           reject(new Error("Host workspace inspection timed out. No creation was requested."));
@@ -2803,7 +2803,7 @@ ${GUEST_UI_LOOK_CSS}`;
         void subscribe((value) => {
           if (value.state === "loading") return;
           settled = true;
-          if (value.state === "ready") resolve2(value);
+          if (value.state === "ready") resolve(value);
           else reject(new Error("Host workspace inspection failed."));
         }).then((unsubscribe) => {
           off = unsubscribe;
@@ -2853,9 +2853,9 @@ Investigate the goal, relevant code, options and trade-offs for ${target}. Discu
 
 Inspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
     if (change.stage === "ready" || change.stage === "progress") {
-      const progress2 = change.stage === "progress" ? `
+      const progress = change.stage === "progress" ? `
 ${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.` : "";
-      return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress2}
+      return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress}
 
 Complete all remaining tasks in ${target}, then verify the implementation against its change artefacts. Resolve any issues found and verify again until all tasks are complete and verification passes. If blocked, report the blocker rather than marking unfinished work complete.`;
     }
@@ -2867,12 +2867,34 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   // src/panel/tracked-change.ts
   var prefix = "session-change:";
   var readBatchSize = 32;
-  async function readTrackedChange(host2, sessionId2) {
+  async function readTrackedChanges(host2, sessionId2) {
     const value = await host2.storage.get(`${prefix}${sessionId2}`);
-    return value && typeof value === "object" && "change" in value && typeof value.change === "string" ? value.change : null;
+    if (!value || typeof value !== "object" || !("changes" in value) || !Array.isArray(value.changes))
+      return null;
+    if (!value.changes.every((name) => typeof name === "string" && isChangeName(name)))
+      throw new Error("Invalid tracked OpenSpec changes.");
+    return [...new Set(value.changes)];
   }
-  async function saveTrackedChange(host2, sessionId2, change, current) {
+  function resolveSessionChanges(sessionId2, sessions2, saved, active2) {
+    const candidate = sessions2?.sessions.find(({ id }) => id === sessionId2);
+    const coverage = sessions2?.coverage.find(({ directory: directory2 }) => directory2 === candidate?.directory);
+    const record2 = coverage?.state === "ready" ? candidate : void 0;
+    return resolveTrackedChanges({
+      saved,
+      items: record2?.items ?? [],
+      worktreeName: record2?.worktree?.name ?? null,
+      active: active2
+    }).changes;
+  }
+  async function updateTrackedChanges(host2, sessionId2, current, seed, update) {
     try {
+      if (!current()) return false;
+      const saved = await readTrackedChanges(host2, sessionId2);
+      if (!current()) return false;
+      const base = saved ?? await seed();
+      if (!current()) return false;
+      const changes = update(base);
+      if (saved && changes === saved) return true;
       const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));
       if (keys.length >= 1900) {
         const choices2 = [];
@@ -2894,12 +2916,21 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         }
       }
       if (!current()) return false;
-      await host2.storage.set(`${prefix}${sessionId2}`, { change, savedAt: Date.now() });
+      await host2.storage.set(`${prefix}${sessionId2}`, { changes, savedAt: Date.now() });
       return true;
     } catch (caught) {
       console.warn("Could not save the tracked OpenSpec change.", caught);
       return false;
     }
+  }
+  function appendTrackedChange(host2, sessionId2, change, current, seed) {
+    return updateTrackedChanges(
+      host2,
+      sessionId2,
+      current,
+      seed,
+      (choices2) => choices2.includes(change) ? choices2 : [...choices2, change]
+    );
   }
 
   // src/panel/workflow.ts
@@ -2909,8 +2940,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     { id: "progress", label: "In Progress", action: "continue" },
     { id: "complete", label: "Complete", action: "archive" }
   ];
-  var workflowLabel = (stage2) => stages.find((item) => item.id === stage2).action;
-  var stageLabel = (stage2) => stages.find((item) => item.id === stage2).label;
+  var workflowLabel = (stage) => stages.find((item) => item.id === stage).action;
+  var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
 
   // src/status.ts
   var root = document.querySelector("#root");
@@ -2942,8 +2973,6 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   for (const element of [notes, content, controls]) element.hidden = true;
   panelRoot.append(notes, content, controls);
   var bodyRefresh = document.createElement("div");
-  var primaryRoot = document.createElement("div");
-  var verifyRoot = document.createElement("div");
   var pickerRoot = document.createElement("div");
   var picker = document.createElement("div");
   picker.className = "section-picker";
@@ -2951,7 +2980,10 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   picker.hidden = true;
   var choices = document.createElement("ul");
   choices.setAttribute("aria-label", "Changes");
-  picker.append(choices);
+  var emptyChoices = document.createElement("p");
+  emptyChoices.className = "note";
+  emptyChoices.textContent = "No untracked changes.";
+  picker.append(choices, emptyChoices);
   panelRoot.append(picker);
   controls.append(bodyRefresh);
   var refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
@@ -2964,25 +2996,9 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       void host.openSurface("plugin:openspec-board").catch((caught) => showError(current, caught, "Could not open the OpenSpec board."));
     }
   });
-  controls.append(primaryRoot, verifyRoot, pickerRoot);
-  var trackedChange = null;
-  var primary2 = mountButton(primaryRoot, {
-    label: "",
-    size: "sm",
-    onClick: () => {
-      if (trackedChange) void preparePrompt(trackedChange, "primary", captureContext());
-    }
-  });
-  var verify = mountButton(verifyRoot, {
-    label: "verify",
-    size: "sm",
-    variant: "secondary",
-    onClick: () => {
-      if (trackedChange) void preparePrompt(trackedChange, "verify", captureContext());
-    }
-  });
+  controls.append(pickerRoot);
   var pickerButton = mountButton(pickerRoot, {
-    label: "",
+    label: "\uFF0B Track a change",
     size: "sm",
     variant: "secondary",
     onClick: () => setPickerOpen(picker.hidden === true)
@@ -3001,6 +3017,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   });
   var pickerKey = "";
   var viewKey = "";
+  var mountedCards = /* @__PURE__ */ new Map();
   function setPickerOpen(open, restoreFocus = true) {
     picker.hidden = !open;
     pickerTrigger.setAttribute("aria-expanded", String(open));
@@ -3023,17 +3040,26 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     if (viewKey === nextViewKey) return;
     viewKey = nextViewKey;
     controls.hidden = view.kind === "empty" || view.kind === "loading";
-    content.hidden = view.kind !== "tracked";
-    trackedChange = view.kind === "tracked" ? view.change : null;
-    primaryRoot.hidden = !trackedChange;
-    verifyRoot.hidden = trackedChange?.stage !== "complete";
+    const cards = view.kind === "ready" ? view.cards : [];
+    content.hidden = !cards.length;
+    for (const [id, mounted] of mountedCards) {
+      if (cards.some((card) => card.id === id)) continue;
+      mounted.dispose();
+      mountedCards.delete(id);
+    }
+    for (const [index, card] of cards.entries()) {
+      let mounted = mountedCards.get(card.id);
+      if (!mounted) {
+        mounted = mountTrackedCard(card.id);
+        mountedCards.set(card.id, mounted);
+      }
+      const previous = content.children.item(index);
+      if (previous !== mounted.element) content.insertBefore(mounted.element, previous);
+      mounted.update(card);
+    }
     notes.replaceChildren();
-    if (view.kind === "tracked") {
-      renderTracked(view.change, view.tasks);
-      primary2.update({ label: workflowLabel(view.change.stage) });
-    } else if (view.kind === "picker") {
-      if (view.staleSaved) note(`Saved change ${view.staleSaved} is no longer active.`);
-      if (!sessionId) note("Start a session to choose a change.");
+    if (view.kind === "ready") {
+      if (!sessionId) note("Start a session to track a change.");
       if (!view.listing.changes.length) note("No active changes.");
     } else if (view.kind === "error") {
       note(view.message, "alert");
@@ -3041,39 +3067,35 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       note("Loading OpenSpec change\u2026", "status");
     }
     notes.hidden = !notes.childElementCount;
-    const listing = view.kind === "tracked" || view.kind === "picker" ? view.listing : null;
-    pickerRoot.hidden = !listing?.changes.length;
-    cancelRoot.hidden = view.kind !== "tracked";
-    if (listing?.changes.length)
-      updatePicker(listing, view.kind === "tracked" ? "Change\u2026" : "Choose a change");
+    pickerRoot.hidden = view.kind !== "ready";
+    cancelRoot.hidden = !cards.length;
+    if (view.kind === "ready")
+      updatePicker(
+        view.listing,
+        cards.map(({ id }) => id)
+      );
     else setPickerOpen(false, false);
-    if (view.kind === "empty" || view.kind === "loading") {
-      nameAnchor.dispose();
-      closeInlineFlyout();
-      disclosure.open = false;
-      taskKey = "";
-    }
   }
   function pickerPriority({ completedTasks, totalTasks }) {
     if (!totalTasks) return 2;
     if (!completedTasks) return 1;
     return completedTasks < totalTasks ? 0 : 3;
   }
-  function updatePicker(listing, label) {
-    const items = [...listing.changes].sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => ({ id, label: id, disabled: !sessionId }));
-    const nextKey = JSON.stringify([label, items]);
+  function updatePicker(listing, tracked) {
+    const items = [...listing.changes].filter(({ id }) => !tracked.includes(id)).sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => id);
+    const nextKey = JSON.stringify([sessionId, items]);
     if (pickerKey === nextKey) return;
     pickerKey = nextKey;
-    pickerButton.update({ label });
+    pickerButton.update({ disabled: !sessionId });
+    emptyChoices.hidden = items.length !== 0;
     const focused = choices.contains(document.activeElement) ? document.activeElement?.textContent : null;
     for (const button2 of optionButtons) button2.dispose();
     choices.replaceChildren();
-    optionButtons = items.map(({ id, label: label2, disabled }) => {
+    optionButtons = items.map((id) => {
       const row = document.createElement("li");
       choices.append(row);
       const button2 = mountButton(row, {
-        label: label2,
-        disabled,
+        label: id,
         size: "sm",
         variant: "secondary",
         onClick: () => {
@@ -3082,18 +3104,21 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           if (!session || !current()) return;
           setPickerOpen(false);
           void (async () => {
-            const saved = await saveTrackedChange(host, session, id, current);
+            const saved = await appendTrackedChange(host, session, id, current, seedTrackedChanges);
             if (!current()) return;
             if (saved) read();
             else await showError(current, null, "Could not save the tracked OpenSpec change.");
           })();
         }
       });
-      if (focused === label2) row.querySelector("button")?.focus();
+      if (focused === id) row.querySelector("button")?.focus();
       return button2;
     });
     if (focused && !choices.contains(document.activeElement))
       (choices.querySelector("button:enabled") ?? pickerTrigger).focus();
+  }
+  function seedTrackedChanges() {
+    return selection2 ? resolveSessionChanges(sessionId, sessions, null, selection2.active) : [];
   }
   async function showError(current, caught, fallback) {
     if (!current()) return;
@@ -3108,7 +3133,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     try {
       await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
       if (!current()) return;
-      if (session) void saveTrackedChange(host, session, change.id, current);
+      if (session) void appendTrackedChange(host, session, change.id, current, seedTrackedChanges);
       await host.toast({
         kind: "success",
         message: "Workflow prompt prepared in the open composer."
@@ -3117,73 +3142,115 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       await showError(current, caught, "The workflow prompt could not be prepared.");
     }
   }
-  var heading = document.createElement("div");
-  heading.className = "section-heading";
-  var title = document.createElement("h1");
-  var nameButton = document.createElement("button");
-  nameButton.type = "button";
-  nameButton.className = "flyout-trigger";
-  title.append(nameButton);
-  heading.append(title);
-  var inlineFlyout = document.createElement("div");
-  inlineFlyout.hidden = true;
-  var nameAnchor = mountFlyout(
-    nameButton,
-    inlineFlyout,
-    () => trackedChange ? changeFlyout(trackedChange) : null
-  );
-  var stage = mountBadge(heading, { label: "" });
-  var meter = document.createElement("div");
-  meter.className = "section-progress";
-  var progress = mountProgress(meter, { value: 0 });
-  meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
-  var count2 = document.createElement("span");
-  meter.append(count2);
-  var disclosure = document.createElement("details");
-  var summary = document.createElement("summary");
-  var description = document.createElement("p");
-  disclosure.append(summary, description);
-  var taskKey = "";
-  var artifacts = document.createElement("ul");
-  artifacts.className = "section-artefacts";
-  artifacts.setAttribute("aria-label", "Planning artefacts");
-  var artifactKey = "";
-  var artifactBadges = [];
-  content.append(heading, inlineFlyout, meter, disclosure, artifacts);
-  function renderTracked(change, tasks) {
-    if (nameButton.textContent !== change.id) {
-      nameButton.textContent = change.id;
-      closeInlineFlyout();
-    }
-    nameAnchor.update();
-    stage.update({ label: stageLabel(change.stage) });
-    const { completedTasks, totalTasks } = change;
-    progress.update({ value: totalTasks ? 100 * completedTasks / totalTasks : 0 });
-    count2.textContent = `${completedTasks}/${totalTasks}`;
-    const next = completedTasks < totalTasks ? tasks.find((task) => !task.done) : void 0;
-    const nextKey = next ? JSON.stringify([change.id, next.id]) : "";
-    if (nextKey !== taskKey) disclosure.open = false;
-    taskKey = nextKey;
-    disclosure.hidden = !next;
-    if (next) {
-      if (summary.textContent !== next.description) summary.textContent = next.description;
-      if (description.textContent !== next.description) description.textContent = next.description;
-    }
-    const required = requiredArtifactIds(change);
-    const applicable = change.artifacts.filter(({ id }) => required.has(id));
-    const nextArtifactKey = JSON.stringify(applicable.map(({ id, status }) => [id, status]));
-    if (artifactKey === nextArtifactKey) return;
-    artifactKey = nextArtifactKey;
-    for (const badge of artifactBadges) badge.dispose();
-    artifactBadges = [];
-    artifacts.replaceChildren();
-    artifacts.hidden = !applicable.length;
-    for (const artifact of applicable) {
-      const item = document.createElement("li");
-      item.append(`${artifact.id} `);
-      artifactBadges.push(mountBadge(item, { label: artifact.status }));
-      artifacts.append(item);
-    }
+  function mountTrackedCard(id) {
+    const element = document.createElement("article");
+    element.className = "section-content";
+    const heading = document.createElement("div");
+    heading.className = "section-heading";
+    const title = document.createElement("h1");
+    const nameButton = document.createElement("button");
+    nameButton.type = "button";
+    nameButton.className = "flyout-trigger";
+    nameButton.textContent = id;
+    title.append(nameButton);
+    heading.append(title);
+    const inline = document.createElement("div");
+    inline.hidden = true;
+    let change = null;
+    const nameAnchor = mountFlyout(nameButton, inline, () => change ? changeFlyout(change) : null);
+    const stage = mountBadge(heading, { label: "" });
+    const meter = document.createElement("div");
+    meter.className = "section-progress";
+    const progress = mountProgress(meter, { value: 0 });
+    meter.querySelector('[role="progressbar"]')?.setAttribute("aria-label", "Task completion");
+    const count2 = document.createElement("span");
+    meter.append(count2);
+    const disclosure = document.createElement("details");
+    const summary = document.createElement("summary");
+    const description = document.createElement("p");
+    disclosure.append(summary, description);
+    let taskKey = "";
+    const artifacts = document.createElement("ul");
+    artifacts.className = "section-artefacts";
+    artifacts.setAttribute("aria-label", "Planning artefacts");
+    let artifactKey = "";
+    let artifactBadges = [];
+    const actions = document.createElement("div");
+    actions.className = "section-controls";
+    const primary2 = mountButton(actions, {
+      label: "",
+      size: "sm",
+      onClick: () => {
+        if (change) void preparePrompt(change, "primary", captureContext());
+      }
+    });
+    const verifyRoot = document.createElement("div");
+    actions.append(verifyRoot);
+    const verify = mountButton(verifyRoot, {
+      label: "verify",
+      size: "sm",
+      variant: "secondary",
+      onClick: () => {
+        if (change) void preparePrompt(change, "verify", captureContext());
+      }
+    });
+    const details = document.createElement("div");
+    details.className = "section-content";
+    details.append(heading, inline, meter, disclosure, artifacts, actions);
+    const error = document.createElement("p");
+    error.setAttribute("role", "alert");
+    element.append(details, error);
+    return {
+      element,
+      refreshAnchor: nameAnchor.update,
+      update(card) {
+        details.hidden = "message" in card;
+        error.hidden = !details.hidden;
+        if ("message" in card) {
+          error.textContent = card.message;
+          change = null;
+          return;
+        }
+        change = card.change;
+        nameAnchor.update();
+        stage.update({ label: stageLabel(change.stage) });
+        primary2.update({ label: workflowLabel(change.stage) });
+        verifyRoot.hidden = change.stage !== "complete";
+        const { completedTasks, totalTasks } = change;
+        progress.update({ value: totalTasks ? 100 * completedTasks / totalTasks : 0 });
+        count2.textContent = `${completedTasks}/${totalTasks}`;
+        const next = completedTasks < totalTasks ? card.tasks.find((task) => !task.done) : void 0;
+        const nextKey = next?.id ?? "";
+        if (nextKey !== taskKey) disclosure.open = false;
+        taskKey = nextKey;
+        disclosure.hidden = !next;
+        if (next) {
+          if (summary.textContent !== next.description) summary.textContent = next.description;
+          if (description.textContent !== next.description)
+            description.textContent = next.description;
+        }
+        const required = requiredArtifactIds(change);
+        const applicable = change.artifacts.filter(({ id: id2 }) => required.has(id2));
+        const nextArtifactKey = JSON.stringify(applicable.map(({ id: id2, status }) => [id2, status]));
+        if (artifactKey === nextArtifactKey) return;
+        artifactKey = nextArtifactKey;
+        for (const badge of artifactBadges) badge.dispose();
+        artifactBadges = [];
+        artifacts.replaceChildren();
+        artifacts.hidden = !applicable.length;
+        for (const artifact of applicable) {
+          const item = document.createElement("li");
+          item.append(`${artifact.id} `);
+          artifactBadges.push(mountBadge(item, { label: artifact.status }));
+          artifacts.append(item);
+        }
+      },
+      dispose() {
+        nameAnchor.dispose();
+        for (const handle of [stage, progress, primary2, verify, ...artifactBadges]) handle.dispose();
+        element.remove();
+      }
+    };
   }
   var FLYOUT_DATA_LIMIT = 15e3;
   function ellipsize(text, max) {
@@ -3208,11 +3275,6 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       stage: change.stage,
       goal: null
     };
-    data.name = fitText(
-      data.name,
-      FLYOUT_DATA_LIMIT,
-      (name) => JSON.stringify({ ...data, name }).length
-    );
     if (change.goal) {
       data.goal = fitText(change.goal, 4e3, (goal) => JSON.stringify({ ...data, goal }).length);
     }
@@ -3225,25 +3287,36 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       return null;
     return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
   }
-  function renderFlyout(container, data) {
-    const heading2 = document.createElement("h1");
-    heading2.textContent = data.name;
-    const stage2 = document.createElement("p");
-    stage2.textContent = stageLabel(data.stage);
+  function renderFlyout(container, data, untrack) {
+    const heading = document.createElement(container === panelRoot ? "h1" : "p");
+    heading.className = "flyout-heading";
+    heading.textContent = data.name;
+    const stage = document.createElement("p");
+    stage.textContent = stageLabel(data.stage);
     container.classList.add("flyout");
-    container.replaceChildren(heading2, stage2);
+    container.replaceChildren(heading, stage);
     if (data.goal) {
       const goal = document.createElement("p");
       goal.textContent = data.goal;
       container.append(goal);
     }
-  }
-  function closeInlineFlyout() {
-    inlineFlyout.hidden = true;
-    if (!hasPopovers) nameButton.setAttribute("aria-expanded", "false");
+    if (untrack)
+      return mountButton(container, {
+        label: "Untrack",
+        variant: "secondary",
+        size: "sm",
+        onClick: untrack
+      });
   }
   function mountFlyout(button2, inline, getData) {
     let anchor;
+    let action;
+    function closeInline() {
+      action?.dispose();
+      action = void 0;
+      inline.hidden = true;
+      if (!anchor) button2.setAttribute("aria-expanded", "false");
+    }
     function onClick() {
       const data = getData();
       if (!data) return;
@@ -3251,9 +3324,19 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         if (button2.getAttribute("aria-expanded") !== "true")
           button2.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
       } else {
-        inline.hidden = !inline.hidden;
-        if (!inline.hidden) renderFlyout(inline, data);
-        button2.setAttribute("aria-expanded", String(!inline.hidden));
+        if (!inline.hidden) return closeInline();
+        inline.hidden = false;
+        const session = sessionId;
+        const current = captureContext();
+        action = renderFlyout(
+          inline,
+          data,
+          session ? () => void untrackChange(session, data.name, current, seedTrackedChanges, () => {
+            closeInline();
+            read();
+          }) : void 0
+        );
+        button2.setAttribute("aria-expanded", "true");
       }
     }
     button2.addEventListener("click", onClick);
@@ -3266,7 +3349,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         if (!hasPopovers) {
           button2.setAttribute("aria-expanded", String(!inline.hidden));
         } else if (!anchor) {
-          inline.hidden = true;
+          closeInline();
           button2.removeAttribute("aria-expanded");
           anchor = mountPopoverAnchor(button2, {
             host,
@@ -3285,6 +3368,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       dispose() {
         anchor?.dispose();
         anchor = void 0;
+        closeInline();
+        button2.removeEventListener("click", onClick);
       }
     };
   }
@@ -3295,16 +3380,20 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     line.textContent = text;
     notes.append(line);
   }
-  function resolve(listing, saved) {
-    const candidate = sessions?.sessions.find((item) => item.id === sessionId);
-    const coverage = sessions?.coverage.find((item) => item.directory === candidate?.directory);
-    const record2 = coverage?.state === "ready" ? candidate : void 0;
-    return resolveTrackedChanges({
-      saved: saved !== null && listing.changes.some(({ id }) => id === saved) ? [saved] : null,
-      items: record2?.items ?? [],
-      worktreeName: record2?.worktree?.name ?? null,
-      active: new Set(listing.changes.map(({ id }) => id))
-    });
+  async function untrackChange(session, change, current, seed, onSaved) {
+    const saved = await updateTrackedChanges(
+      host,
+      session,
+      current,
+      seed,
+      (changes) => changes.filter((name) => name !== change)
+    );
+    if (!current()) return;
+    if (saved) onSaved();
+    else await showError(current, null, "Could not untrack the OpenSpec change.");
+  }
+  function sameChanges(left, right) {
+    return left === right || left !== null && right !== null && left.length === right.length && left.every((id, index) => id === right[index]);
   }
   function read() {
     if (disposed || !directory) return;
@@ -3322,24 +3411,32 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       try {
         const listing = await client.list(capturedDirectory);
         if (!current()) return;
-        const saved = capturedSession ? await readTrackedChange(host, capturedSession) : null;
+        const saved = capturedSession ? await readTrackedChanges(host, capturedSession) : null;
         if (!current()) return;
-        if (capturedSession && !listing.changes.some(({ id }) => id === saved)) {
+        if (capturedSession && saved === null) {
           await capturedWorkspace;
           if (!current()) return;
         }
-        const change = resolve(listing, saved).changes[0] ?? null;
-        selection2 = { listing, saved, change };
-        if (change === null) {
-          render({ kind: "picker", listing, staleSaved: saved });
-        } else {
-          const entry = listing.changes.find(({ id }) => id === change);
-          const summary2 = await client.summary(listing, entry.id);
-          if (!current()) return;
-          const tasks = await client.tasks(listing, entry.id);
-          if (!current()) return;
-          render({ kind: "tracked", listing, change: deriveChange({ ...summary2, ...entry }), tasks });
-        }
+        const byId = new Map(listing.changes.map((item) => [item.id, item]));
+        const active2 = new Set(byId.keys());
+        const changes = resolveSessionChanges(capturedSession, sessions, saved, active2);
+        selection2 = { active: active2, saved, changes };
+        const cards = await Promise.all(
+          changes.map(async (id) => {
+            try {
+              const summary = await client.summary(listing, id);
+              if (!current()) return { id, message: "" };
+              const tasks = await client.tasks(listing, id);
+              return { id, change: deriveChange({ ...summary, ...byId.get(id) }), tasks };
+            } catch (caught) {
+              return {
+                id,
+                message: caught instanceof Error ? caught.message : "Could not read the OpenSpec change."
+              };
+            }
+          })
+        );
+        if (current()) render({ kind: "ready", listing, cards });
       } catch (caught) {
         if (current())
           render({
@@ -3365,7 +3462,10 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         const off = await host.onSessions(project.id, (snapshot) => {
           if (!current()) return;
           sessions = snapshot;
-          if (selection2 && (resolve(selection2.listing, selection2.saved).changes[0] ?? null) !== selection2.change) {
+          if (selection2 && !sameChanges(
+            resolveSessionChanges(sessionId, sessions, selection2.saved, selection2.active),
+            selection2.changes
+          )) {
             epoch++;
             selection2 = null;
             render({ kind: "loading" });
@@ -3413,6 +3513,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     read();
   }
   var lastHeight = 0;
+  var popoverSession = null;
+  var popoverAction;
   var resize = new ResizeObserver(() => {
     const height = Math.ceil(panelRoot.getBoundingClientRect().height);
     if (height === lastHeight) return;
@@ -3427,19 +3529,38 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     applyHostReady(ready2, document.documentElement);
     applyDevice(ready2.device);
     if (ready2.surface === "popover") {
+      const nextSession = ready2.session?.id ?? null;
       if (!popoverFrame) {
         popoverFrame = true;
+        popoverSession = nextSession;
         panelRoot.replaceChildren();
         const data = decodeFlyout(ready2.popover?.data);
-        if (data) renderFlyout(panelRoot, data);
-        else panelRoot.textContent = "OpenSpec details are unavailable.";
+        const popoverId = ready2.popover?.id;
+        if (data) {
+          popoverAction = renderFlyout(
+            panelRoot,
+            data,
+            nextSession && popoverId ? () => void untrackChange(
+              nextSession,
+              data.name,
+              () => !disposed && popoverSession === nextSession,
+              () => [data.name],
+              () => void host.closePopover(popoverId).catch((caught) => {
+                console.warn("Could not close the OpenSpec flyout.", caught);
+              })
+            ) : void 0
+          );
+        } else panelRoot.textContent = "OpenSpec details are unavailable.";
+      } else if (nextSession !== popoverSession) {
+        popoverSession = null;
+        popoverAction?.update({ disabled: true });
       }
       resize.observe(panelRoot);
       return;
     }
     if (hasPopovers !== (ready2.features?.popovers === true)) {
       hasPopovers = ready2.features?.popovers === true;
-      nameAnchor.update();
+      for (const card of mountedCards.values()) card.refreshAnchor();
     }
     updateContext(ready2.directory, ready2.session?.id ?? null);
     if (statusControlsChanged && !directoryChanged) publishRefreshControl();
@@ -3450,6 +3571,10 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   });
   var offSession = host.onSession((next) => {
     if (!popoverFrame) updateContext(directory, next?.id ?? null);
+    else if (next?.id !== popoverSession) {
+      popoverSession = null;
+      popoverAction?.update({ disabled: true });
+    }
   });
   var offLifecycle = host.onSessionLifecycle((event) => {
     if (event.sessionId !== sessionId) return;
@@ -3459,6 +3584,16 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   });
   var offStatusControl = host.onStatusControl(({ id }) => {
     if (id === "refresh") refresh();
+  });
+  var offPopover = host.onPopoverClosed(({ reason }) => {
+    const session = sessionId;
+    if (reason !== "closed" || !session || !selection2) return;
+    const current = captureContext();
+    void readTrackedChanges(host, session).then((saved) => {
+      if (current() && selection2 && !sameChanges(saved, selection2.saved)) read();
+    }).catch((caught) => {
+      console.warn("Could not check the tracked OpenSpec changes.", caught);
+    });
   });
   window.addEventListener(
     "pagehide",
@@ -3470,20 +3605,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       offSession();
       offLifecycle();
       offStatusControl();
+      offPopover();
       offSessions?.();
-      nameAnchor.dispose();
-      for (const handle of [
-        refreshButton,
-        openBoard,
-        primary2,
-        verify,
-        pickerButton,
-        cancelPicker,
-        stage,
-        progress,
-        ...artifactBadges,
-        ...optionButtons
-      ])
+      popoverAction?.dispose();
+      for (const card of mountedCards.values()) card.dispose();
+      for (const handle of [refreshButton, openBoard, pickerButton, cancelPicker, ...optionButtons])
         handle.dispose();
       panelRoot.removeEventListener("keydown", escapePicker);
       host.dispose();

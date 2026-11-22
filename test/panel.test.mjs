@@ -244,10 +244,12 @@ function hostHtml(statusCase, pointer, popovers) {
       sessions = [{ id: "fixture-session", title: "Fixture", projectId: "origin-project",
         directory: statusDirectory, parentId: null, createdAt: 1, updatedAt: 1, archivedAt: null,
         worktree, activity: "idle", outcome: null, items: worktree ? [] : items }];
-      if (statusCase === "saved" || statusCase === "stale")
-        storage.set("session-change:fixture-session", { change: statusCase === "saved" ? "second-change" : "old-change", savedAt: 1 });
+      if (statusCase === "saved" || statusCase === "stale" || statusCase === "legacy-value")
+        storage.set("session-change:fixture-session", statusCase === "legacy-value"
+          ? { change: "second-change", savedAt: 1 }
+          : { changes: [statusCase === "saved" ? "second-change" : "old-change"], savedAt: 1 });
       if (statusCase === "other-directory-error" || statusCase === "unregistered-saved")
-        storage.set("session-change:fixture-session", { change: "second-change", savedAt: 1 });
+        storage.set("session-change:fixture-session", { changes: ["second-change"], savedAt: 1 });
       if (statusCase.startsWith("unregistered-")) projects = [];
       if (statusCase === "stale") sessions[0].items = [];
       if (statusCase === "switch") sessions.push({ ...sessions[0], id: "replacement-session",
@@ -433,7 +435,7 @@ function hostHtml(statusCase, pointer, popovers) {
         const query = message.payload;
         reply(query.kind === "projects" ? {kind:"projects",state:"ready",projects} :
           query.kind === "worktrees" ? {kind:"worktrees",projectId:query.projectId,state:"ready",worktrees} :
-          {kind:"sessions",projectId:query.projectId,state:"ready",coverage:[],sessions});
+           {kind:"sessions",projectId:query.projectId,state:"ready",coverage:[{ directory: statusDirectory, state: "ready" }],sessions});
         return;
       }
       if (message.type === "workspace-subscribe") {
@@ -684,7 +686,7 @@ test("session section fits a JSON-escaped goal within the popover budget", async
   });
 });
 
-for (const scenario of ["saved", "worktree", "archive", "stale", "new"]) {
+for (const scenario of ["saved", "worktree", "archive", "stale", "legacy-value", "new"]) {
   test(`session section resolves ${scenario} context without reading the board`, async () => {
     await withPanel(async (browser, url) => {
       const page = await browser.newPage();
@@ -694,24 +696,23 @@ for (const scenario of ["saved", "worktree", "archive", "stale", "new"]) {
         await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor({
           timeout: 3000,
         });
+      } else if (scenario === "legacy-value") {
+        await frame.getByRole("heading", { name: "first-change", exact: true }).waitFor({
+          timeout: 3000,
+        });
+        assert.equal(await frame.getByRole("heading", { name: "second-change" }).count(), 0);
+      } else if (scenario === "new") {
+        const track = frame.getByRole("button", { name: "＋ Track a change" });
+        await track.waitFor({ timeout: 3000 });
+        assert.equal(await track.isDisabled(), true);
+        assert.equal(await frame.getByText("Start a session to track a change.").isVisible(), true);
       } else {
-        await frame.getByRole("button", { name: "Choose a change" }).click({ timeout: 3000 });
+        await frame.getByRole("button", { name: "＋ Track a change" }).click({ timeout: 3000 });
         const option = frame.getByRole("button", { name: "first-change", exact: true });
         await option.waitFor();
-        if (scenario === "new") {
-          assert.equal(await option.isDisabled(), true);
-          assert.equal(
-            await frame.getByText("Start a session to choose a change.").isVisible(),
-            true,
-          );
-        } else {
-          assert.equal(await option.isEnabled(), true);
-        }
+        assert.equal(await option.isEnabled(), true);
         if (scenario === "stale")
-          assert.equal(
-            await frame.getByText("Saved change old-change is no longer active.").isVisible(),
-            true,
-          );
+          assert.equal(await frame.getByRole("heading", { name: "old-change" }).count(), 0);
         if (scenario === "archive")
           assert.equal(
             await frame.getByRole("button", { name: "archive-all", exact: true }).isVisible(),
@@ -815,7 +816,7 @@ test("session section orders the picker by task counts and persists a choice", a
     const page = await browser.newPage();
     await page.goto(`${url}?status=picker`);
     const frame = page.frameLocator("iframe");
-    await frame.getByRole("button", { name: "Choose a change" }).click({ timeout: 3000 });
+    await frame.getByRole("button", { name: "＋ Track a change" }).click({ timeout: 3000 });
     const list = frame.getByRole("list", { name: "Changes", exact: true });
     const choices = list.getByRole("button");
     await choices.first().waitFor();
@@ -834,19 +835,62 @@ test("session section orders the picker by task counts and persists a choice", a
       .getByRole("heading", { name: "first-change", exact: true })
       .waitFor({ timeout: 3000 });
     await page.waitForFunction(
-      () => __stored()["session-change:fixture-session"]?.change === "first-change",
+      () => __stored()["session-change:fixture-session"]?.changes?.join() === "first-change",
     );
-    await frame.getByRole("button", { name: "Change…", exact: true }).click();
+    await frame.getByRole("button", { name: "＋ Track a change", exact: true }).click();
+    assert.equal(await list.getByRole("button", { name: "first-change", exact: true }).count(), 0);
     await list.getByRole("button", { name: "second-change", exact: true }).click();
+    await frame.getByRole("heading", { name: "first-change", exact: true }).waitFor();
     await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
     await page.waitForFunction(
-      () => __stored()["session-change:fixture-session"]?.change === "second-change",
+      () =>
+        __stored()["session-change:fixture-session"]?.changes?.join() ===
+        "first-change,second-change",
     );
     await page.waitForFunction(() =>
       __requests.some((r) => r.path === "/tasks" && r.body.change === "second-change"),
     );
     assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/summaries")), false);
     await page.close();
+  });
+});
+
+test("session tracking seeds a worktree's derived change and untracking all keeps it hidden", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ hasTouch: true });
+    await page.goto(`${url}?status=worktree&popovers&pointer=coarse`);
+    const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+    const flyout = page.frameLocator('iframe[title="OpenSpec test popover"]');
+    const track = section.getByRole("button", { name: "＋ Track a change" });
+    await track.tap({ timeout: 3000 });
+    await section
+      .getByRole("list", { name: "Changes" })
+      .getByRole("button", { name: "first-change" })
+      .tap();
+    for (const name of ["second-change", "first-change"]) {
+      await section.getByRole("heading", { name, exact: true }).waitFor();
+    }
+    assert.deepEqual(
+      await page.evaluate(() => __stored()["session-change:fixture-session"].changes),
+      ["second-change", "first-change"],
+    );
+    for (const name of ["first-change", "second-change"]) {
+      const control = section.getByRole("button", { name, exact: true });
+      await control.tap();
+      await flyout.getByRole("button", { name: "Untrack" }).tap();
+      await control.waitFor({ state: "hidden" });
+    }
+    assert.deepEqual(
+      await page.evaluate(() => __stored()["session-change:fixture-session"].changes),
+      [],
+    );
+    await section.getByRole("button", { name: "Refresh" }).tap();
+    await page.waitForFunction(
+      () => __completed.filter((path) => path === "/changes").length === 5,
+    );
+    await page.evaluate(() => __theme("light"));
+    await section.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal(await section.getByRole("heading").count(), 0);
   });
 });
 
@@ -861,7 +905,7 @@ for (const [width, pointer, scenario] of [
       await page.goto(`${url}?status=${scenario}&pointer=${pointer}`);
       const frame = page.frameLocator("iframe");
       const trigger = frame.getByRole("button", {
-        name: scenario === "item" ? "Change…" : "Choose a change",
+        name: "＋ Track a change",
         exact: true,
       });
       const list = frame.getByRole("list", { name: "Changes", exact: true });
@@ -893,7 +937,7 @@ for (const [width, pointer, scenario] of [
         reportedHeight,
       );
       const options = list.getByRole("button");
-      assert.equal(await options.count(), scenario === "item" ? 2 : 5);
+      assert.equal(await options.count(), scenario === "item" ? 1 : 5);
       const boxes = await options.evaluateAll((buttons) =>
         buttons.map((button) => {
           const { top, right, bottom, left, height } = button.getBoundingClientRect();
@@ -924,12 +968,13 @@ for (const [width, pointer, scenario] of [
       } else assert.equal(await cancel.count(), 0);
       await list.getByRole("button", { name: "second-change", exact: true }).press("Enter");
       await page.waitForFunction(
-        () => __stored()["session-change:fixture-session"]?.change === "second-change",
+        (expected) => __stored()["session-change:fixture-session"]?.changes?.join() === expected,
+        scenario === "item" ? "first-change,second-change" : "second-change",
       );
       await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
       assert.equal(
         await frame
-          .getByRole("button", { name: "Change…", exact: true })
+          .getByRole("button", { name: "＋ Track a change", exact: true })
           .evaluate((node) => node === document.activeElement),
         true,
       );
@@ -958,7 +1003,7 @@ test("session section continue prepares the board's unsent prompt and saves the 
     await section.getByRole("button", { name: "continue", exact: true }).click({ timeout: 3000 });
     await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
     await page.waitForFunction(
-      () => __stored()["session-change:fixture-session"]?.change === "first-change",
+      () => __stored()["session-change:fixture-session"]?.changes?.join() === "first-change",
     );
     assert.equal(await page.evaluate(() => __draft()), expected);
     assert.equal(
@@ -981,7 +1026,7 @@ test("session section discards late composition feedback and saving after a sess
     await frame.getByRole("button", { name: "continue", exact: true }).click({ timeout: 3000 });
     await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
     await page.evaluate(() => __session("replacement-session"));
-    await frame.getByRole("button", { name: "Choose a change" }).waitFor();
+    await frame.getByRole("button", { name: "＋ Track a change" }).waitFor();
     await page.evaluate(() => __releaseCompose());
     await frame.getByRole("button", { name: "Open board", exact: true }).click();
     await page.waitForFunction(() => __requests.some((r) => r.path === "open-surface"));
@@ -1102,7 +1147,7 @@ test("session section preserves an open disclosure, focus and picker across fini
     assert.notEqual(await detail.getAttribute("open"), null);
     assert.equal(await refresh.evaluate((node) => document.activeElement === node), true);
 
-    await frame.getByRole("button", { name: "Change…", exact: true }).click();
+    await frame.getByRole("button", { name: "＋ Track a change", exact: true }).click();
     const picker = frame.getByRole("list", { name: "Changes", exact: true });
     await picker.waitFor();
     await page.evaluate(() => {
@@ -1142,7 +1187,7 @@ for (const scenario of ["other-directory-error", "unregistered-saved", "unregist
       await page.goto(`${url}?status=${scenario}`);
       const frame = page.frameLocator("iframe");
       if (scenario === "unregistered-picker") {
-        await frame.getByRole("button", { name: "Choose a change", exact: true }).click({
+        await frame.getByRole("button", { name: "＋ Track a change", exact: true }).click({
           timeout: 3000,
         });
         await frame.getByRole("button", { name: "first-change", exact: true }).waitFor();
@@ -1312,7 +1357,7 @@ for (const pointer of ["coarse", "fine"]) {
 
       await page.goto(`${url}?status=progress&pointer=${pointer}`);
       const section = page.frameLocator("iframe");
-      const change = section.getByRole("button", { name: "Change…", exact: true });
+      const change = section.getByRole("button", { name: "＋ Track a change", exact: true });
       await change.waitFor();
       const sectionHeight = (await change.boundingBox()).height;
       const summaryHeight = (await section.locator("details summary").boundingBox()).height;
@@ -3745,6 +3790,11 @@ test("preparing an unsent draft saves the tracked change for the open session", 
     await page.goto(url);
     const panel = page.frameLocator("iframe");
     const startedAt = Date.now();
+    await page.evaluate(() =>
+      __seedStorage([
+        ["session-change:fixture-session", { changes: ["second-change"], savedAt: 0 }],
+      ]),
+    );
     await panel
       .locator(".change-card")
       .filter({ hasText: "first-change" })
@@ -3754,7 +3804,11 @@ test("preparing an unsent draft saves the tracked change for the open session", 
     await page.waitForFunction(() =>
       __requests.some((r) => r.path === "toast" && r.body.kind === "success"),
     );
-    await page.waitForFunction(() => Object.keys(__stored()).length > 0, null, { timeout: 3000 });
+    await page.waitForFunction(
+      () => __stored()["session-change:fixture-session"]?.savedAt > 0,
+      null,
+      { timeout: 3000 },
+    );
     const { stored, draft, requests } = await page.evaluate(() => ({
       stored: __stored(),
       draft: __draft(),
@@ -3762,7 +3816,10 @@ test("preparing an unsent draft saves the tracked change for the open session", 
     }));
     const saved = stored["session-change:fixture-session"];
     assert.deepEqual(stored, {
-      "session-change:fixture-session": { change: "first-change", savedAt: saved?.savedAt },
+      "session-change:fixture-session": {
+        changes: ["second-change", "first-change"],
+        savedAt: saved?.savedAt,
+      },
     });
     assert.ok(Number.isInteger(saved.savedAt) && saved.savedAt >= startedAt);
     assert.match(draft, /openspec-apply-change.*"first-change"/);
@@ -3853,7 +3910,7 @@ test("saving a tracked change prunes the 100 oldest choices at 1,900 keys", asyn
     const panel = page.frameLocator("iframe");
     const entries = Array.from({ length: 1900 }, (_, index) => [
       `session-change:seed-${String(index).padStart(4, "0")}`,
-      { change: "seed-change", savedAt: 1900 - index },
+      { changes: ["seed-change"], savedAt: 1900 - index },
     ]);
     const unrelated = ["other-preference", { savedAt: 0 }];
     await page.evaluate((entries) => __seedStorage(entries), [...entries, unrelated]);
@@ -3868,7 +3925,7 @@ test("saving a tracked change prunes the 100 oldest choices at 1,900 keys", asyn
       timeout: 30_000,
     });
     const stored = await page.evaluate(() => __stored());
-    assert.equal(stored["session-change:fixture-session"].change, "first-change");
+    assert.deepEqual(stored["session-change:fixture-session"].changes, ["first-change"]);
     delete stored["session-change:fixture-session"];
     assert.deepEqual(stored, Object.fromEntries([...entries.slice(0, 1800), unrelated]));
     await page.close();

@@ -10,7 +10,8 @@ import { mountDeleteDialog } from "./delete-dialog.js";
 import { mountArchiveDialog } from "./archive-dialog.js";
 import { archiveAllPrompt } from "./archive-prompt.js";
 import { actionPrompt } from "./prompts.js";
-import { saveTrackedChange } from "./tracked-change.js";
+import { appendTrackedChange, resolveSessionChanges } from "./tracked-change.js";
+import { findProject } from "./project.js";
 import { inspectWorktreeDestination } from "./worktree.js";
 
 export function mountController(host: HostClient, appRoot: HTMLElement): () => void {
@@ -30,6 +31,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     minOperation: number;
   } | null = null;
   let changes: DerivedChange[] = [];
+  let listedIds: ReadonlySet<string> = new Set();
   let staleIds = new Set<string>();
   let unavailableIds = new Set<string>();
   let failures: { id: string; error: string }[] = [];
@@ -65,6 +67,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     scope = null;
     resources.setContext(null);
     changes = [];
+    listedIds = new Set();
     staleIds = new Set();
     unavailableIds = new Set();
     failures = [];
@@ -134,6 +137,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         const current = scope;
         resources.setContext(current);
         const listed = new Set(listing.changes.map((entry) => entry.id));
+        listedIds = listed;
         if (selectedChange && !listed.has(selectedChange.id)) {
           unavailableIds.add(selectedChange.id);
           detailOpening++;
@@ -302,7 +306,16 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
       if (!currentContext()) return;
       if (expectedSession !== null)
-        void saveTrackedChange(host, expectedSession, change.id, currentContext);
+        void appendTrackedChange(host, expectedSession, change.id, currentContext, async () => {
+          const project = await findProject(host, captured.directory);
+          if (!project || !currentContext()) return [];
+          return resolveSessionChanges(
+            expectedSession,
+            await host.listSessions(project.id),
+            null,
+            listedIds,
+          );
+        });
       await host.toast({
         kind: "success",
         message: "Workflow prompt prepared in the open composer.",
