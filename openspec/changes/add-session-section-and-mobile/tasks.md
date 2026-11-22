@@ -97,7 +97,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
 - [x] 7.2 Service seam: add `/validate` and `/focus` (set, read-once, 30 s expiry, `emit`). Check
       the CLI's issue JSON against an invalid fixture first. Verify with `npm run build && node
       --test test/service.test.mjs`.
-- [ ] 7.3 Fake host seam: model `openPopover` (loads the status entry with `surface: "popover"` and
+- [x] 7.3 Fake host seam: model `openPopover` (loads the status entry with `surface: "popover"` and
       `ready.popover.data`), `onPopoverClosed`, a `features.popovers` toggle and `onServiceEvent`,
       and apply `setHeight` to the frame with the 24–480 clamp. Add a failing test that a flyout
       opens as a popover when supported and inline otherwise, then implement popover mode in

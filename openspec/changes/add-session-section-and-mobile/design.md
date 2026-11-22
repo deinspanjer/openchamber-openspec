@@ -184,6 +184,7 @@ reason `closed`. Anchors use `mountPopoverAnchor` so a tap on a phone opens the 
 Without `features.popovers`, the same card renders inline under its anchor as a toggled element.
 Data stays under the 16,000-character popover limit; a task description is cut at 4,000 characters
 with an ellipsis.
+Cut goals at 4,000 characters and validation to 20 issues with 300-character messages; show the total and `+N more issues: open the board or run openspec validate` for omissions. Fit serialized data within 15,000 characters before opening, and use the same cuts inline.
 
 ### `Open board`
 

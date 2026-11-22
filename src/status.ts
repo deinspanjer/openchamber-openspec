@@ -1,11 +1,18 @@
 import { connectHost, HostRequestError, type GuestSessionsSnapshot } from "@openchamber/sdk";
-import { applyHostReady, mountBadge, mountButton, mountProgress } from "@openchamber/sdk/ui";
+import {
+  applyHostReady,
+  mountBadge,
+  mountButton,
+  mountPopoverAnchor,
+  mountProgress,
+} from "@openchamber/sdk/ui";
 import type { ListingEntry, Task } from "./contracts.js";
 import {
   deriveChange,
   requiredArtifactIds,
   resolveTrackedChanges,
   type DerivedChange,
+  type Stage,
 } from "./model.js";
 import { createClient, type Listing } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
@@ -19,6 +26,7 @@ type View =
   | { kind: "error"; message: string }
   | { kind: "picker"; listing: Listing; staleSaved: string | null }
   | { kind: "tracked"; listing: Listing; change: DerivedChange; tasks: Task[] };
+type ChangeFlyout = { kind: "change"; name: string; stage: Stage; goal: string | null };
 
 const root = document.querySelector<HTMLElement>("#root");
 if (!root) throw new Error("Status section root is missing");
@@ -39,6 +47,8 @@ let reading = false;
 let queued = false;
 let selection: { listing: Listing; saved: string | null; change: string | null } | null = null;
 let hasStatusControls = false;
+let hasPopovers = false;
+let popoverFrame = false;
 let headerRequest = 0;
 const notes = document.createElement("div");
 const content = document.createElement("div");
@@ -162,6 +172,8 @@ function render(view: View) {
     updatePicker(listing, view.kind === "tracked" ? "Change…" : "Choose a change");
   else setPickerOpen(false, false);
   if (view.kind === "empty" || view.kind === "loading") {
+    nameAnchor.dispose();
+    closeInlineFlyout();
     disclosure.open = false;
     taskKey = "";
   }
@@ -247,7 +259,16 @@ async function preparePrompt(
 const heading = document.createElement("div");
 heading.className = "section-heading";
 const title = document.createElement("h1");
+const nameButton = document.createElement("button");
+nameButton.type = "button";
+nameButton.className = "flyout-trigger";
+title.append(nameButton);
 heading.append(title);
+const inlineFlyout = document.createElement("div");
+inlineFlyout.hidden = true;
+const nameAnchor = mountFlyout(nameButton, inlineFlyout, () =>
+  trackedChange ? changeFlyout(trackedChange) : null,
+);
 const stage = mountBadge(heading, { label: "" });
 const meter = document.createElement("div");
 meter.className = "section-progress";
@@ -265,10 +286,14 @@ artifacts.className = "section-artefacts";
 artifacts.setAttribute("aria-label", "Planning artefacts");
 let artifactKey = "";
 let artifactBadges: ReturnType<typeof mountBadge>[] = [];
-content.append(heading, meter, disclosure, artifacts);
+content.append(heading, inlineFlyout, meter, disclosure, artifacts);
 
 function renderTracked(change: DerivedChange, tasks: Task[]) {
-  if (title.textContent !== change.id) title.textContent = change.id;
+  if (nameButton.textContent !== change.id) {
+    nameButton.textContent = change.id;
+    closeInlineFlyout();
+  }
+  nameAnchor.update();
   stage.update({ label: stageLabel(change.stage) });
   const { completedTasks, totalTasks } = change;
   progress.update({ value: totalTasks ? (100 * completedTasks) / totalTasks : 0 });
@@ -299,6 +324,131 @@ function renderTracked(change: DerivedChange, tasks: Task[]) {
     artifactBadges.push(mountBadge(item, { label: artifact.status }));
     artifacts.append(item);
   }
+}
+
+const FLYOUT_DATA_LIMIT = 15_000;
+
+function ellipsize(text: string, max: number) {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+}
+
+function fitText(text: string, max: number, measure: (value: string) => number): string {
+  const cut = ellipsize(text, max);
+  if (measure(cut) <= FLYOUT_DATA_LIMIT) return cut;
+  let low = 1;
+  let high = cut.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (measure(ellipsize(text, mid)) <= FLYOUT_DATA_LIMIT) low = mid;
+    else high = mid - 1;
+  }
+  return ellipsize(text, low);
+}
+
+function changeFlyout(change: DerivedChange): ChangeFlyout {
+  const data: ChangeFlyout = {
+    kind: "change",
+    name: change.id,
+    stage: change.stage,
+    goal: null,
+  };
+  data.name = fitText(
+    data.name,
+    FLYOUT_DATA_LIMIT,
+    (name) => JSON.stringify({ ...data, name }).length,
+  );
+  if (change.goal) {
+    data.goal = fitText(change.goal, 4_000, (goal) => JSON.stringify({ ...data, goal }).length);
+  }
+  return data;
+}
+
+function decodeFlyout(value: unknown): ChangeFlyout | null {
+  if (!value || typeof value !== "object" || !("kind" in value) || value.kind !== "change")
+    return null;
+  if (
+    !("name" in value) ||
+    typeof value.name !== "string" ||
+    !("goal" in value) ||
+    (value.goal !== null && typeof value.goal !== "string") ||
+    !("stage" in value) ||
+    (value.stage !== "planning" &&
+      value.stage !== "ready" &&
+      value.stage !== "progress" &&
+      value.stage !== "complete")
+  )
+    return null;
+  return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
+}
+
+function renderFlyout(container: HTMLElement, data: ChangeFlyout) {
+  const heading = document.createElement("h1");
+  heading.textContent = data.name;
+  const stage = document.createElement("p");
+  stage.textContent = stageLabel(data.stage);
+  container.classList.add("flyout");
+  container.replaceChildren(heading, stage);
+  if (data.goal) {
+    const goal = document.createElement("p");
+    goal.textContent = data.goal;
+    container.append(goal);
+  }
+}
+
+function closeInlineFlyout() {
+  inlineFlyout.hidden = true;
+  if (!hasPopovers) nameButton.setAttribute("aria-expanded", "false");
+}
+
+function mountFlyout(
+  button: HTMLButtonElement,
+  inline: HTMLElement,
+  getData: () => ChangeFlyout | null,
+) {
+  let anchor: ReturnType<typeof mountPopoverAnchor> | undefined;
+  function onClick() {
+    const data = getData();
+    if (!data) return;
+    if (anchor) {
+      if (button.getAttribute("aria-expanded") !== "true")
+        button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    } else {
+      inline.hidden = !inline.hidden;
+      if (!inline.hidden) renderFlyout(inline, data);
+      button.setAttribute("aria-expanded", String(!inline.hidden));
+    }
+  }
+  button.addEventListener("click", onClick);
+  return {
+    update() {
+      if (anchor && !hasPopovers) {
+        anchor.dispose();
+        anchor = undefined;
+      }
+      if (!hasPopovers) {
+        button.setAttribute("aria-expanded", String(!inline.hidden));
+      } else if (!anchor) {
+        inline.hidden = true;
+        button.removeAttribute("aria-expanded");
+        anchor = mountPopoverAnchor(button, {
+          host,
+          getData: () => {
+            const data = getData();
+            if (!data || JSON.stringify(data).length > FLYOUT_DATA_LIMIT)
+              throw new Error("OpenSpec flyout data is unavailable.");
+            return data;
+          },
+          width: 320,
+          height: 160,
+          side: "bottom",
+        });
+      }
+    },
+    dispose() {
+      anchor?.dispose();
+      anchor = undefined;
+    },
+  };
 }
 
 function note(text: string, role?: string) {
@@ -455,12 +605,31 @@ const offReady = host.onReady((ready) => {
   hasStatusControls = nextStatusControls;
   applyHostReady(ready, document.documentElement);
   applyDevice(ready.device);
+  if (ready.surface === "popover") {
+    if (!popoverFrame) {
+      popoverFrame = true;
+      panelRoot.replaceChildren();
+      const data = decodeFlyout(ready.popover?.data);
+      if (data) renderFlyout(panelRoot, data);
+      else panelRoot.textContent = "OpenSpec details are unavailable.";
+    }
+    resize.observe(panelRoot);
+    return;
+  }
+  if (hasPopovers !== (ready.features?.popovers === true)) {
+    hasPopovers = ready.features?.popovers === true;
+    nameAnchor.update();
+  }
   updateContext(ready.directory, ready.session?.id ?? null);
   if (statusControlsChanged && !directoryChanged) publishRefreshControl();
   resize.observe(panelRoot);
 });
-const offDirectory = host.onDirectory((next) => updateContext(next, sessionId));
-const offSession = host.onSession((next) => updateContext(directory, next?.id ?? null));
+const offDirectory = host.onDirectory((next) => {
+  if (!popoverFrame) updateContext(next, sessionId);
+});
+const offSession = host.onSession((next) => {
+  if (!popoverFrame) updateContext(directory, next?.id ?? null);
+});
 const offLifecycle = host.onSessionLifecycle((event) => {
   if (event.sessionId !== sessionId) return;
   const completedTurn = turnStarted && event.phase === "completed";
@@ -481,6 +650,7 @@ window.addEventListener(
     offLifecycle();
     offStatusControl();
     offSessions?.();
+    nameAnchor.dispose();
     for (const handle of [
       refreshButton,
       openBoard,

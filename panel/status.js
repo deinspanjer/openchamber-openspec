@@ -2163,6 +2163,231 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
+  // node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
+  var nextPopoverAnchorId = 0;
+  var isKeyboardEvent = (event) => "key" in event;
+  var mountPopoverAnchor = (element, options) => {
+    const document2 = element.ownerDocument;
+    const window2 = document2.defaultView;
+    let timer = null;
+    let activeId = null;
+    let disposed2 = false;
+    let ignoreNextFocus = false;
+    let pointerActive = false;
+    let focusActive = false;
+    let touchPointerDown = false;
+    let observer = null;
+    const previousExpanded = element.getAttribute("aria-expanded");
+    const previousPopup = element.getAttribute("aria-haspopup");
+    const previousLabel = element.getAttribute("aria-label");
+    const ownsExpanded = previousExpanded === null;
+    const clearTimer = () => {
+      if (timer !== null)
+        clearTimeout(timer);
+      timer = null;
+    };
+    const removeActiveListeners = () => {
+      document2.removeEventListener("scroll", closeForAnchor, true);
+      document2.removeEventListener("pointerdown", closeForOutside, true);
+      window2?.removeEventListener("resize", closeForAnchor);
+      observer?.disconnect();
+      observer = null;
+    };
+    const close = (reason = "closed", restoreFocus = false) => {
+      const id = activeId;
+      clearTimer();
+      activeId = null;
+      removeActiveListeners();
+      element.removeAttribute("data-oc-popover-open");
+      if (ownsExpanded)
+        element.setAttribute("aria-expanded", "false");
+      if (id)
+        void options.host.closePopover(id, reason).catch(() => void 0);
+      if (restoreFocus) {
+        ignoreNextFocus = true;
+        element.focus();
+        queueMicrotask(() => {
+          ignoreNextFocus = false;
+        });
+      }
+    };
+    const closeForAnchor = () => close();
+    const closeForOutside = (event) => {
+      const target = event.target;
+      if (target !== element && !element.contains(target))
+        close();
+    };
+    const watchActive = () => {
+      document2.addEventListener("scroll", closeForAnchor, true);
+      document2.addEventListener("pointerdown", closeForOutside, true);
+      window2?.addEventListener("resize", closeForAnchor);
+      observer = new MutationObserver(() => {
+        if (!document2.contains(element))
+          close();
+      });
+      observer.observe(document2, { childList: true, subtree: true });
+    };
+    const reportAnchorActivity = () => {
+      if (activeId)
+        void options.host.setPopoverAnchorActive(activeId, pointerActive || focusActive).catch(() => void 0);
+    };
+    const open = (focus) => {
+      clearTimer();
+      if (disposed2 || activeId || !element.isConnected)
+        return;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0)
+        return;
+      const id = `oc-popover-${++nextPopoverAnchorId}`;
+      let data;
+      try {
+        data = options.getData();
+      } catch {
+        return;
+      }
+      activeId = id;
+      element.setAttribute("data-oc-popover-open", "true");
+      if (ownsExpanded)
+        element.setAttribute("aria-expanded", "true");
+      watchActive();
+      void options.host.openPopover({
+        id,
+        anchor: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        width: options.width,
+        height: options.height,
+        side: options.side,
+        focus,
+        data
+      }).catch(() => {
+        if (activeId === id)
+          close();
+      });
+    };
+    const scheduleOpen = () => {
+      if (!activeId && !disposed2 && timer === null)
+        timer = setTimeout(() => open(false), 250);
+    };
+    const onPointerEnter = (event) => {
+      if ("pointerType" in event && event.pointerType && event.pointerType !== "mouse")
+        return;
+      pointerActive = true;
+      if (activeId)
+        reportAnchorActivity();
+      else if (!ignoreNextFocus)
+        scheduleOpen();
+    };
+    const onPointerLeave = (event) => {
+      if ("pointerType" in event && event.pointerType && event.pointerType !== "mouse")
+        return;
+      pointerActive = false;
+      clearTimer();
+      reportAnchorActivity();
+    };
+    const onPointerDown = (event) => {
+      touchPointerDown = "pointerType" in event && typeof event.pointerType === "string" && event.pointerType !== "" && event.pointerType !== "mouse";
+    };
+    const onPointerCancel = () => {
+      touchPointerDown = false;
+    };
+    const onClick = (event) => {
+      const tapped = touchPointerDown;
+      touchPointerDown = false;
+      if (!tapped || "detail" in event && event.detail === 0)
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (activeId)
+        close();
+      else
+        open(false);
+    };
+    const onFocus = () => {
+      focusActive = true;
+      if (activeId)
+        reportAnchorActivity();
+      else if (!ignoreNextFocus && element.matches(":focus-visible"))
+        open(false);
+    };
+    const onFocusOut = () => {
+      focusActive = false;
+      reportAnchorActivity();
+    };
+    const onKeyDown = (event) => {
+      if (!isKeyboardEvent(event))
+        return;
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        if (activeId)
+          close();
+        open(true);
+      } else if (event.key === "Escape" && activeId) {
+        event.preventDefault();
+        close("escape", true);
+      }
+    };
+    const unsubscribe = options.host.onPopoverClosed((event) => {
+      if (event.id !== activeId)
+        return;
+      activeId = null;
+      clearTimer();
+      removeActiveListeners();
+      element.removeAttribute("data-oc-popover-open");
+      if (ownsExpanded)
+        element.setAttribute("aria-expanded", "false");
+      if (event.reason === "escape") {
+        ignoreNextFocus = true;
+        element.focus();
+        queueMicrotask(() => {
+          ignoreNextFocus = false;
+        });
+      }
+    });
+    element.setAttribute("aria-haspopup", "dialog");
+    if (ownsExpanded)
+      element.setAttribute("aria-expanded", "false");
+    if (options.label)
+      element.setAttribute("aria-label", options.label);
+    element.addEventListener("pointerenter", onPointerEnter);
+    element.addEventListener("pointermove", onPointerEnter);
+    element.addEventListener("pointerleave", onPointerLeave);
+    element.addEventListener("pointerdown", onPointerDown);
+    element.addEventListener("pointercancel", onPointerCancel);
+    element.addEventListener("click", onClick, true);
+    element.addEventListener("focus", onFocus);
+    element.addEventListener("focusout", onFocusOut);
+    element.addEventListener("keydown", onKeyDown);
+    return { dispose: () => {
+      if (disposed2)
+        return;
+      disposed2 = true;
+      clearTimer();
+      close();
+      unsubscribe();
+      element.removeAttribute("data-oc-popover-open");
+      if (previousExpanded === null)
+        element.removeAttribute("aria-expanded");
+      if (previousPopup === null)
+        element.removeAttribute("aria-haspopup");
+      else
+        element.setAttribute("aria-haspopup", previousPopup);
+      if (options.label) {
+        if (previousLabel === null)
+          element.removeAttribute("aria-label");
+        else
+          element.setAttribute("aria-label", previousLabel);
+      }
+      element.removeEventListener("pointerenter", onPointerEnter);
+      element.removeEventListener("pointermove", onPointerEnter);
+      element.removeEventListener("pointerleave", onPointerLeave);
+      element.removeEventListener("pointerdown", onPointerDown);
+      element.removeEventListener("pointercancel", onPointerCancel);
+      element.removeEventListener("click", onClick, true);
+      element.removeEventListener("focus", onFocus);
+      element.removeEventListener("focusout", onFocusOut);
+      element.removeEventListener("keydown", onKeyDown);
+    } };
+  };
+
   // src/model.ts
   function requiredArtifactIds(change) {
     const byId = new Map(change.artifacts.map((artifact) => [artifact.id, artifact]));
@@ -2706,6 +2931,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var queued = false;
   var selection2 = null;
   var hasStatusControls = false;
+  var hasPopovers = false;
+  var popoverFrame = false;
   var headerRequest = 0;
   var notes = document.createElement("div");
   var content = document.createElement("div");
@@ -2821,6 +3048,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       updatePicker(listing, view.kind === "tracked" ? "Change\u2026" : "Choose a change");
     else setPickerOpen(false, false);
     if (view.kind === "empty" || view.kind === "loading") {
+      nameAnchor.dispose();
+      closeInlineFlyout();
       disclosure.open = false;
       taskKey = "";
     }
@@ -2891,7 +3120,18 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var heading = document.createElement("div");
   heading.className = "section-heading";
   var title = document.createElement("h1");
+  var nameButton = document.createElement("button");
+  nameButton.type = "button";
+  nameButton.className = "flyout-trigger";
+  title.append(nameButton);
   heading.append(title);
+  var inlineFlyout = document.createElement("div");
+  inlineFlyout.hidden = true;
+  var nameAnchor = mountFlyout(
+    nameButton,
+    inlineFlyout,
+    () => trackedChange ? changeFlyout(trackedChange) : null
+  );
   var stage = mountBadge(heading, { label: "" });
   var meter = document.createElement("div");
   meter.className = "section-progress";
@@ -2909,9 +3149,13 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   artifacts.setAttribute("aria-label", "Planning artefacts");
   var artifactKey = "";
   var artifactBadges = [];
-  content.append(heading, meter, disclosure, artifacts);
+  content.append(heading, inlineFlyout, meter, disclosure, artifacts);
   function renderTracked(change, tasks) {
-    if (title.textContent !== change.id) title.textContent = change.id;
+    if (nameButton.textContent !== change.id) {
+      nameButton.textContent = change.id;
+      closeInlineFlyout();
+    }
+    nameAnchor.update();
     stage.update({ label: stageLabel(change.stage) });
     const { completedTasks, totalTasks } = change;
     progress.update({ value: totalTasks ? 100 * completedTasks / totalTasks : 0 });
@@ -2940,6 +3184,109 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       artifactBadges.push(mountBadge(item, { label: artifact.status }));
       artifacts.append(item);
     }
+  }
+  var FLYOUT_DATA_LIMIT = 15e3;
+  function ellipsize(text, max) {
+    return text.length <= max ? text : `${text.slice(0, max - 1)}\u2026`;
+  }
+  function fitText(text, max, measure) {
+    const cut = ellipsize(text, max);
+    if (measure(cut) <= FLYOUT_DATA_LIMIT) return cut;
+    let low = 1;
+    let high = cut.length;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (measure(ellipsize(text, mid)) <= FLYOUT_DATA_LIMIT) low = mid;
+      else high = mid - 1;
+    }
+    return ellipsize(text, low);
+  }
+  function changeFlyout(change) {
+    const data = {
+      kind: "change",
+      name: change.id,
+      stage: change.stage,
+      goal: null
+    };
+    data.name = fitText(
+      data.name,
+      FLYOUT_DATA_LIMIT,
+      (name) => JSON.stringify({ ...data, name }).length
+    );
+    if (change.goal) {
+      data.goal = fitText(change.goal, 4e3, (goal) => JSON.stringify({ ...data, goal }).length);
+    }
+    return data;
+  }
+  function decodeFlyout(value) {
+    if (!value || typeof value !== "object" || !("kind" in value) || value.kind !== "change")
+      return null;
+    if (!("name" in value) || typeof value.name !== "string" || !("goal" in value) || value.goal !== null && typeof value.goal !== "string" || !("stage" in value) || value.stage !== "planning" && value.stage !== "ready" && value.stage !== "progress" && value.stage !== "complete")
+      return null;
+    return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
+  }
+  function renderFlyout(container, data) {
+    const heading2 = document.createElement("h1");
+    heading2.textContent = data.name;
+    const stage2 = document.createElement("p");
+    stage2.textContent = stageLabel(data.stage);
+    container.classList.add("flyout");
+    container.replaceChildren(heading2, stage2);
+    if (data.goal) {
+      const goal = document.createElement("p");
+      goal.textContent = data.goal;
+      container.append(goal);
+    }
+  }
+  function closeInlineFlyout() {
+    inlineFlyout.hidden = true;
+    if (!hasPopovers) nameButton.setAttribute("aria-expanded", "false");
+  }
+  function mountFlyout(button2, inline, getData) {
+    let anchor;
+    function onClick() {
+      const data = getData();
+      if (!data) return;
+      if (anchor) {
+        if (button2.getAttribute("aria-expanded") !== "true")
+          button2.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+      } else {
+        inline.hidden = !inline.hidden;
+        if (!inline.hidden) renderFlyout(inline, data);
+        button2.setAttribute("aria-expanded", String(!inline.hidden));
+      }
+    }
+    button2.addEventListener("click", onClick);
+    return {
+      update() {
+        if (anchor && !hasPopovers) {
+          anchor.dispose();
+          anchor = void 0;
+        }
+        if (!hasPopovers) {
+          button2.setAttribute("aria-expanded", String(!inline.hidden));
+        } else if (!anchor) {
+          inline.hidden = true;
+          button2.removeAttribute("aria-expanded");
+          anchor = mountPopoverAnchor(button2, {
+            host,
+            getData: () => {
+              const data = getData();
+              if (!data || JSON.stringify(data).length > FLYOUT_DATA_LIMIT)
+                throw new Error("OpenSpec flyout data is unavailable.");
+              return data;
+            },
+            width: 320,
+            height: 160,
+            side: "bottom"
+          });
+        }
+      },
+      dispose() {
+        anchor?.dispose();
+        anchor = void 0;
+      }
+    };
   }
   function note(text, role) {
     const line = document.createElement("p");
@@ -3079,12 +3426,31 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     hasStatusControls = nextStatusControls;
     applyHostReady(ready2, document.documentElement);
     applyDevice(ready2.device);
+    if (ready2.surface === "popover") {
+      if (!popoverFrame) {
+        popoverFrame = true;
+        panelRoot.replaceChildren();
+        const data = decodeFlyout(ready2.popover?.data);
+        if (data) renderFlyout(panelRoot, data);
+        else panelRoot.textContent = "OpenSpec details are unavailable.";
+      }
+      resize.observe(panelRoot);
+      return;
+    }
+    if (hasPopovers !== (ready2.features?.popovers === true)) {
+      hasPopovers = ready2.features?.popovers === true;
+      nameAnchor.update();
+    }
     updateContext(ready2.directory, ready2.session?.id ?? null);
     if (statusControlsChanged && !directoryChanged) publishRefreshControl();
     resize.observe(panelRoot);
   });
-  var offDirectory = host.onDirectory((next) => updateContext(next, sessionId));
-  var offSession = host.onSession((next) => updateContext(directory, next?.id ?? null));
+  var offDirectory = host.onDirectory((next) => {
+    if (!popoverFrame) updateContext(next, sessionId);
+  });
+  var offSession = host.onSession((next) => {
+    if (!popoverFrame) updateContext(directory, next?.id ?? null);
+  });
   var offLifecycle = host.onSessionLifecycle((event) => {
     if (event.sessionId !== sessionId) return;
     const completedTurn = turnStarted && event.phase === "completed";
@@ -3105,6 +3471,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       offLifecycle();
       offStatusControl();
       offSessions?.();
+      nameAnchor.dispose();
       for (const handle of [
         refreshButton,
         openBoard,

@@ -43,13 +43,14 @@ const artifacts = [
   { id: "specs", status: "done", outputPath: "specs/**/*.md", requires: ["proposal"] },
   { id: "tasks", status: "done", outputPath: "tasks.md", requires: ["specs"] },
 ];
-function hostHtml(statusCase, pointer) {
+function hostHtml(statusCase, pointer, popovers) {
   const data = JSON.stringify({ directory, root, artifacts, theme: theme("dark") });
   const themes = JSON.stringify({ dark: theme("dark"), light: theme("light") });
   return `<!doctype html><script>
     const { directory, root, artifacts, theme } = ${data};
     const statusCase = ${JSON.stringify(statusCase)};
     const pointer = ${JSON.stringify(pointer)};
+    const popovers = ${JSON.stringify(popovers)};
     const statusDirectory = statusCase === "worktree" ? "/tmp/fixture-worktree" : directory;
     let currentRoot = root;
     let currentPlanning = "fixture-planning";
@@ -59,6 +60,24 @@ function hostHtml(statusCase, pointer) {
     window.__projects = value => { projects = value; };
     window.__worktrees = value => { worktrees = value; };
     const guests = new Set();
+    let popover = null;
+    const post = (guest, type, payload) =>
+      guest.postMessage({ channel: "openchamber.sdk", v: 1, type, payload }, "*");
+    const readyFor = (guest) => popover && popover.frame.contentWindow === guest
+      ? { ...ready, surface: "popover", item: null, features: undefined, popover: popover.context }
+      : ready;
+    const closePopover = (reason) => {
+      if (!popover) return;
+      const { owner, frame, context } = popover;
+      guests.delete(frame.contentWindow);
+      frame.remove();
+      popover = null;
+      post(owner, "popover-closed", { id: context.id, reason });
+    };
+    window.__closePopover = closePopover;
+    window.__serviceEvent = (topic, data) => {
+      for (const guest of guests) post(guest, "service-event", { topic, data });
+    };
     const changes = [
       { id: "first-change", goal: "Read the proposal", completedTasks: 1, totalTasks: 2 },
       { id: "second-change", goal: "Review the specs", completedTasks: 0, totalTasks: 0 },
@@ -143,8 +162,10 @@ function hostHtml(statusCase, pointer) {
     window.__remove = (id) => { const index = changes.findIndex((item) => item.id === id); changes.splice(index, 1); };
     window.__recreate = (id) => { changes.push({ id, goal: "Recreated goal", completedTasks: 0, totalTasks: 0 }); };
     window.__addSameStage = () => { changes.push({ id: "alpha-change", goal: "Another goal", completedTasks: 1, totalTasks: 2 }); };
-    window.__theme = (mode) => { for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
-      type: "ready", payload: { ...ready, theme: ${themes}[mode] } }, "*"); };
+    window.__theme = (mode) => {
+      ready.theme = ${themes}[mode];
+      for (const guest of guests) post(guest, "ready", readyFor(guest));
+    };
     window.__failSummary = () => { failSummary = true; };
     window.__failDocument = () => { failDocument = true; };
     window.__failTasks = () => { failTasks = true; };
@@ -175,8 +196,8 @@ function hostHtml(statusCase, pointer) {
     window.__proposalStatus = (status) => { artifacts[0].status = status; };
     window.__draft = () => draft;
     window.__session = (id, busy = false) => { ready.session = id ? { id, busy } : null;
-      for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
-        type: "session", payload: { session: ready.session } }, "*");
+      for (const guest of guests) post(guest, "ready", readyFor(guest));
+      for (const guest of guests) post(guest, "session", { session: ready.session });
       if (statusCase && id) __lifecycle(id, busy ? "started" : "completed");
     };
     window.__lifecycle = (sessionId, phase) => {
@@ -204,8 +225,9 @@ function hostHtml(statusCase, pointer) {
     window.__root = (next) => { currentRoot = next; };
     window.__planning = next => { currentPlanning = next; };
     const ready = { directory: statusDirectory, theme, locale: "en-AU",
-      session: statusCase === "new" ? null : { id: "fixture-session" },
+      session: statusCase === "new" ? null : { id: "fixture-session", busy: false },
       surface: statusCase ? "status" : "panel", connection: { connected: true, account: "" }, settings: {}, item: null };
+    if (popovers) ready.features = { popovers: true };
     if (pointer) ready.device = { formFactor: pointer === "coarse" ? "phone" : "desktop", pointer,
       insets: { top: 0, right: 0, bottom: 0, left: 0 }, keyboard: 0 };
     window.__device = (bottom, keyboard) => {
@@ -230,7 +252,7 @@ function hostHtml(statusCase, pointer) {
       if (statusCase === "stale") sessions[0].items = [];
       if (statusCase === "switch") sessions.push({ ...sessions[0], id: "replacement-session",
         items: [{ id: "second-change", data: { kind: "change", change: "second-change" } }] });
-      if (statusCase === "header") ready.features = { statusControls: true };
+      if (statusCase === "header") ready.features = { ...ready.features, statusControls: true };
       if (statusCase === "picker") {
         sessions[0].items = [];
         changes.unshift(
@@ -240,6 +262,8 @@ function hostHtml(statusCase, pointer) {
         );
       }
       if (statusCase === "archive") changes.push({ id: "archive-all", goal: null, completedTasks: 0, totalTasks: 0 });
+      if (statusCase === "long-goal") changes[0].goal = "a".repeat(17000);
+      if (statusCase === "escaped-goal") changes[0].goal = String.fromCharCode(1).repeat(17000);
       if (["progress", "complete", "read-error"].includes(statusCase)) {
         changes[0].completedTasks = statusCase === "complete" ? 7 : 3;
         changes[0].totalTasks = 7;
@@ -264,7 +288,13 @@ function hostHtml(statusCase, pointer) {
            type: "result", id: message.id, ok: true, payload }, "*"); };
       if (message.type === "hello") {
         guests.add(event.source);
-        const show = () => event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "ready", payload: ready }, "*");
+         const show = () => {
+           const context = readyFor(event.source);
+           post(event.source, "ready", context);
+           if (statusCase && context.session) post(event.source, "session-lifecycle", {
+             sessionId: context.session.id, phase: context.session.busy ? "started" : "completed",
+           });
+         };
         if (location.search.includes("hold-ready")) window.__releaseReady = show;
         else show();
         return;
@@ -417,10 +447,34 @@ function hostHtml(statusCase, pointer) {
         reply();
         return;
       }
-      if (["workspace-unsubscribe", "resize", "status-controls", "open-surface"].includes(message.type)) {
-        window.__requests.push({path:message.type,body:message.payload});
-        if (statusCase && message.type === "resize")
-          document.querySelector("iframe").style.height = Math.max(24, Math.min(480, message.payload.height)) + "px";
+       if (message.type === "popover-open") {
+         window.__requests.push({ path: message.type, body: message.payload });
+         const { id, data, width, height } = message.payload;
+         const ownerFrame = [...document.querySelectorAll("iframe")].find((frame) => frame.contentWindow === event.source);
+         closePopover("replaced");
+         const frame = document.createElement("iframe");
+         frame.src = ownerFrame.src;
+         frame.title = "OpenSpec test popover";
+         frame.style.width = width + "px";
+         frame.style.height = height + "px";
+         popover = { owner: event.source, frame, context: { id, data } };
+         document.body.append(frame);
+         reply();
+         return;
+       }
+       if (message.type === "popover-close" || message.type === "popover-anchor-active") {
+         window.__requests.push({ path: message.type, body: message.payload });
+         if (message.type === "popover-close" && message.payload.id === popover?.context.id)
+           closePopover(message.payload.reason ?? "closed");
+         reply();
+         return;
+       }
+       if (["workspace-unsubscribe", "resize", "status-controls", "open-surface"].includes(message.type)) {
+         window.__requests.push({path:message.type,body:message.payload});
+         if (statusCase && message.type === "resize") {
+           const frame = [...document.querySelectorAll("iframe")].find((frame) => frame.contentWindow === event.source);
+           if (frame) frame.style.height = Math.max(24, Math.min(480, message.payload.height)) + "px";
+         }
         reply();
         return;
       }
@@ -502,7 +556,13 @@ async function withPanel(run) {
     const { pathname: path, searchParams } = new URL(request.url, "http://127.0.0.1");
     if (path === "/") {
       response.setHeader("content-type", "text/html");
-      response.end(hostHtml(searchParams.get("status"), searchParams.get("pointer")));
+      response.end(
+        hostHtml(
+          searchParams.get("status"),
+          searchParams.get("pointer"),
+          searchParams.has("popovers"),
+        ),
+      );
     } else if (path === "/panel/index.html") {
       response.setHeader("content-type", "text/html");
       response.end(html);
@@ -555,6 +615,74 @@ async function withPanel(run) {
     if (failures.length) throw new AggregateError(failures.map((result) => result.reason));
   }
 }
+
+for (const popovers of [true, false]) {
+  test(`session section shows the change flyout ${popovers ? "in a host popover" : "inline"}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ hasTouch: popovers });
+      await page.goto(`${url}?status=progress${popovers ? "&popovers&pointer=coarse" : ""}`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const name = section.getByRole("button", { name: "first-change", exact: true });
+      const goal = "Read the proposal";
+      if (popovers) {
+        await name.tap({ timeout: 3000 });
+        const flyout = page.frameLocator('iframe[title="OpenSpec test popover"]');
+        await flyout.getByText(goal, { exact: true }).waitFor({ timeout: 3000 });
+        assert.equal(await section.getByText(goal, { exact: true }).count(), 0);
+        assert.equal(await flyout.getByRole("button", { name: "Open board" }).count(), 0);
+        await page.evaluate(() => __closePopover("outside"));
+        await page.waitForFunction(
+          () => !document.querySelector('iframe[title="OpenSpec test popover"]'),
+        );
+        await name.tap();
+        await flyout.getByText(goal, { exact: true }).waitFor();
+      } else {
+        await name.click({ timeout: 3000 });
+        await section.getByText(goal, { exact: true }).waitFor({ timeout: 3000 });
+        assert.equal(await page.locator("iframe").count(), 1);
+        await name.click();
+        await section.getByText(goal, { exact: true }).waitFor({ state: "hidden" });
+      }
+    });
+  });
+}
+
+test("session section shows the same shortened 17,000-character goal in either flyout", async () => {
+  await withPanel(async (browser, url) => {
+    for (const popovers of [true, false]) {
+      const page = await browser.newPage({ hasTouch: popovers });
+      await page.goto(`${url}?status=long-goal${popovers ? "&popovers&pointer=coarse" : ""}`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const name = section.getByRole("button", { name: "first-change", exact: true });
+      if (popovers) await name.tap({ timeout: 3000 });
+      else await name.click({ timeout: 3000 });
+      const destination = popovers
+        ? page.frameLocator('iframe[title="OpenSpec test popover"]')
+        : section;
+      await destination
+        .getByText(`${"a".repeat(3999)}…`, { exact: true })
+        .waitFor({ timeout: 3000 });
+      await page.close();
+    }
+  });
+});
+
+test("session section fits a JSON-escaped goal within the popover budget", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ hasTouch: true });
+    await page.goto(`${url}?status=escaped-goal&popovers&pointer=coarse`);
+    const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+    await section.getByRole("button", { name: "first-change", exact: true }).tap({ timeout: 3000 });
+    const flyout = page.frameLocator('iframe[title="OpenSpec test popover"]');
+    await flyout.getByRole("heading", { name: "first-change" }).waitFor({ timeout: 3000 });
+    const data = await page.evaluate(
+      () => __requests.find(({ path }) => path === "popover-open").body.data,
+    );
+    assert.ok(JSON.stringify(data).length <= 15_000);
+    assert.ok(data.goal.length < 4000);
+    assert.match(data.goal, /^\x01+…$/);
+  });
+});
 
 for (const scenario of ["saved", "worktree", "archive", "stale", "new"]) {
   test(`session section resolves ${scenario} context without reading the board`, async () => {
