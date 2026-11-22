@@ -2407,6 +2407,21 @@ ${GUEST_UI_LOOK_CSS}`;
     if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
     return { id, completedTasks, totalTasks };
   }
+  function decodeArchived(value) {
+    const { changes } = record(value);
+    if (!Array.isArray(changes)) throw new Error("Invalid archived listing.");
+    const archived = changes.map((value2) => {
+      const item = record(value2);
+      const name = string(item.name);
+      const completedTasks = count(item.completedTasks);
+      const totalTasks = count(item.totalTasks);
+      if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
+      return { name, completedTasks, totalTasks };
+    });
+    if (new Set(archived.map(({ name }) => name)).size !== archived.length)
+      throw new Error("Duplicate archived change.");
+    return archived;
+  }
   function decodeListing(value) {
     const input = record(value);
     const directory2 = string(input.directory);
@@ -2589,6 +2604,10 @@ ${GUEST_UI_LOOK_CSS}`;
       return value;
     };
     return {
+      archived: async ({ directory: directory2, root: root2, planning }) => decode2(
+        await request("/archived", { directory: directory2, expectedRoot: root2, expectedPlanning: planning }),
+        decodeArchived
+      ),
       workflows: async (directory2) => decode2(await request("/workflows", { directory: directory2 }), decodeWorkflows),
       list: async (directory2, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {

@@ -2689,6 +2689,21 @@ ${GUEST_UI_LOOK_CSS}`;
     if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
     return { id, completedTasks, totalTasks };
   }
+  function decodeArchived(value) {
+    const { changes } = record(value);
+    if (!Array.isArray(changes)) throw new Error("Invalid archived listing.");
+    const archived = changes.map((value2) => {
+      const item = record(value2);
+      const name = string(item.name);
+      const completedTasks = count(item.completedTasks);
+      const totalTasks = count(item.totalTasks);
+      if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
+      return { name, completedTasks, totalTasks };
+    });
+    if (new Set(archived.map(({ name }) => name)).size !== archived.length)
+      throw new Error("Duplicate archived change.");
+    return archived;
+  }
   function decodeListing(value) {
     const input = record(value);
     const directory = string(input.directory);
@@ -2847,6 +2862,10 @@ ${GUEST_UI_LOOK_CSS}`;
       return value;
     };
     return {
+      archived: async ({ directory, root: root2, planning }) => decode(
+        await request("/archived", { directory, expectedRoot: root2, expectedPlanning: planning }),
+        decodeArchived
+      ),
       workflows: async (directory) => decode(await request("/workflows", { directory }), decodeWorkflows),
       list: async (directory, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {
@@ -3026,6 +3045,7 @@ ${GUEST_UI_LOOK_CSS}`;
     let disposed = false;
     const scopeKey = (scope) => JSON.stringify([scope.directory, scope.root, scope.planning]);
     const keyFor = (scope, change, kind, artifact = "", selector = "") => JSON.stringify([scope.directory, scope.root, scope.planning, change, kind, artifact, selector]);
+    const changePrefix = (scope, change) => JSON.stringify([scope.directory, scope.root, scope.planning, change]).slice(0, -1) + ",";
     const active2 = (scope) => !disposed && !!context && scopeKey(context) === scopeKey(scope);
     const state = (entry) => ({
       value: entry.value,
@@ -3036,6 +3056,13 @@ ${GUEST_UI_LOOK_CSS}`;
       generation++;
       cache.clear();
       bytes = 0;
+    }
+    function removeEntries(matches) {
+      for (const [key, entry] of cache)
+        if (matches(key)) {
+          bytes -= entry.bytes;
+          cache.delete(key);
+        }
     }
     function setContext(scope) {
       if (context && scope && scopeKey(context) === scopeKey(scope)) return;
@@ -3087,6 +3114,14 @@ ${GUEST_UI_LOOK_CSS}`;
     return {
       setContext,
       refresh,
+      refreshChanges() {
+        if (!context) return;
+        const browse = changePrefix(context, "");
+        removeEntries((key) => !key.startsWith(browse));
+      },
+      archived(scope) {
+        return read(scope, keyFor(scope, "", "archived"), () => client.archived(scope));
+      },
       taskState(scope, change) {
         const entry = cache.get(keyFor(scope, change, "tasks"));
         return active2(scope) && entry ? state(entry) : null;
@@ -3107,12 +3142,8 @@ ${GUEST_UI_LOOK_CSS}`;
         );
       },
       invalidateChange(scope, change) {
-        const prefix2 = JSON.stringify([scope.directory, scope.root, scope.planning, change]).slice(0, -1) + ",";
-        for (const [key, entry] of cache)
-          if (key.startsWith(prefix2)) {
-            bytes -= entry.bytes;
-            cache.delete(key);
-          }
+        const prefix2 = changePrefix(scope, change);
+        removeEntries((key) => key.startsWith(prefix2));
       },
       dispose() {
         disposed = true;
@@ -3406,6 +3437,54 @@ ${GUEST_UI_LOOK_CSS}`;
       });
     }
     syncTabs();
+    const archivedStatus = document.createElement("div");
+    archivedStatus.className = "notice browse-status";
+    const archivedMessage = document.createElement("span");
+    const archivedRetryRoot = document.createElement("span");
+    const archivedRetry = mountButton(archivedRetryRoot, {
+      label: "refresh",
+      variant: "secondary",
+      size: "sm",
+      onClick: callbacks.retry
+    });
+    const archivedList = document.createElement("ul");
+    archivedList.className = "browse-list";
+    archivedStatus.append(archivedMessage, archivedRetryRoot);
+    panes.archived.append(archivedStatus, archivedList);
+    let lastArchived;
+    let lastArchiveQuery;
+    function updateArchived(state, query) {
+      if (lastArchived === state && lastArchiveQuery === query) return;
+      lastArchived = state;
+      lastArchiveQuery = query;
+      const rows = (state?.value ?? []).map(({ name, completedTasks, totalTasks }) => {
+        const dated = /^(\d{4}-\d{2}-\d{2})-(.+)$/.exec(name);
+        return { name: dated?.[2] ?? name, date: dated?.[1] ?? "", completedTasks, totalTasks };
+      }).filter(({ name }) => name.toLocaleLowerCase().includes(query)).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
+      archivedList.replaceChildren(
+        ...rows.map(({ name, date, completedTasks, totalTasks }) => {
+          const row = document.createElement("li");
+          const title = document.createElement("span");
+          title.textContent = name;
+          const count2 = document.createElement("span");
+          count2.textContent = `${completedTasks} of ${totalTasks} tasks`;
+          count2.className = "browse-meta";
+          row.append(title);
+          if (date) {
+            const time = document.createElement("time");
+            time.dateTime = time.textContent = date;
+            time.className = "browse-meta";
+            row.append(time);
+          }
+          row.append(count2);
+          return row;
+        })
+      );
+      archivedStatus.hidden = !state || rows.length > 0;
+      archivedStatus.classList.toggle("error", !!state?.error);
+      archivedRetryRoot.hidden = !state?.error;
+      archivedMessage.textContent = state?.error?.message ?? (state?.pending ? "Loading archived changes\u2026" : state?.value?.length ? "No matching archived changes." : "No changes are archived.");
+    }
     const board = panes.changes;
     board.className = "board";
     const sections = stages.map((stage) => {
@@ -3588,6 +3667,7 @@ ${GUEST_UI_LOOK_CSS}`;
           cards.delete(id);
         }
         const query = state.search.trim().toLocaleLowerCase();
+        updateArchived(state.archived, query);
         for (const entry of cards.values()) {
           if (!entry.current.change.id.toLocaleLowerCase().includes(query)) entry.node.remove();
         }
@@ -3635,6 +3715,7 @@ ${GUEST_UI_LOOK_CSS}`;
         help.dispose();
         search.dispose();
         tabs.dispose();
+        archivedRetry.dispose();
         main.remove();
       }
     };
@@ -8272,6 +8353,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     let errorMessage = null;
     let search = "";
     let boardTab = "changes";
+    let archivedState = null;
     let selectedChange = null;
     let selectedArtifact = "";
     let activeView = "document";
@@ -8293,6 +8375,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       pendingInspection = null;
       scope = null;
       resources.setContext(null);
+      archivedState = null;
       changes = [];
       workflows = new Set(CORE_WORKFLOWS);
       listedIds = /* @__PURE__ */ new Set();
@@ -8336,7 +8419,10 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         return;
       }
       if (refresh) {
-        resources.refresh();
+        if (readWorkflows) {
+          resources.refresh();
+          archivedState = null;
+        } else resources.refreshChanges();
         readGeneration++;
         detailOpening++;
         files = /* @__PURE__ */ new Map();
@@ -8362,9 +8448,12 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
             return;
           }
           workflows = configuredWorkflows;
+          const previousScope = scope;
           scope = scope?.root === listing.root && scope.planning === listing.planning ? scope : { directory: currentDirectory, root: listing.root, planning: listing.planning };
           const current = scope;
           resources.setContext(current);
+          if (current !== previousScope) archivedState = null;
+          if (boardTab === "archived" && !archivedState) readArchived(current);
           const listed = new Set(listing.changes.map((entry) => entry.id));
           listedIds = listed;
           if (selectedChange && !listed.has(selectedChange.id)) {
@@ -8483,6 +8572,16 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           }
         }
       })();
+    }
+    function readArchived(captured) {
+      const read = resources.archived(captured);
+      archivedState = read.state;
+      if (read.completion)
+        void read.completion.then((state) => {
+          if (scope !== captured || archivedState !== read.state) return;
+          archivedState = state;
+          render();
+        });
     }
     async function preparePrompt(change, captured, originatingEpoch, intent, originatingSession = sessionId) {
       const current = changes.find((item) => item.id === change.id);
@@ -8842,6 +8941,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       },
       select: (view) => {
         boardTab = view;
+        if (view === "archived" && scope && !archivedState) readArchived(scope);
         render();
       }
     });
@@ -8958,6 +9058,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         failures,
         workflows,
         view: boardTab,
+        archived: archivedState,
         cards: changes.map((change) => ({
           change,
           stale: staleIds.has(change.id),

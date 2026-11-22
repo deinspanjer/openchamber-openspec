@@ -1,11 +1,12 @@
 import { mountButton, mountProgress, mountSearchField, mountTabs } from "@openchamber/sdk/ui";
-import type { Workflow } from "../contracts.js";
+import type { ArchivedChange, Workflow } from "../contracts.js";
 import type { DerivedChange } from "../model.js";
 import { stages, workflowLabel } from "./workflow.js";
 import { mountPrimaryAction, type PrimaryIntent } from "./primary-action.js";
 import { mountHelpButton } from "./help-button.js";
 import { addButtonIcon } from "./button-icon.js";
 import { mountAreaBadges } from "./area-badges.js";
+import type { ReadState } from "./resources.js";
 
 const views = [
   { id: "changes", label: "Changes" },
@@ -39,6 +40,7 @@ export type BoardState = {
   cards: BoardCard[];
   workflows: ReadonlySet<Workflow>;
   view: BoardView;
+  archived: ReadState<ArchivedChange[]> | null;
 };
 
 export function mountBoardView(
@@ -157,6 +159,63 @@ export function mountBoardView(
     });
   }
   syncTabs();
+  const archivedStatus = document.createElement("div");
+  archivedStatus.className = "notice browse-status";
+  const archivedMessage = document.createElement("span");
+  const archivedRetryRoot = document.createElement("span");
+  const archivedRetry = mountButton(archivedRetryRoot, {
+    label: "refresh",
+    variant: "secondary",
+    size: "sm",
+    onClick: callbacks.retry,
+  });
+  const archivedList = document.createElement("ul");
+  archivedList.className = "browse-list";
+  archivedStatus.append(archivedMessage, archivedRetryRoot);
+  panes.archived.append(archivedStatus, archivedList);
+  let lastArchived: BoardState["archived"] | undefined;
+  let lastArchiveQuery: string | undefined;
+  function updateArchived(state: BoardState["archived"], query: string) {
+    if (lastArchived === state && lastArchiveQuery === query) return;
+    lastArchived = state;
+    lastArchiveQuery = query;
+    const rows = (state?.value ?? [])
+      .map(({ name, completedTasks, totalTasks }) => {
+        const dated = /^(\d{4}-\d{2}-\d{2})-(.+)$/.exec(name);
+        return { name: dated?.[2] ?? name, date: dated?.[1] ?? "", completedTasks, totalTasks };
+      })
+      .filter(({ name }) => name.toLocaleLowerCase().includes(query))
+      .sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
+    archivedList.replaceChildren(
+      ...rows.map(({ name, date, completedTasks, totalTasks }) => {
+        const row = document.createElement("li");
+        const title = document.createElement("span");
+        title.textContent = name;
+        const count = document.createElement("span");
+        count.textContent = `${completedTasks} of ${totalTasks} tasks`;
+        count.className = "browse-meta";
+        row.append(title);
+        if (date) {
+          const time = document.createElement("time");
+          time.dateTime = time.textContent = date;
+          time.className = "browse-meta";
+          row.append(time);
+        }
+        row.append(count);
+        return row;
+      }),
+    );
+    archivedStatus.hidden = !state || rows.length > 0;
+    archivedStatus.classList.toggle("error", !!state?.error);
+    archivedRetryRoot.hidden = !state?.error;
+    archivedMessage.textContent =
+      state?.error?.message ??
+      (state?.pending
+        ? "Loading archived changes…"
+        : state?.value?.length
+          ? "No matching archived changes."
+          : "No changes are archived.");
+  }
   const board = panes.changes;
   board.className = "board";
   const sections = stages.map((stage) => {
@@ -358,6 +417,7 @@ export function mountBoardView(
         cards.delete(id);
       }
       const query = state.search.trim().toLocaleLowerCase();
+      updateArchived(state.archived, query);
       for (const entry of cards.values()) {
         if (!entry.current.change.id.toLocaleLowerCase().includes(query)) entry.node.remove();
       }
@@ -416,6 +476,7 @@ export function mountBoardView(
       help.dispose();
       search.dispose();
       tabs.dispose();
+      archivedRetry.dispose();
       main.remove();
     },
   };

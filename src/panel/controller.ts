@@ -1,6 +1,6 @@
 import { HostRequestError, type HostClient } from "@openchamber/sdk";
 import { deriveChange, type DerivedChange } from "../model.js";
-import { documentKey, type Task, type Workflow } from "../contracts.js";
+import { documentKey, type ArchivedChange, type Task, type Workflow } from "../contracts.js";
 import { createClient, ServiceRequestError, type Scope } from "./client.js";
 import { createResources, type ReadState } from "./resources.js";
 import { mountBoardView, type BoardView } from "./board-view.js";
@@ -49,6 +49,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let errorMessage: string | null = null;
   let search = "";
   let boardTab: BoardView = "changes";
+  let archivedState: ReadState<ArchivedChange[]> | null = null;
   let selectedChange: DerivedChange | null = null;
   let selectedArtifact = "";
   let activeView: "document" | "tasks" = "document";
@@ -72,6 +73,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     pendingInspection = null;
     scope = null;
     resources.setContext(null);
+    archivedState = null;
     changes = [];
     workflows = new Set(CORE_WORKFLOWS);
     listedIds = new Set();
@@ -117,7 +119,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       return;
     }
     if (refresh) {
-      resources.refresh();
+      if (readWorkflows) {
+        resources.refresh();
+        archivedState = null;
+      } else resources.refreshChanges();
       readGeneration++;
       detailOpening++;
       files = new Map();
@@ -147,12 +152,15 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           return;
         }
         workflows = configuredWorkflows;
+        const previousScope = scope;
         scope =
           scope?.root === listing.root && scope.planning === listing.planning
             ? scope
             : { directory: currentDirectory, root: listing.root, planning: listing.planning };
         const current = scope;
         resources.setContext(current);
+        if (current !== previousScope) archivedState = null;
+        if (boardTab === "archived" && !archivedState) readArchived(current);
         const listed = new Set(listing.changes.map((entry) => entry.id));
         listedIds = listed;
         if (selectedChange && !listed.has(selectedChange.id)) {
@@ -292,6 +300,17 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         }
       }
     })();
+  }
+
+  function readArchived(captured: Scope) {
+    const read = resources.archived(captured);
+    archivedState = read.state;
+    if (read.completion)
+      void read.completion.then((state) => {
+        if (scope !== captured || archivedState !== read.state) return;
+        archivedState = state;
+        render();
+      });
   }
 
   async function preparePrompt(
@@ -765,6 +784,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     },
     select: (view) => {
       boardTab = view;
+      if (view === "archived" && scope && !archivedState) readArchived(scope);
       render();
     },
   });
@@ -893,6 +913,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       failures,
       workflows,
       view: boardTab,
+      archived: archivedState,
       cards: changes.map((change) => ({
         change,
         stale: staleIds.has(change.id),

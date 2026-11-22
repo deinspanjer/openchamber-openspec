@@ -28,10 +28,11 @@ SHALL offer no workflow, edit or delete actions.
 
 ### Requirement: Read archived changes only on demand
 
-The board SHALL read archived changes when the `Archived` view first opens in a context and on
-explicit Refresh while it shows, and SHALL keep the result until then. A failed read SHALL show the
-error and `refresh` in the view and SHALL NOT show a partial list. Reads SHALL verify the OpenSpec
-root as other board reads do.
+The board SHALL read archived changes when the `Archived` view first opens in a context and retain
+the result until Refresh or a context change. After Refresh, the next showing SHALL read again; if
+`Archived` is already shown, it SHALL read immediately. A failed read SHALL show the error and
+`refresh` in the view and SHALL NOT show a partial list. Reads SHALL verify the OpenSpec root as
+other board reads do.
 
 #### Scenario: Older CLI
 
@@ -40,5 +41,10 @@ root as other board reads do.
 
 #### Scenario: Return to the view
 
-- **WHEN** the user leaves `Archived` and opens it again in the same context
+- **WHEN** the user leaves `Archived` and opens it again in the same context without Refresh
 - **THEN** the view shows its earlier list without a new read
+
+#### Scenario: Refresh while Archived is hidden
+
+- **WHEN** the user refreshes another view after reading `Archived`
+- **THEN** the board does not read archived changes until the user returns to `Archived`

@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   CORE_WORKFLOWS,
+  decodeArchived,
   decodeArtifacts,
   decodeListingEntry,
   decodeTasks,
@@ -350,6 +351,22 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     const archive = configured.findIndex((name) => name === "archive" || name === "bulk-archive");
     if (archive !== -1 && !configured.includes("sync")) configured.splice(archive, 0, "sync");
     return { ok: true, value: { workflows: configured } };
+  }
+
+  async function archived(
+    directory: string,
+    expectedRoot: string,
+    expectedPlanning?: string,
+  ): Promise<CliResult> {
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const result = await checked(directory, ["list", "--archived"], current, true, true);
+    if (!result.ok) return result;
+    await planningScope(expectedRoot, current.planning);
+    try {
+      return { ok: true, value: { changes: decodeArchived(result.value) } };
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec archived listing.", 502));
+    }
   }
 
   async function summary(
@@ -731,6 +748,7 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
   }
 
   return {
+    archived,
     changes,
     workflows,
     summary,

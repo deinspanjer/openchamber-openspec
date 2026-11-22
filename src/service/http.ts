@@ -196,10 +196,16 @@ export function createOpenSpecService(
                         )
                       : path === "/workflows"
                         ? adapter.workflows(directory)
-                        : Promise.resolve({
-                            ok: false as const,
-                            error: serviceError("NOT_FOUND", "Route not found.", 404),
-                          });
+                        : path === "/archived"
+                          ? adapter.archived(
+                              directory,
+                              requiredString(body, "expectedRoot"),
+                              expectedPlanning,
+                            )
+                          : Promise.resolve({
+                              ok: false as const,
+                              error: serviceError("NOT_FOUND", "Route not found.", 404),
+                            });
       let timer: NodeJS.Timeout | undefined;
       const result = await Promise.race([
         work,

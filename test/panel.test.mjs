@@ -137,6 +137,8 @@ function hostHtml(statusCase, pointer, popovers) {
     let failNextListing = false;
     let workflows = ["propose", "explore", "apply", "update", "sync", "archive"];
     window.__workflows = (value) => { workflows = value; };
+    let archivedChanges = [];
+    window.__archived = (changes) => { archivedChanges = changes; };
     let holdWorkflows = false;
     const pendingWorkflows = [];
     window.__holdWorkflows = () => { holdWorkflows = true; };
@@ -395,7 +397,12 @@ function hostHtml(statusCase, pointer, popovers) {
              changes: local ? changes.map(({ id, completedTasks, totalTasks }) => ({ id, completedTasks, totalTasks })) : [] });
           if (holdListing) pending.push(finish); else finish();
         }
-        else if (path === "/summaries") {
+         else if (path === "/archived") {
+           if (archivedChanges === null)
+             send({ error: { code: "OPENSPEC_ERROR", message: "Cannot list archived changes" } }, 422);
+           else send({ changes: archivedChanges });
+         }
+         else if (path === "/summaries") {
           if (body.directory !== directory) { send({ root: body.directory + "/openspec", changes: [] }); return; }
           if (batchReply) {
             const mode = batchReply; batchReply = "";
@@ -2969,7 +2976,11 @@ test("board tabs retain the Changes cards, scroll and focus without reading agai
     await changes.waitFor({ timeout: 3000 });
     assert.equal(await changes.getAttribute("aria-selected"), "true");
     assert.equal(await tabs.evaluate((node) => node.closest("header") === null), true);
-    const before = await page.evaluate(() => __requests.length);
+    const before = await page.evaluate(
+      () =>
+        __requests.filter(({ path }) => ["/changes", "/workflows", "/summaries"].includes(path))
+          .length,
+    );
     await last.scrollIntoViewIfNeeded();
     const scroll = await last.evaluate((node) => {
       node.focus({ preventScroll: true });
@@ -2999,7 +3010,14 @@ test("board tabs retain the Changes cards, scroll and focus without reading agai
     );
     await search.fill("Recreated goal");
     assert.equal(await last.count(), 0);
-    assert.equal(await page.evaluate(() => __requests.length), before);
+    assert.equal(
+      await page.evaluate(
+        () =>
+          __requests.filter(({ path }) => ["/changes", "/workflows", "/summaries"].includes(path))
+            .length,
+      ),
+      before,
+    );
   });
 });
 
@@ -3020,6 +3038,96 @@ test("coarse-pointer board tabs are touch-sized and reachable with arrow keys", 
     assert.equal(await specs.getAttribute("aria-selected"), "true");
     await specs.press("ArrowLeft");
     assert.equal(await archived.getAttribute("aria-selected"), "true");
+  });
+});
+
+test("Archived orders and filters archived changes without reading them before opening", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() =>
+      __archived([
+        { name: "no-date", completedTasks: 0, totalTasks: 0 },
+        { name: "2026-11-20-add-login", completedTasks: 7, totalTasks: 7 },
+        { name: "2026-11-22-fix-cache", completedTasks: 3, totalTasks: 3 },
+        { name: "2026-11-22-add-cache", completedTasks: 1, totalTasks: 2 },
+      ]),
+    );
+    assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/archived")), false);
+    await panel.getByRole("tab", { name: "Archived", exact: true }).click();
+    const archive = panel.getByRole("tabpanel", { name: "Archived" });
+    await archive.getByText("fix-cache", { exact: true }).waitFor({ timeout: 3000 });
+    const rows = archive.getByRole("listitem");
+    assert.deepEqual(await rows.allTextContents(), [
+      "add-cache2026-11-221 of 2 tasks",
+      "fix-cache2026-11-223 of 3 tasks",
+      "add-login2026-11-207 of 7 tasks",
+      "no-date0 of 0 tasks",
+    ]);
+    await panel.getByRole("searchbox", { name: "Search changes" }).fill("login");
+    assert.deepEqual(await rows.allTextContents(), ["add-login2026-11-207 of 7 tasks"]);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      1,
+    );
+  });
+});
+
+test("Archived retains reads across tab switches but a Refresh on Changes invalidates them", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    const archived = panel.getByRole("tab", { name: "Archived", exact: true });
+    const changes = panel.getByRole("tab", { name: "Changes", exact: true });
+    const archive = panel.getByRole("tabpanel", { name: "Archived" });
+    await archived.click();
+    await archive.getByText("No changes are archived.").waitFor({ timeout: 3000 });
+    await changes.click();
+    await page.evaluate(() =>
+      __archived([{ name: "2026-11-22-fix-cache", completedTasks: 3, totalTasks: 3 }]),
+    );
+    await archived.click();
+    await archive.getByText("No changes are archived.").waitFor();
+    assert.equal(await page.evaluate(() => __completed.filter((p) => p === "/archived").length), 1);
+    await changes.click();
+    await page.evaluate(() => __recreate("loaded-on-refresh"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "loaded-on-refresh", exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      1,
+    );
+    await archived.click();
+    await archive.getByText("fix-cache", { exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      2,
+    );
+  });
+});
+
+test("Archived shows the CLI error without rows and refresh retries the shown view", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => __archived(null));
+    await panel.getByRole("tab", { name: "Archived", exact: true }).click();
+    const archive = panel.getByRole("tabpanel", { name: "Archived" });
+    await archive.getByText("Cannot list archived changes").waitFor({ timeout: 3000 });
+    assert.equal(await archive.getByRole("listitem").count(), 0);
+    await page.evaluate(() => __archived([]));
+    await archive.getByRole("button", { name: "refresh", exact: true }).click();
+    await archive.getByText("No changes are archived.").waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      2,
+    );
   });
 });
 

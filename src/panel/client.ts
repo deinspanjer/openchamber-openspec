@@ -1,5 +1,6 @@
 import type { GuestRequest, HostClient } from "@openchamber/sdk";
 import {
+  decodeArchived,
   decodeTaskResponse,
   decodeListing,
   decodeSummary,
@@ -79,6 +80,11 @@ export function createClient(host: HostClient) {
   };
 
   return {
+    archived: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/archived", { directory, expectedRoot: root, expectedPlanning: planning }),
+        decodeArchived,
+      ),
     workflows: async (directory: string) =>
       decode(await request("/workflows", { directory }), decodeWorkflows),
     list: async (

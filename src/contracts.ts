@@ -7,6 +7,7 @@ export function decodePlanning(value: unknown): string {
   return value;
 }
 export type ListingEntry = { id: string; completedTasks: number; totalTasks: number };
+export type ArchivedChange = { name: string; completedTasks: number; totalTasks: number };
 export type Task = {
   id: string;
   description: string;
@@ -100,6 +101,22 @@ export function decodeListingEntry(value: unknown, key: "name" | "id" = "id"): L
   const totalTasks = count(item.totalTasks);
   if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
   return { id, completedTasks, totalTasks };
+}
+
+export function decodeArchived(value: unknown): ArchivedChange[] {
+  const { changes } = record(value);
+  if (!Array.isArray(changes)) throw new Error("Invalid archived listing.");
+  const archived = changes.map((value) => {
+    const item = record(value);
+    const name = string(item.name);
+    const completedTasks = count(item.completedTasks);
+    const totalTasks = count(item.totalTasks);
+    if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
+    return { name, completedTasks, totalTasks };
+  });
+  if (new Set(archived.map(({ name }) => name)).size !== archived.length)
+    throw new Error("Duplicate archived change.");
+  return archived;
 }
 
 export function decodeListing(value: unknown): {

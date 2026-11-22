@@ -31,7 +31,7 @@ task.
       cards, scroll and focus without a read. Search filters the shown view, and `new change` and
       `archive all` stay available. Tabs are arrow-key operable and at least 44px tall on a coarse
       pointer. Implement with `mountTabs` in `board-view.ts` and `panel/index.html`.
-- [ ] 2.2 Archived. Service seam (`test/service.test.mjs`): add failing tests for `/archived` with
+- [x] 2.2 Archived. Service seam (`test/service.test.mjs`): add failing tests for `/archived` with
       the real CLI on a disposable root holding two dated archive directories and one active change.
       With a fake runner, add malformed output, duplicate names and root change. Implement the route
       and `client.archived()`. Fake host seam: add failing tests that opening `Archived` reads once,

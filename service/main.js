@@ -7595,6 +7595,21 @@ function decodeListingEntry(value, key = "id") {
   if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
   return { id, completedTasks, totalTasks };
 }
+function decodeArchived(value) {
+  const { changes } = record(value);
+  if (!Array.isArray(changes)) throw new Error("Invalid archived listing.");
+  const archived = changes.map((value2) => {
+    const item = record(value2);
+    const name = string(item.name);
+    const completedTasks = count(item.completedTasks);
+    const totalTasks = count(item.totalTasks);
+    if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
+    return { name, completedTasks, totalTasks };
+  });
+  if (new Set(archived.map(({ name }) => name)).size !== archived.length)
+    throw new Error("Duplicate archived change.");
+  return archived;
+}
 function decodeArtifacts(value, requires) {
   if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
   const artifacts = value.map((value2) => {
@@ -8015,6 +8030,17 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     if (archive !== -1 && !configured.includes("sync")) configured.splice(archive, 0, "sync");
     return { ok: true, value: { workflows: configured } };
   }
+  async function archived(directory, expectedRoot, expectedPlanning) {
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const result = await checked(directory, ["list", "--archived"], current, true, true);
+    if (!result.ok) return result;
+    await planningScope(expectedRoot, current.planning);
+    try {
+      return { ok: true, value: { changes: decodeArchived(result.value) } };
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec archived listing.", 502));
+    }
+  }
   async function summary(directory, change, expectedRoot, expectedPlanning) {
     if (!isChangeName(change))
       return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
@@ -8313,6 +8339,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     }
   }
   return {
+    archived,
     changes,
     workflows,
     summary,
@@ -8472,7 +8499,11 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),
         expectedPlanning
-      ) : path === "/workflows" ? adapter.workflows(directory) : Promise.resolve({
+      ) : path === "/workflows" ? adapter.workflows(directory) : path === "/archived" ? adapter.archived(
+        directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : Promise.resolve({
         ok: false,
         error: serviceError("NOT_FOUND", "Route not found.", 404)
       });

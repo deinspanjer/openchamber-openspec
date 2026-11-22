@@ -57,8 +57,29 @@
       .board-tabs {
         margin-top: 12px;
       }
-      .board-body > [hidden] {
+      .board-body [hidden] {
         display: none;
+      }
+      .browse-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .browse-list > li,
+      .browse-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        align-items: center;
+      }
+      .browse-list > li {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--oc-border);
+        overflow-wrap: anywhere;
+      }
+      .browse-meta {
+        color: var(--oc-muted);
+        font-variant-numeric: tabular-nums;
       }
       .heading,
       .detail-title-row {

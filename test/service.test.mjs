@@ -652,6 +652,77 @@ test("summaries accepts real CLI exit one while keeping a good change", async ()
   });
 });
 
+test("archived lists only archived changes and their task counts from the real CLI", async () => {
+  await withProjects(async (root) => {
+    await fixtureChange(root, "active-change", "Not archived");
+    for (const [name, tasks] of [
+      ["2026-11-20-add-login", "- [x] First\n- [ ] Second\n"],
+      ["2026-11-22-fix-cache", "- [x] Done\n"],
+    ]) {
+      const change = join(root, "openspec", "changes", "archive", name);
+      await mkdir(change, { recursive: true });
+      await writeFile(join(change, "tasks.md"), tasks);
+    }
+    await withService(async (url) => {
+      const listing = await fetch(`${url}/changes`, {
+        method: "POST",
+        headers: { authorization: "Bearer test-token" },
+        body: JSON.stringify({ directory: root }),
+      });
+      const { planning } = await listing.json();
+      const response = await fetch(`${url}/archived`, {
+        method: "POST",
+        headers: { authorization: "Bearer test-token" },
+        body: JSON.stringify({ directory: root, expectedRoot: root, expectedPlanning: planning }),
+      });
+      const value = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(value));
+      assert.deepEqual(
+        value.changes.sort((a, b) => a.name.localeCompare(b.name)),
+        [
+          { name: "2026-11-20-add-login", completedTasks: 1, totalTasks: 2 },
+          { name: "2026-11-22-fix-cache", completedTasks: 1, totalTasks: 1 },
+        ],
+      );
+    });
+  });
+});
+
+test("archived rejects malformed, duplicate and wrong-root CLI listings", async (t) => {
+  await withProjects(async (root, other) => {
+    const row = { name: "2026-11-22-fix-cache", completedTasks: 1, totalTasks: 1 };
+    for (const [label, changes, reportedRoot, status, code] of [
+      ["missing list", null, root, 502, "BAD_CLI_OUTPUT"],
+      ["invalid counts", [{ ...row, completedTasks: 2 }], root, 502, "BAD_CLI_OUTPUT"],
+      ["duplicate names", [row, row], root, 502, "BAD_CLI_OUTPUT"],
+      ["wrong root", [row], other, 409, "ROOT_CHANGED"],
+    ]) {
+      await t.test(label, async () => {
+        await withService(
+          async (url) => {
+            const response = await fetch(`${url}/archived`, {
+              method: "POST",
+              headers: { authorization: "Bearer test-token" },
+              body: JSON.stringify({ directory: root, expectedRoot: root }),
+            });
+            assert.deepEqual(
+              [response.status, (await response.json()).error?.code],
+              [status, code],
+            );
+          },
+          async (_directory, args) => {
+            assert.deepEqual(args, ["list", "--archived"]);
+            return {
+              ok: true,
+              value: { root: { path: reportedRoot, source: "nearest" }, changes },
+            };
+          },
+        );
+      });
+    }
+  });
+});
+
 test("summary returns one scoped change from the real CLI", async (t) => {
   await withProjects(async (root, other) => {
     await fixtureChange(root, "first-change", "First goal");
