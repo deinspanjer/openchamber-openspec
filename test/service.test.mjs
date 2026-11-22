@@ -1973,6 +1973,92 @@ test("creation stays in the validated root after a selected-directory alias move
   });
 });
 
+test("workflow detection follows the global OpenSpec profile without a planning root", async () => {
+  const base = await mkdtemp(join(tempDirectory, "openspec-workflows-"));
+  const env = { ...process.env, XDG_CONFIG_HOME: join(base, "config") };
+  try {
+    await withService(
+      async (url) => {
+        for (const [args, workflows] of [
+          [null, ["propose", "explore", "apply", "update", "sync", "archive"]],
+          [
+            ["set", "workflows", '["ff","verify","archive"]'],
+            ["propose", "explore", "apply", "update", "sync", "archive"],
+          ],
+          [
+            ["set", "profile", "custom"],
+            ["ff", "verify", "sync", "archive"],
+          ],
+        ]) {
+          if (args) await exec("openspec", ["config", ...args], { cwd: base, env });
+          const response = await fetch(`${url}/workflows`, {
+            method: "POST",
+            headers: { authorization: "Bearer test-token" },
+            body: JSON.stringify({ directory: base }),
+          });
+          assert.equal(response.status, 200);
+          assert.deepEqual(await response.json(), { workflows });
+        }
+      },
+      async (cwd, args) => {
+        assert.equal(cwd, base);
+        assert.deepEqual(args, ["config", "list"]);
+        const { stdout } = await exec("openspec", [...args, "--json"], { cwd, env });
+        return { ok: true, value: JSON.parse(stdout) };
+      },
+    );
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+for (const [label, cli, error] of [
+  [
+    "CLI failure",
+    { ok: false, error: { code: "OPENSPEC_ERROR", message: "Unknown command", status: 422 } },
+    "OPENSPEC_ERROR",
+  ],
+  ["missing profile", { ok: true, value: {} }, "BAD_CLI_OUTPUT"],
+  ["malformed profile", { ok: true, value: { profile: 2 } }, "BAD_CLI_OUTPUT"],
+  [
+    "malformed workflow list",
+    { ok: true, value: { profile: "custom", workflows: "archive" } },
+    "BAD_CLI_OUTPUT",
+  ],
+  [
+    "malformed workflow entry",
+    { ok: true, value: { profile: "core", workflows: ["apply", 2] } },
+    "BAD_CLI_OUTPUT",
+  ],
+  [
+    "unknown workflow",
+    { ok: true, value: { profile: "custom", workflows: ["future", "ff"] } },
+    null,
+  ],
+]) {
+  test(`workflow detection handles ${label}`, async () => {
+    await withService(
+      async (url) => {
+        const response = await fetch(`${url}/workflows`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory: tempDirectory }),
+        });
+        const value = await response.json();
+        if (error) {
+          assert.equal(response.status, cli.ok ? 502 : 422);
+          assert.equal(value.error.code, error);
+          if (!cli.ok) assert.deepEqual(value.error, cli.error);
+        } else {
+          assert.equal(response.status, 200);
+          assert.deepEqual(value, { workflows: ["ff"] });
+        }
+      },
+      async () => cli,
+    );
+  });
+}
+
 test("creation stays in the validated registered store when its pointer changes", async () => {
   const base = await mkdtemp(join(tempDirectory, "openspec-create-store-race-"));
   const env = {

@@ -5,6 +5,7 @@ import {
   type ListingEntry,
   type Task,
   type ValidationResult,
+  type Workflow,
 } from "./contracts.js";
 import { deriveChange, taskWindow, type DerivedChange, type Stage } from "./model.js";
 import { createClient, type Listing, type Scope } from "./panel/client.js";
@@ -19,6 +20,7 @@ import {
   updateTrackedChanges,
 } from "./panel/tracked-change.js";
 import { stageLabel } from "./panel/workflow.js";
+import { loadWorkflows } from "./panel/workflows.js";
 
 type View =
   | { kind: "empty" | "loading" }
@@ -56,6 +58,8 @@ let workspace: Promise<void> | undefined;
 let disposed = false;
 let reading = false;
 let queued = false;
+let workflows: ReadonlySet<Workflow> | undefined;
+let refreshWorkflows = false;
 let contextRead: ReturnType<typeof setTimeout> | undefined;
 let selection: { active: Set<string>; saved: string[] | null; changes: string[] } | null = null;
 let hasStatusControls = false;
@@ -858,13 +862,23 @@ function read() {
   const capturedSession = sessionId;
   const capturedWorkspace = workspace;
   const capturedEpoch = epoch;
+  const capturedProject = projectEpoch;
+  const config = refreshWorkflows || !workflows;
+  refreshWorkflows = false;
   const current = () => !disposed && epoch === capturedEpoch;
   reading = true;
   if (showingLive && mountedCards.size) markRefreshing(true);
   void (async () => {
     try {
-      const listing = await client.list(capturedDirectory);
+      const [listingResult, detected] = await Promise.allSettled([
+        client.list(capturedDirectory),
+        config ? loadWorkflows(client, capturedDirectory) : workflows,
+      ]);
+      if (!disposed && projectEpoch === capturedProject && detected.status === "fulfilled")
+        workflows = detected.value;
       if (!current()) return;
+      if (listingResult.status === "rejected") throw listingResult.reason;
+      const listing = listingResult.value;
       const saved = capturedSession ? await readTrackedChanges(host, capturedSession) : null;
       if (!current()) return;
       if (capturedSession && saved === null) {
@@ -978,6 +992,7 @@ function subscribeToProject(capturedDirectory: string) {
 }
 
 function refresh() {
+  refreshWorkflows = true;
   read();
 }
 
@@ -1025,6 +1040,8 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
       if (current() && cards?.length && !showingLive) showCached();
     });
   if (directoryChanged) {
+    workflows = undefined;
+    refreshWorkflows = false;
     bodyRefresh.hidden = false;
     projectEpoch++;
     offSessions?.();

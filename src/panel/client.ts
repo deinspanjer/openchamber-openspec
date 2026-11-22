@@ -5,6 +5,7 @@ import {
   decodeSummary,
   decodeSummaries,
   decodeValidation,
+  decodeWorkflows,
   type ChangeMetadata,
   type Task,
   type ListingEntry,
@@ -78,6 +79,8 @@ export function createClient(host: HostClient) {
   };
 
   return {
+    workflows: async (directory: string) =>
+      decode(await request("/workflows", { directory }), decodeWorkflows),
     list: async (
       directory: string,
       expectedRoot?: string,

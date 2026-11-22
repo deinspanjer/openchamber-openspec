@@ -30,9 +30,37 @@ export type ChangeMetadata = {
 };
 export type ServiceIssue = { code: string; message: string; status: number; outcome?: "unknown" };
 
+const ALL_WORKFLOWS = [
+  "propose",
+  "explore",
+  "new",
+  "continue",
+  "apply",
+  "update",
+  "ff",
+  "sync",
+  "archive",
+  "bulk-archive",
+  "verify",
+  "onboard",
+] as const;
+export type Workflow = (typeof ALL_WORKFLOWS)[number];
+export const CORE_WORKFLOWS = ["propose", "explore", "apply", "update", "sync", "archive"] as const;
+
+export function isWorkflow(value: unknown): value is Workflow {
+  return ALL_WORKFLOWS.some((name) => name === value);
+}
+
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid data.");
   return value as Record<string, unknown>;
+}
+
+export function decodeWorkflows(value: unknown): Workflow[] {
+  const { workflows } = record(value);
+  if (!Array.isArray(workflows) || !workflows.every(isWorkflow))
+    throw new Error("Invalid workflows.");
+  return workflows;
 }
 
 function string(value: unknown): string {

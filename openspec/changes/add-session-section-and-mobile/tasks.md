@@ -155,7 +155,7 @@ Spec: `specs/session-change-section`, `specs/change-workflows`; design: "Workflo
 "Icon crop". Each test fails first for the expected reason. No new test files or shared helpers.
 One commit per task.
 
-- [ ] 9.1 Detection. Service seam (`test/service.test.mjs`): add failing tests for `/workflows`
+- [x] 9.1 Detection. Service seam (`test/service.test.mjs`): add failing tests for `/workflows`
       against the real CLI with an isolated `XDG_CONFIG_HOME`: an empty config gives the core set,
       and `custom` with `ff`, `verify`, `archive` gives those plus `sync` before `archive`. With a
       fake runner, CLI failure returns its error and malformed `profile` or `workflows` returns

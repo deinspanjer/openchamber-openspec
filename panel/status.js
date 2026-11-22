@@ -2345,9 +2345,33 @@ ${GUEST_UI_LOOK_CSS}`;
     return value;
   }
   var documentKey = (artifactId, selector) => JSON.stringify([artifactId, selector]);
+  var ALL_WORKFLOWS = [
+    "propose",
+    "explore",
+    "new",
+    "continue",
+    "apply",
+    "update",
+    "ff",
+    "sync",
+    "archive",
+    "bulk-archive",
+    "verify",
+    "onboard"
+  ];
+  var CORE_WORKFLOWS = ["propose", "explore", "apply", "update", "sync", "archive"];
+  function isWorkflow(value) {
+    return ALL_WORKFLOWS.some((name) => name === value);
+  }
   function record(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid data.");
     return value;
+  }
+  function decodeWorkflows(value) {
+    const { workflows: workflows2 } = record(value);
+    if (!Array.isArray(workflows2) || !workflows2.every(isWorkflow))
+      throw new Error("Invalid workflows.");
+    return workflows2;
   }
   function string(value) {
     if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
@@ -2541,6 +2565,7 @@ ${GUEST_UI_LOOK_CSS}`;
       return value;
     };
     return {
+      workflows: async (directory2) => decode2(await request("/workflows", { directory: directory2 }), decodeWorkflows),
       list: async (directory2, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {
           directory: directory2,
@@ -2958,6 +2983,16 @@ Report what you synced without archiving the change.`;
     );
   }
 
+  // src/panel/workflows.ts
+  async function loadWorkflows(client2, directory2) {
+    try {
+      return new Set(await client2.workflows(directory2));
+    } catch (caught) {
+      console.warn("Could not read OpenSpec workflows; using the core workflows.", caught);
+      return new Set(CORE_WORKFLOWS);
+    }
+  }
+
   // src/status.ts
   var root = document.querySelector("#root");
   if (!root) throw new Error("Status section root is missing");
@@ -2976,6 +3011,8 @@ Report what you synced without archiving the change.`;
   var disposed = false;
   var reading = false;
   var queued = false;
+  var workflows;
+  var refreshWorkflows = false;
   var contextRead;
   var selection2 = null;
   var hasStatusControls = false;
@@ -3678,13 +3715,23 @@ Report what you synced without archiving the change.`;
     const capturedSession = sessionId;
     const capturedWorkspace = workspace;
     const capturedEpoch = epoch;
+    const capturedProject = projectEpoch;
+    const config = refreshWorkflows || !workflows;
+    refreshWorkflows = false;
     const current = () => !disposed && epoch === capturedEpoch;
     reading = true;
     if (showingLive && mountedCards.size) markRefreshing(true);
     void (async () => {
       try {
-        const listing = await client.list(capturedDirectory);
+        const [listingResult, detected] = await Promise.allSettled([
+          client.list(capturedDirectory),
+          config ? loadWorkflows(client, capturedDirectory) : workflows
+        ]);
+        if (!disposed && projectEpoch === capturedProject && detected.status === "fulfilled")
+          workflows = detected.value;
         if (!current()) return;
+        if (listingResult.status === "rejected") throw listingResult.reason;
+        const listing = listingResult.value;
         const saved = capturedSession ? await readTrackedChanges(host, capturedSession) : null;
         if (!current()) return;
         if (capturedSession && saved === null) {
@@ -3791,6 +3838,7 @@ Report what you synced without archiving the change.`;
     })();
   }
   function refresh() {
+    refreshWorkflows = true;
     read();
   }
   function publishRefreshControl() {
@@ -3826,6 +3874,8 @@ Report what you synced without archiving the change.`;
         if (current() && cards?.length && !showingLive) showCached();
       });
     if (directoryChanged) {
+      workflows = void 0;
+      refreshWorkflows = false;
       bodyRefresh.hidden = false;
       projectEpoch++;
       offSessions?.();

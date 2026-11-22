@@ -135,6 +135,8 @@ function hostHtml(statusCase, pointer, popovers) {
     let unknownDelete = false;
     let malformedDelete = false;
     let failNextListing = false;
+    let workflows = ["propose", "explore", "apply", "update", "sync", "archive"];
+    window.__workflows = (value) => { workflows = value; };
     const pendingDeletes = [];
     const pendingCreates = [];
     let holdProposal = false;
@@ -376,7 +378,12 @@ function hostHtml(statusCase, pointer, popovers) {
         if (body.expectedPlanning && body.expectedPlanning !== currentPlanning) {
           send({error:{code:"PLANNING_CHANGED",message:"Planning target changed. Refresh to establish the new scope."}},409); return;
         }
-        if (path === "/changes") {
+         if (path === "/workflows") {
+           if (workflows === null)
+             reply({ status: 422, body: JSON.stringify({ error: { code: "OPENSPEC_ERROR", message: "Cannot read workflows" } }) });
+           else reply({ status: 200, body: JSON.stringify({ workflows }) });
+         }
+         else if (path === "/changes") {
            if (failNextListing) { failNextListing = false;
              send({ error: { code: "CLI_UNAVAILABLE", message: "Cannot check listing" } }, 503); return; }
            const local = body.directory === statusDirectory;
@@ -968,6 +975,7 @@ test("session section isolates a failed card and refreshes each tracked change w
         .filter(
           ({ path }) =>
             path === "/changes" ||
+            path === "/workflows" ||
             path === "/summary" ||
             path === "/tasks" ||
             path === "/summaries",
@@ -976,6 +984,7 @@ test("session section isolates a failed card and refreshes each tracked change w
     );
     const expected = [
       "/changes",
+      "/workflows",
       "/summary first-change",
       "/summary second-change",
       "/tasks first-change",
@@ -990,6 +999,7 @@ test("session section isolates a failed card and refreshes each tracked change w
         .filter(
           ({ path }) =>
             path === "/changes" ||
+            path === "/workflows" ||
             path === "/summary" ||
             path === "/tasks" ||
             path === "/summaries",
@@ -1721,6 +1731,55 @@ test("the Work Status device cache retains at most 50 sessions", async () => {
   });
 });
 
+test("session section reads configured workflows on mount, Refresh and directory change", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=item`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByText("1/2", { exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __completed.filter((p) => p === "/workflows").length),
+      1,
+    );
+    await page.evaluate(() => __edit("Completed"));
+    await frame.getByRole("button", { name: "Refresh", exact: true }).click();
+    await frame.getByText("2/2", { exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __completed.filter((p) => p === "/workflows").length),
+      2,
+    );
+    await page.evaluate(() => __directory("/tmp/workflows-other-project"));
+    await frame.getByText("No active changes.", { exact: true }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter(({ path }) => path === "/workflows").map(({ body }) => body),
+      ),
+      [{ directory }, { directory }, { directory: "/tmp/workflows-other-project" }],
+    );
+    await page.close();
+  });
+});
+
+test("session section falls back to core workflows without showing the config error", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=planning&hold-ready`);
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __workflows(null);
+      __releaseReady();
+    });
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("button", { name: "propose", exact: true }).waitFor();
+    assert.equal(await frame.getByRole("alert").count(), 0);
+    assert.equal(
+      await page.evaluate(() => __completed.filter((p) => p === "/workflows").length),
+      1,
+    );
+    await page.close();
+  });
+});
+
 test("session section refreshes once for a completed turn in the shown session only", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
@@ -1747,10 +1806,12 @@ test("session section refreshes once for a completed turn in the shown session o
     assert.deepEqual(
       await page.evaluate(() =>
         __requests
-          .filter((r) => ["/changes", "/summary", "/tasks", "/summaries"].includes(r.path))
+          .filter((r) =>
+            ["/changes", "/workflows", "/summary", "/tasks", "/summaries"].includes(r.path),
+          )
           .map((r) => r.path),
       ),
-      ["/changes", "/summary", "/tasks", "/changes", "/summary", "/tasks"],
+      ["/changes", "/workflows", "/summary", "/tasks", "/changes", "/summary", "/tasks"],
     );
     await page.close();
   });
@@ -1783,6 +1844,10 @@ test("session section reads once on an idle session switch, then once for a fini
     assert.equal(
       await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
       3,
+    );
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
+      1,
     );
     await page.close();
   });

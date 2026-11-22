@@ -7539,6 +7539,24 @@ var import_node_path = require("node:path");
 var import_yaml = __toESM(require_dist(), 1);
 
 // src/contracts.ts
+var ALL_WORKFLOWS = [
+  "propose",
+  "explore",
+  "new",
+  "continue",
+  "apply",
+  "update",
+  "ff",
+  "sync",
+  "archive",
+  "bulk-archive",
+  "verify",
+  "onboard"
+];
+var CORE_WORKFLOWS = ["propose", "explore", "apply", "update", "sync", "archive"];
+function isWorkflow(value) {
+  return ALL_WORKFLOWS.some((name) => name === value);
+}
 function record(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid data.");
   return value;
@@ -7983,6 +8001,20 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     const current = await planningScope(listing.root, expectedPlanning);
     return { ok: true, value: { directory, ...listing, planning: current.planning } };
   }
+  async function workflows(directory) {
+    if (!(0, import_node_path.isAbsolute)(directory))
+      return failure(serviceError("BAD_DIRECTORY", "Directory must be absolute."));
+    const result = await run(directory, ["config", "list"]);
+    if (!result.ok) return result;
+    const { profile, workflows: workflows2 } = result.value;
+    if (typeof profile !== "string" || workflows2 !== void 0 && (!Array.isArray(workflows2) || workflows2.some((name) => typeof name !== "string")))
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec workflow config.", 502));
+    if (profile !== "custom") return { ok: true, value: { workflows: CORE_WORKFLOWS } };
+    const configured = Array.isArray(workflows2) ? workflows2.filter(isWorkflow) : [];
+    const archive = configured.findIndex((name) => name === "archive" || name === "bulk-archive");
+    if (archive !== -1 && !configured.includes("sync")) configured.splice(archive, 0, "sync");
+    return { ok: true, value: { workflows: configured } };
+  }
   async function summary(directory, change, expectedRoot, expectedPlanning) {
     if (!isChangeName(change))
       return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
@@ -8280,7 +8312,17 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       throw caught;
     }
   }
-  return { changes, summary, summaries, validate, tasks, documentFor, createChange, deleteChange };
+  return {
+    changes,
+    workflows,
+    summary,
+    summaries,
+    validate,
+    tasks,
+    documentFor,
+    createChange,
+    deleteChange
+  };
 }
 
 // src/service/http.ts
@@ -8430,7 +8472,7 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),
         expectedPlanning
-      ) : Promise.resolve({
+      ) : path === "/workflows" ? adapter.workflows(directory) : Promise.resolve({
         ok: false,
         error: serviceError("NOT_FOUND", "Route not found.", 404)
       });

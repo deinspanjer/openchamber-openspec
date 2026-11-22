@@ -2,10 +2,12 @@ import { lstat, open, readdir, realpath, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
+  CORE_WORKFLOWS,
   decodeArtifacts,
   decodeListingEntry,
   decodeTasks,
   decodeValidation,
+  isWorkflow,
   type ListingEntry,
   type ChangeMetadata,
 } from "../contracts.js";
@@ -329,6 +331,25 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     if ("code" in listing) return failure(listing);
     const current = await planningScope(listing.root, expectedPlanning);
     return { ok: true, value: { directory, ...listing, planning: current.planning } };
+  }
+
+  async function workflows(directory: string): Promise<CliResult> {
+    if (!isAbsolute(directory))
+      return failure(serviceError("BAD_DIRECTORY", "Directory must be absolute."));
+    const result = await run(directory, ["config", "list"]);
+    if (!result.ok) return result;
+    const { profile, workflows } = result.value;
+    if (
+      typeof profile !== "string" ||
+      (workflows !== undefined &&
+        (!Array.isArray(workflows) || workflows.some((name) => typeof name !== "string")))
+    )
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec workflow config.", 502));
+    if (profile !== "custom") return { ok: true, value: { workflows: CORE_WORKFLOWS } };
+    const configured = Array.isArray(workflows) ? workflows.filter(isWorkflow) : [];
+    const archive = configured.findIndex((name) => name === "archive" || name === "bulk-archive");
+    if (archive !== -1 && !configured.includes("sync")) configured.splice(archive, 0, "sync");
+    return { ok: true, value: { workflows: configured } };
   }
 
   async function summary(
@@ -709,5 +730,15 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     }
   }
 
-  return { changes, summary, summaries, validate, tasks, documentFor, createChange, deleteChange };
+  return {
+    changes,
+    workflows,
+    summary,
+    summaries,
+    validate,
+    tasks,
+    documentFor,
+    createChange,
+    deleteChange,
+  };
 }

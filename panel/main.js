@@ -2627,9 +2627,32 @@ ${GUEST_UI_LOOK_CSS}`;
     return value;
   }
   var documentKey = (artifactId, selector) => JSON.stringify([artifactId, selector]);
+  var ALL_WORKFLOWS = [
+    "propose",
+    "explore",
+    "new",
+    "continue",
+    "apply",
+    "update",
+    "ff",
+    "sync",
+    "archive",
+    "bulk-archive",
+    "verify",
+    "onboard"
+  ];
+  function isWorkflow(value) {
+    return ALL_WORKFLOWS.some((name) => name === value);
+  }
   function record(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid data.");
     return value;
+  }
+  function decodeWorkflows(value) {
+    const { workflows } = record(value);
+    if (!Array.isArray(workflows) || !workflows.every(isWorkflow))
+      throw new Error("Invalid workflows.");
+    return workflows;
   }
   function string(value) {
     if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
@@ -2823,6 +2846,7 @@ ${GUEST_UI_LOOK_CSS}`;
       return value;
     };
     return {
+      workflows: async (directory) => decode(await request("/workflows", { directory }), decodeWorkflows),
       list: async (directory, expectedRoot, expectedPlanning) => {
         const value = await request("/changes", {
           directory,
