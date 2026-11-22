@@ -110,6 +110,15 @@ function hostHtml(statusCase, pointer, popovers) {
     let holdListing = false;
     let holdSummaries = location.search.includes("hold-summary");
     const pendingSummaries = [];
+    const pendingValidation = [];
+    let holdValidation = false;
+    let rejectNextPopover = false;
+    window.__holdValidation = () => { holdValidation = true; };
+    window.__releaseValidation = () => {
+      holdValidation = false;
+      pendingValidation.splice(0).forEach((finish) => finish());
+    };
+    window.__rejectNextPopover = () => { rejectNextPopover = true; };
     let failSummary = location.search.includes("fail-summary");
     let batchReply = "";
     window.__batchReply = (value) => { batchReply = value; };
@@ -373,7 +382,10 @@ function hostHtml(statusCase, pointer, popovers) {
            send({ ok: true });
          }
          else if (path === "/validate") {
-           if (body.change === "first-change") send({ valid: true, issues: [] });
+           if (body.change === "first-change") {
+             const finish = () => send({ valid: true, issues: [] });
+             if (holdValidation) pendingValidation.push(finish); else finish();
+           }
            else if (statusCase === "compact-validation-budget") send({ valid: false,
              issues: Array.from({ length: 23 }, (_, i) => ({
                level: "ERROR", path: "specs/" + i, message: String.fromCharCode(1).repeat(400),
@@ -494,8 +506,14 @@ function hostHtml(statusCase, pointer, popovers) {
         reply();
         return;
       }
-       if (message.type === "popover-open") {
-         window.__requests.push({ path: message.type, body: message.payload });
+        if (message.type === "popover-open") {
+          window.__requests.push({ path: message.type, body: message.payload });
+          if (rejectNextPopover) {
+            rejectNextPopover = false;
+            event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result",
+              id: message.id, ok: false, code: "HOST_REJECTED", error: "Popover anchor was not visible" }, "*");
+            return;
+          }
          const { id, data, width, height } = message.payload;
          const ownerFrame = [...document.querySelectorAll("iframe")].find((frame) => frame.contentWindow === event.source);
          closePopover("replaced");
@@ -1420,6 +1438,79 @@ test("session section validation opens a flyout only when a validation chip is a
     }
   });
 });
+
+for (const failure of ["no geometry", "host rejection"]) {
+  test(`validation cannot reopen a stale result after ${failure}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=item&popovers`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const chip = section.getByRole("button", { name: "validate" });
+      if (failure === "no geometry") await page.evaluate(() => __holdValidation());
+      else await page.evaluate(() => __rejectNextPopover());
+      await chip.click();
+      await page.waitForFunction(() => __requests.some(({ path }) => path === "/validate"));
+      if (failure === "no geometry") {
+        await chip.evaluate((button) => {
+          button.style.display = "none";
+        });
+        await page.evaluate(() => __releaseValidation());
+      } else {
+        await page.waitForFunction(() => __requests.some(({ path }) => path === "popover-close"));
+      }
+      await page.evaluate(() => __theme("light"));
+      await section.locator('html[data-oc-theme="light"]').waitFor();
+      await section
+        .locator("button")
+        .filter({ hasText: "validate" })
+        .evaluate((button) => {
+          button.style.removeProperty("display");
+        });
+      await chip.press("ArrowRight");
+      await page.evaluate(() => __theme("dark"));
+      await section.locator('html[data-oc-theme="dark"]').waitFor();
+      const attempts = failure === "no geometry" ? 0 : 1;
+      assert.equal(
+        await page.evaluate(() => __requests.filter(({ path }) => path === "popover-open").length),
+        attempts,
+      );
+      await chip.click();
+      await page
+        .frameLocator('iframe[title="OpenSpec test popover"]')
+        .getByText("Valid · 0 issues")
+        .waitFor({ timeout: 3000 });
+      assert.equal(
+        await page.evaluate(() => __requests.filter(({ path }) => path === "/validate").length),
+        2,
+      );
+    });
+  });
+}
+
+for (const popovers of [false, true]) {
+  test(`a repeat validate click reruns validation while its ${popovers ? "popover" : "inline result"} is open`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ hasTouch: popovers });
+      await page.goto(`${url}?status=item${popovers ? "&popovers&pointer=coarse" : ""}`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const chip = section.getByRole("button", { name: "validate" });
+      const result = popovers
+        ? page.frameLocator('iframe[title="OpenSpec test popover"]')
+        : section;
+      if (popovers) await chip.tap();
+      else await chip.click();
+      await result.getByText("Valid · 0 issues").waitFor();
+      if (popovers) await chip.tap();
+      else await chip.click();
+      await page.waitForFunction(
+        () => __requests.filter(({ path }) => path === "/validate").length === 2,
+        null,
+        { timeout: 3000 },
+      );
+      await result.getByText("Valid · 0 issues").waitFor();
+    });
+  });
+}
 
 test("session section omits additional validation issues to fit JSON-escaped messages", async () => {
   await withPanel(async (browser, url) => {

@@ -336,17 +336,10 @@ function mountTrackedCard(id: string) {
     variant: "secondary",
     onClick: () => {
       if (!change || !scope || validating) return;
-      if (!validationInline.hidden) {
-        validationAnchor.reset();
-        validationData = null;
-        return;
-      }
       const captured = captureContext();
       const current = () => captured() && !disposedCard && change !== null;
       const plan = scope;
       validating = true;
-      validationAnchor.reset();
-      validationData = null;
       void client
         .validate(plan, id)
         .then((result) => {
@@ -354,6 +347,7 @@ function mountTrackedCard(id: string) {
           validationData = validationFlyout(id, result);
           validationAnchor.update();
           validationAnchor.open();
+          if (!validationAnchor.isOpen()) validationAnchor.reset();
         })
         .catch((caught: unknown) =>
           showError(current, caught, "Could not validate the OpenSpec change."),
@@ -367,7 +361,9 @@ function mountTrackedCard(id: string) {
     validateRoot.querySelector("button")!,
     validationInline,
     () => validationData,
-    false,
+    () => {
+      validationData = null;
+    },
   );
   const board = mountButton(actions, {
     label: "board",
@@ -648,7 +644,7 @@ function mountFlyout(
   button: HTMLButtonElement,
   inline: HTMLElement,
   getData: () => Flyout | null,
-  activateOnClick = true,
+  onReset?: () => void,
 ) {
   let anchor: ReturnType<typeof mountPopoverAnchor> | undefined;
   let openedId: string | null = null;
@@ -693,8 +689,9 @@ function mountFlyout(
     anchor?.dispose();
     anchor = undefined;
     closeInline();
+    onReset?.();
   }
-  const offClosed = activateOnClick
+  const offClosed = !onReset
     ? undefined
     : host.onPopoverClosed(({ id }) => {
         if (id === openedId)
@@ -702,7 +699,9 @@ function mountFlyout(
             if (id === openedId) reset();
           });
       });
-  if (activateOnClick) button.addEventListener("click", onClick);
+  // Validation clicks must reach the chip even when the SDK would treat a tap as a toggle.
+  if (onReset) button.addEventListener("click", reset, true);
+  else button.addEventListener("click", onClick);
   return {
     open,
     reset,
@@ -718,15 +717,18 @@ function mountFlyout(
         closeInline();
         button.removeAttribute("aria-expanded");
         anchor = mountPopoverAnchor(button, {
-          host: activateOnClick
-            ? host
-            : {
+          host: onReset
+            ? {
                 ...host,
                 openPopover: (request) => {
                   openedId = request.id;
-                  return host.openPopover(request);
+                  return host.openPopover(request).catch((caught: unknown) => {
+                    if (openedId === request.id) reset();
+                    throw caught;
+                  });
                 },
-              },
+              }
+            : host,
           getData: () => {
             const data = getData();
             if (!data || JSON.stringify(data).length > FLYOUT_DATA_LIMIT)
@@ -742,7 +744,8 @@ function mountFlyout(
     dispose() {
       offClosed?.();
       reset();
-      button.removeEventListener("click", onClick);
+      if (onReset) button.removeEventListener("click", reset, true);
+      else button.removeEventListener("click", onClick);
     },
   };
 }

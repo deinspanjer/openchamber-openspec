@@ -3162,22 +3162,16 @@ Report what you synced without archiving the change.`;
       variant: "secondary",
       onClick: () => {
         if (!change || !scope || validating) return;
-        if (!validationInline.hidden) {
-          validationAnchor.reset();
-          validationData = null;
-          return;
-        }
         const captured = captureContext();
         const current = () => captured() && !disposedCard && change !== null;
         const plan = scope;
         validating = true;
-        validationAnchor.reset();
-        validationData = null;
         void client.validate(plan, id).then((result) => {
           if (!current()) return;
           validationData = validationFlyout(id, result);
           validationAnchor.update();
           validationAnchor.open();
+          if (!validationAnchor.isOpen()) validationAnchor.reset();
         }).catch(
           (caught) => showError(current, caught, "Could not validate the OpenSpec change.")
         ).finally(() => {
@@ -3189,7 +3183,9 @@ Report what you synced without archiving the change.`;
       validateRoot.querySelector("button"),
       validationInline,
       () => validationData,
-      false
+      () => {
+        validationData = null;
+      }
     );
     const board = mountButton(actions, {
       label: "board",
@@ -3430,7 +3426,7 @@ Report what you synced without archiving the change.`;
         onClick: untrack
       });
   }
-  function mountFlyout(button2, inline, getData, activateOnClick = true) {
+  function mountFlyout(button2, inline, getData, onReset) {
     let anchor;
     let openedId = null;
     let action;
@@ -3471,14 +3467,16 @@ Report what you synced without archiving the change.`;
       anchor?.dispose();
       anchor = void 0;
       closeInline();
+      onReset?.();
     }
-    const offClosed = activateOnClick ? void 0 : host.onPopoverClosed(({ id }) => {
+    const offClosed = !onReset ? void 0 : host.onPopoverClosed(({ id }) => {
       if (id === openedId)
         queueMicrotask(() => {
           if (id === openedId) reset();
         });
     });
-    if (activateOnClick) button2.addEventListener("click", onClick);
+    if (onReset) button2.addEventListener("click", reset, true);
+    else button2.addEventListener("click", onClick);
     return {
       open,
       reset,
@@ -3494,13 +3492,16 @@ Report what you synced without archiving the change.`;
           closeInline();
           button2.removeAttribute("aria-expanded");
           anchor = mountPopoverAnchor(button2, {
-            host: activateOnClick ? host : {
+            host: onReset ? {
               ...host,
               openPopover: (request) => {
                 openedId = request.id;
-                return host.openPopover(request);
+                return host.openPopover(request).catch((caught) => {
+                  if (openedId === request.id) reset();
+                  throw caught;
+                });
               }
-            },
+            } : host,
             getData: () => {
               const data = getData();
               if (!data || JSON.stringify(data).length > FLYOUT_DATA_LIMIT)
@@ -3516,7 +3517,8 @@ Report what you synced without archiving the change.`;
       dispose() {
         offClosed?.();
         reset();
-        button2.removeEventListener("click", onClick);
+        if (onReset) button2.removeEventListener("click", reset, true);
+        else button2.removeEventListener("click", onClick);
       }
     };
   }
