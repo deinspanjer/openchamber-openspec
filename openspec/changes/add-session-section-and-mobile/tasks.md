@@ -90,7 +90,7 @@ Spec: `specs/session-change-section`, `specs/change-workflows`; design: "Compact
 "Validate route", "Focus handoff". Tests fail first at the named seam. Inline waits for fake-host
 delivery in both directions. No new test files or shared helpers. One commit per task.
 
-- [ ] 7.1 Model seam: replace `resolveTrackedChange` with `resolveTrackedChanges` and add
+- [x] 7.1 Model seam: replace `resolveTrackedChange` with `resolveTrackedChanges` and add
       `taskWindow`, with failing cases first (see design's test seams). Update callers so
       `npm run typecheck` passes. Verify with `npm run build:model:test && node --test
       test/model.test.mjs`.

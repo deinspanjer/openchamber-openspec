@@ -2196,22 +2196,22 @@ ${GUEST_UI_LOOK_CSS}`;
   function isChangeName(value) {
     return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
   }
-  function resolveTrackedChange({
+  function resolveTrackedChanges({
     saved,
     items,
     worktreeName,
     active: active2
   }) {
-    if (saved !== null && active2.has(saved)) return { change: saved, source: "saved" };
+    if (saved !== null) return { changes: saved.filter((name) => active2.has(name)), source: "saved" };
     for (const { data } of items) {
       if (data && typeof data === "object" && "kind" in data && data.kind === "change" && "change" in data && typeof data.change === "string" && active2.has(data.change))
-        return { change: data.change, source: "item" };
+        return { changes: [data.change], source: "item" };
     }
     const legacy = items.find(({ id, data }) => data === void 0 && active2.has(id));
-    if (legacy) return { change: legacy.id, source: "item" };
+    if (legacy) return { changes: [legacy.id], source: "item" };
     if (worktreeName !== null && active2.has(worktreeName))
-      return { change: worktreeName, source: "worktree" };
-    return { change: null, staleSaved: saved };
+      return { changes: [worktreeName], source: "worktree" };
+    return { changes: [], source: "none" };
   }
 
   // src/contracts.ts
@@ -2952,8 +2952,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     const candidate = sessions?.sessions.find((item) => item.id === sessionId);
     const coverage = sessions?.coverage.find((item) => item.directory === candidate?.directory);
     const record2 = coverage?.state === "ready" ? candidate : void 0;
-    return resolveTrackedChange({
-      saved,
+    return resolveTrackedChanges({
+      saved: saved !== null && listing.changes.some(({ id }) => id === saved) ? [saved] : null,
       items: record2?.items ?? [],
       worktreeName: record2?.worktree?.name ?? null,
       active: new Set(listing.changes.map(({ id }) => id))
@@ -2981,12 +2981,12 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           await capturedWorkspace;
           if (!current()) return;
         }
-        const tracked = resolve(listing, saved);
-        selection2 = { listing, saved, change: tracked.change };
-        if (tracked.change === null) {
-          render({ kind: "picker", listing, staleSaved: tracked.staleSaved });
+        const change = resolve(listing, saved).changes[0] ?? null;
+        selection2 = { listing, saved, change };
+        if (change === null) {
+          render({ kind: "picker", listing, staleSaved: saved });
         } else {
-          const entry = listing.changes.find(({ id }) => id === tracked.change);
+          const entry = listing.changes.find(({ id }) => id === change);
           const summary2 = await client.summary(listing, entry.id);
           if (!current()) return;
           const tasks = await client.tasks(listing, entry.id);
@@ -3018,7 +3018,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         const off = await host.onSessions(project.id, (snapshot) => {
           if (!current()) return;
           sessions = snapshot;
-          if (selection2 && resolve(selection2.listing, selection2.saved).change !== selection2.change) {
+          if (selection2 && (resolve(selection2.listing, selection2.saved).changes[0] ?? null) !== selection2.change) {
             epoch++;
             selection2 = null;
             render({ kind: "loading" });

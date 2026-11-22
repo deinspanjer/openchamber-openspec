@@ -4,7 +4,7 @@ import type { ListingEntry, Task } from "./contracts.js";
 import {
   deriveChange,
   requiredArtifactIds,
-  resolveTrackedChange,
+  resolveTrackedChanges,
   type DerivedChange,
 } from "./model.js";
 import { createClient, type Listing } from "./panel/client.js";
@@ -313,8 +313,9 @@ function resolve(listing: Listing, saved: string | null) {
   const candidate = sessions?.sessions.find((item) => item.id === sessionId);
   const coverage = sessions?.coverage.find((item) => item.directory === candidate?.directory);
   const record = coverage?.state === "ready" ? candidate : undefined;
-  return resolveTrackedChange({
-    saved,
+  // The single-choice storage format still falls back when the choice is stale.
+  return resolveTrackedChanges({
+    saved: saved !== null && listing.changes.some(({ id }) => id === saved) ? [saved] : null,
     items: record?.items ?? [],
     worktreeName: record?.worktree?.name ?? null,
     active: new Set(listing.changes.map(({ id }) => id)),
@@ -343,12 +344,12 @@ function read() {
         await capturedWorkspace;
         if (!current()) return;
       }
-      const tracked = resolve(listing, saved);
-      selection = { listing, saved, change: tracked.change };
-      if (tracked.change === null) {
-        render({ kind: "picker", listing, staleSaved: tracked.staleSaved });
+      const change = resolve(listing, saved).changes[0] ?? null;
+      selection = { listing, saved, change };
+      if (change === null) {
+        render({ kind: "picker", listing, staleSaved: saved });
       } else {
-        const entry = listing.changes.find(({ id }) => id === tracked.change)!;
+        const entry = listing.changes.find(({ id }) => id === change)!;
         const summary = await client.summary(listing, entry.id);
         if (!current()) return;
         const tasks = await client.tasks(listing, entry.id);
@@ -381,7 +382,10 @@ function subscribeToProject(capturedDirectory: string) {
       const off = await host.onSessions(project.id, (snapshot) => {
         if (!current()) return;
         sessions = snapshot;
-        if (selection && resolve(selection.listing, selection.saved).change !== selection.change) {
+        if (
+          selection &&
+          (resolve(selection.listing, selection.saved).changes[0] ?? null) !== selection.change
+        ) {
           epoch++;
           selection = null;
           render({ kind: "loading" });

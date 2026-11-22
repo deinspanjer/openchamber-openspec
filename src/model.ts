@@ -67,20 +67,20 @@ export function isChangeName(value: string): boolean {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
 
-export type TrackedSource = "saved" | "item" | "worktree";
+export type TrackedSource = "saved" | "item" | "worktree" | "none";
 
-export function resolveTrackedChange({
+export function resolveTrackedChanges({
   saved,
   items,
   worktreeName,
   active,
 }: {
-  saved: string | null;
+  saved: string[] | null;
   items: { id: string; data?: unknown }[];
   worktreeName: string | null;
   active: ReadonlySet<string>;
-}): { change: string; source: TrackedSource } | { change: null; staleSaved: string | null } {
-  if (saved !== null && active.has(saved)) return { change: saved, source: "saved" };
+}): { changes: string[]; source: TrackedSource } {
+  if (saved !== null) return { changes: saved.filter((name) => active.has(name)), source: "saved" };
   for (const { data } of items) {
     if (
       data &&
@@ -91,11 +91,18 @@ export function resolveTrackedChange({
       typeof data.change === "string" &&
       active.has(data.change)
     )
-      return { change: data.change, source: "item" };
+      return { changes: [data.change], source: "item" };
   }
   const legacy = items.find(({ id, data }) => data === undefined && active.has(id));
-  if (legacy) return { change: legacy.id, source: "item" };
+  if (legacy) return { changes: [legacy.id], source: "item" };
   if (worktreeName !== null && active.has(worktreeName))
-    return { change: worktreeName, source: "worktree" };
-  return { change: null, staleSaved: saved };
+    return { changes: [worktreeName], source: "worktree" };
+  return { changes: [], source: "none" };
+}
+
+export function taskWindow<T extends { done: boolean }>(tasks: readonly T[], size = 5): T[] {
+  const incomplete = tasks.findIndex((task) => !task.done);
+  const current = incomplete === -1 ? tasks.length - 1 : incomplete;
+  const start = Math.max(0, Math.min(current - Math.floor(size / 2), tasks.length - size));
+  return tasks.slice(start, start + size);
 }
