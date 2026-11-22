@@ -1,11 +1,5 @@
 import { connectHost, HostRequestError, type GuestSessionsSnapshot } from "@openchamber/sdk";
-import {
-  applyHostReady,
-  mountBadge,
-  mountButton,
-  mountMenu,
-  mountProgress,
-} from "@openchamber/sdk/ui";
+import { applyHostReady, mountBadge, mountButton, mountProgress } from "@openchamber/sdk/ui";
 import type { ListingEntry, Task } from "./contracts.js";
 import {
   deriveChange,
@@ -58,6 +52,14 @@ const bodyRefresh = document.createElement("div");
 const primaryRoot = document.createElement("div");
 const verifyRoot = document.createElement("div");
 const pickerRoot = document.createElement("div");
+const picker = document.createElement("div");
+picker.className = "section-picker";
+picker.id = "section-picker";
+picker.hidden = true;
+const choices = document.createElement("ul");
+choices.setAttribute("aria-label", "Changes");
+picker.append(choices);
+panelRoot.append(picker);
 controls.append(bodyRefresh);
 const refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
 const openBoard = mountButton(controls, {
@@ -88,9 +90,42 @@ const verify = mountButton(verifyRoot, {
     if (trackedChange) void preparePrompt(trackedChange, "verify", captureContext());
   },
 });
-let menu: ReturnType<typeof mountMenu> | undefined;
+const pickerButton = mountButton(pickerRoot, {
+  label: "",
+  size: "sm",
+  variant: "secondary",
+  onClick: () => setPickerOpen(picker.hidden === true),
+});
+const pickerTrigger = pickerRoot.querySelector("button")!;
+pickerTrigger.setAttribute("aria-controls", picker.id);
+pickerTrigger.setAttribute("aria-expanded", "false");
+let optionButtons: ReturnType<typeof mountButton>[] = [];
+const cancelRoot = document.createElement("div");
+picker.append(cancelRoot);
+const cancelPicker = mountButton(cancelRoot, {
+  label: "Cancel",
+  size: "sm",
+  variant: "secondary",
+  onClick: () => setPickerOpen(false),
+});
 let pickerKey = "";
 let viewKey = "";
+
+function setPickerOpen(open: boolean, restoreFocus = true) {
+  picker.hidden = !open;
+  pickerTrigger.setAttribute("aria-expanded", String(open));
+  if (open) choices.querySelector<HTMLElement>("button:enabled")?.focus();
+  else if (restoreFocus) pickerTrigger.focus();
+}
+
+function escapePicker(event: KeyboardEvent) {
+  if (event.key !== "Escape" || picker.hidden) return;
+  event.preventDefault();
+  event.stopPropagation();
+  setPickerOpen(false);
+}
+
+panelRoot.addEventListener("keydown", escapePicker);
 
 function captureContext() {
   const capturedEpoch = epoch;
@@ -120,13 +155,12 @@ function render(view: View) {
     note("Loading OpenSpec change…", "status");
   }
   notes.hidden = !notes.childElementCount;
-  if ((view.kind === "tracked" || view.kind === "picker") && view.listing.changes.length)
-    updatePicker(view.listing, view.kind === "tracked" ? "Change…" : "Choose a change");
-  else {
-    pickerKey = "";
-    menu?.dispose();
-    menu = undefined;
-  }
+  const listing = view.kind === "tracked" || view.kind === "picker" ? view.listing : null;
+  pickerRoot.hidden = !listing?.changes.length;
+  cancelRoot.hidden = view.kind !== "tracked";
+  if (listing?.changes.length)
+    updatePicker(listing, view.kind === "tracked" ? "Change…" : "Choose a change");
+  else setPickerOpen(false, false);
   if (view.kind === "empty" || view.kind === "loading") {
     disclosure.open = false;
     taskKey = "";
@@ -146,17 +180,25 @@ function updatePicker(listing: Listing, label: string) {
   const nextKey = JSON.stringify([label, items]);
   if (pickerKey === nextKey) return;
   pickerKey = nextKey;
-  if (menu) menu.update({ label, items });
-  else {
-    menu = mountMenu(pickerRoot, {
+  pickerButton.update({ label });
+  const focused = choices.contains(document.activeElement)
+    ? document.activeElement?.textContent
+    : null;
+  for (const button of optionButtons) button.dispose();
+  choices.replaceChildren();
+  optionButtons = items.map(({ id, label, disabled }) => {
+    const row = document.createElement("li");
+    choices.append(row);
+    const button = mountButton(row, {
       label,
+      disabled,
       size: "sm",
       variant: "secondary",
-      items,
-      onSelect: (id) => {
+      onClick: () => {
         const session = sessionId;
         const current = captureContext();
         if (!session || !current()) return;
+        setPickerOpen(false);
         void (async () => {
           const saved = await saveTrackedChange(host, session, id, current);
           if (!current()) return;
@@ -165,7 +207,11 @@ function updatePicker(listing: Listing, label: string) {
         })();
       },
     });
-  }
+    if (focused === label) row.querySelector("button")?.focus();
+    return button;
+  });
+  if (focused && !choices.contains(document.activeElement))
+    (choices.querySelector<HTMLElement>("button:enabled") ?? pickerTrigger).focus();
 }
 
 async function showError(current: () => boolean, caught: unknown, fallback: string) {
@@ -436,12 +482,15 @@ window.addEventListener(
       openBoard,
       primary,
       verify,
+      pickerButton,
+      cancelPicker,
       stage,
       progress,
       ...artifactBadges,
+      ...optionButtons,
     ])
       handle.dispose();
-    menu?.dispose();
+    panelRoot.removeEventListener("keydown", escapePicker);
     host.dispose();
   },
   { once: true },

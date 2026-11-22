@@ -1975,11 +1975,6 @@ ${GUEST_UI_LOOK_CSS}`;
 
   // node_modules/@openchamber/sdk/dist/ui/dom.js
   var STYLE_ID = "oc-sdk-ui-style";
-  var clearNode = (node) => {
-    while (node.firstChild) {
-      node.removeChild(node.firstChild);
-    }
-  };
   var ensureStyle = (css) => {
     const existing = document.getElementById(STYLE_ID);
     if (existing instanceof HTMLStyleElement) {
@@ -2018,18 +2013,6 @@ ${GUEST_UI_LOOK_CSS}`;
     } else if (node.getAttribute(name) !== value) {
       node.setAttribute(name, value);
     }
-  };
-  var onOutsideClick = (node, handler) => {
-    const listener = (event) => {
-      if (event.target instanceof Node && node.contains(event.target)) {
-        return;
-      }
-      handler();
-    };
-    document.addEventListener("pointerdown", listener, true);
-    return () => {
-      document.removeEventListener("pointerdown", listener, true);
-    };
   };
 
   // node_modules/@openchamber/sdk/dist/ui/button.js
@@ -2106,120 +2089,6 @@ ${GUEST_UI_LOOK_CSS}`;
     return node;
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/navigation.js
-  var navigationKey = (event, axis = "vertical") => {
-    const [next, previous] = axis === "vertical" ? ["ArrowDown", "ArrowUp"] : ["ArrowRight", "ArrowLeft"];
-    if (event.key === next || event.ctrlKey && event.key.toLowerCase() === "n")
-      return "next";
-    if (event.key === previous || event.ctrlKey && event.key.toLowerCase() === "p")
-      return "previous";
-    if (event.key === "Home")
-      return "first";
-    if (event.key === "End")
-      return "last";
-    return null;
-  };
-  var moveListSelection = (items, currentId, key) => {
-    const enabled = items.filter((item) => !item.disabled);
-    if (enabled.length === 0) {
-      return null;
-    }
-    const first = enabled[0];
-    const last = enabled[enabled.length - 1];
-    if (key === "first" || !first || !last) {
-      return first?.id ?? null;
-    }
-    if (key === "last") {
-      return last.id;
-    }
-    const index = enabled.findIndex((item) => item.id === currentId);
-    if (index === -1) {
-      return key === "next" ? first.id : last.id;
-    }
-    const target = enabled[Math.min(enabled.length - 1, Math.max(0, index + (key === "next" ? 1 : -1)))];
-    return target?.id ?? null;
-  };
-
-  // node_modules/@openchamber/sdk/dist/ui/option.js
-  var optionId = (uid, id) => `${uid}-${id ?? ""}`;
-  var createOption = (uid, role, spec, on) => {
-    const node = button("oc-sdk-option");
-    node.id = optionId(uid, spec.id);
-    node.setAttribute("role", role);
-    node.tabIndex = -1;
-    node.disabled = Boolean(spec.disabled);
-    if (role === "option") {
-      node.setAttribute("aria-selected", spec.selected ? "true" : "false");
-    }
-    node.dataset.destructive = spec.destructive ? "true" : "false";
-    const label = el("span", "oc-sdk-option-label");
-    label.textContent = spec.label;
-    node.append(label);
-    if (spec.hint) {
-      const hint = el("span", "oc-sdk-option-hint");
-      hint.textContent = spec.hint;
-      node.append(hint);
-    }
-    if (role === "option") {
-      node.dataset.mark = "check";
-      const check = el("span", "oc-sdk-option-check");
-      check.append(icon("check", 14));
-      node.append(check);
-    }
-    node.addEventListener("pointerenter", on.hover);
-    node.addEventListener("click", on.pick);
-    return node;
-  };
-  var highlightOption = (container, focusOwner, uid, id) => {
-    const target = optionId(uid, id);
-    for (const child of Array.from(container.children)) {
-      if (child instanceof HTMLElement && child.classList.contains("oc-sdk-option")) {
-        child.dataset.active = child.id === target ? "true" : "false";
-      }
-    }
-    setAttr(focusOwner, "aria-activedescendant", id ? target : null);
-    container.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
-  };
-
-  // node_modules/@openchamber/sdk/dist/ui/popup.js
-  var placePopup = (popup, trigger) => {
-    const rect = trigger.getBoundingClientRect();
-    popup.style.minWidth = `${Math.round(rect.width)}px`;
-    popup.style.left = `${Math.round(rect.left)}px`;
-    popup.style.top = `${Math.round(rect.bottom + 4)}px`;
-    const height = popup.offsetHeight;
-    const roomBelow = window.innerHeight - rect.bottom - 8;
-    if (height > roomBelow && rect.top - 8 > roomBelow) {
-      popup.style.top = `${Math.max(8, Math.round(rect.top - 4 - height))}px`;
-    }
-    const overflow = rect.left + popup.offsetWidth - window.innerWidth + 8;
-    if (overflow > 0) {
-      popup.style.left = `${Math.max(8, Math.round(rect.left - overflow))}px`;
-    }
-  };
-  var openPopup = (host2, trigger, popup, close) => {
-    host2.append(popup);
-    placePopup(popup, trigger);
-    const stopOutside = onOutsideClick(host2, close);
-    const onResize = () => {
-      close();
-    };
-    const onScroll = (event) => {
-      if (event.target instanceof Node && popup.contains(event.target)) {
-        return;
-      }
-      close();
-    };
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onScroll, true);
-    return () => {
-      stopOutside();
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onScroll, true);
-      popup.remove();
-    };
-  };
-
   // node_modules/@openchamber/sdk/dist/ui/badge.js
   var applyTone = (node, tone2) => {
     setAttr(node, "data-tone", tone2 && tone2 !== "neutral" ? tone2 : null);
@@ -2290,112 +2159,6 @@ ${GUEST_UI_LOOK_CSS}`;
       },
       dispose: () => {
         node.remove();
-      }
-    };
-  };
-
-  // node_modules/@openchamber/sdk/dist/ui/menu.js
-  var actions = (items) => items.filter((item) => !("separator" in item));
-  var menuCount = 0;
-  var mountMenu = (root2, initial) => {
-    ensureStyle(UI_CSS);
-    let props = initial;
-    const uid = `oc-sdk-menu-${menuCount += 1}`;
-    const wrap = el("div", "oc-sdk oc-sdk-menu");
-    root2.append(wrap);
-    const popup = el("div", "oc-sdk oc-sdk-popup");
-    popup.setAttribute("role", "menu");
-    popup.tabIndex = -1;
-    let closePopup = null;
-    let activeId = null;
-    const trigger = mountButton(wrap, {
-      label: props.label,
-      variant: props.variant,
-      size: props.size,
-      onClick: () => {
-        if (closePopup)
-          close();
-        else
-          open();
-      }
-    });
-    const triggerNode = wrap.querySelector("button");
-    triggerNode?.setAttribute("aria-haspopup", "menu");
-    const setActive = (id) => {
-      activeId = id;
-      highlightOption(popup, popup, uid, id);
-    };
-    const paintItems = () => {
-      clearNode(popup);
-      for (const item of props.items) {
-        if ("separator" in item) {
-          const line = el("div", "oc-sdk-separator");
-          line.dataset.labeled = "false";
-          popup.append(line);
-          continue;
-        }
-        popup.append(createOption(uid, "menuitem", item, {
-          hover: () => setActive(item.id),
-          pick: () => pick(item.id)
-        }));
-      }
-      setActive(actions(props.items).some((item) => item.id === activeId) ? activeId : null);
-    };
-    const close = () => {
-      const dispose = closePopup;
-      closePopup = null;
-      dispose?.();
-      activeId = null;
-      triggerNode?.setAttribute("aria-expanded", "false");
-    };
-    const open = () => {
-      if (closePopup || !triggerNode) {
-        return;
-      }
-      paintItems();
-      closePopup = openPopup(wrap, triggerNode, popup, close);
-      triggerNode.setAttribute("aria-expanded", "true");
-      popup.focus();
-    };
-    const pick = (id) => {
-      close();
-      triggerNode?.focus();
-      props.onSelect(id);
-    };
-    const onPopupKey = (event) => {
-      const step = navigationKey(event);
-      if (step) {
-        event.preventDefault();
-        setActive(moveListSelection(actions(props.items), activeId, step));
-      } else if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        if (activeId)
-          pick(activeId);
-      } else if (event.key === "Escape") {
-        event.preventDefault();
-        close();
-        triggerNode?.focus();
-      }
-    };
-    const onFocusOut = (event) => {
-      if (closePopup && !(event.relatedTarget instanceof Node && wrap.contains(event.relatedTarget)))
-        close();
-    };
-    popup.addEventListener("keydown", onPopupKey);
-    wrap.addEventListener("focusout", onFocusOut);
-    return {
-      update: (next) => {
-        props = { ...props, ...next };
-        trigger.update({ label: props.label, variant: props.variant, size: props.size });
-        if (closePopup)
-          paintItems();
-      },
-      dispose: () => {
-        close();
-        popup.removeEventListener("keydown", onPopupKey);
-        wrap.removeEventListener("focusout", onFocusOut);
-        trigger.dispose();
-        wrap.remove();
       }
     };
   };
@@ -2887,7 +2650,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     try {
       const keys = (await host2.storage.keys()).filter((key) => key.startsWith(prefix));
       if (keys.length >= 1900) {
-        const choices = [];
+        const choices2 = [];
         for (let i = 0; i < keys.length; i += readBatchSize) {
           if (!current()) return false;
           const batch = keys.slice(i, i + readBatchSize);
@@ -2896,11 +2659,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           );
           for (const { key, value } of values) {
             if (value && typeof value === "object" && "savedAt" in value && typeof value.savedAt === "number" && Number.isFinite(value.savedAt))
-              choices.push({ key, savedAt: value.savedAt });
+              choices2.push({ key, savedAt: value.savedAt });
           }
         }
-        choices.sort((left, right) => left.savedAt - right.savedAt);
-        for (const { key } of choices.slice(0, 100)) {
+        choices2.sort((left, right) => left.savedAt - right.savedAt);
+        for (const { key } of choices2.slice(0, 100)) {
           if (!current()) return false;
           await host2.storage.delete(key);
         }
@@ -2955,6 +2718,14 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
   var primaryRoot = document.createElement("div");
   var verifyRoot = document.createElement("div");
   var pickerRoot = document.createElement("div");
+  var picker = document.createElement("div");
+  picker.className = "section-picker";
+  picker.id = "section-picker";
+  picker.hidden = true;
+  var choices = document.createElement("ul");
+  choices.setAttribute("aria-label", "Changes");
+  picker.append(choices);
+  panelRoot.append(picker);
   controls.append(bodyRefresh);
   var refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
   var openBoard = mountButton(controls, {
@@ -2983,9 +2754,39 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       if (trackedChange) void preparePrompt(trackedChange, "verify", captureContext());
     }
   });
-  var menu;
+  var pickerButton = mountButton(pickerRoot, {
+    label: "",
+    size: "sm",
+    variant: "secondary",
+    onClick: () => setPickerOpen(picker.hidden === true)
+  });
+  var pickerTrigger = pickerRoot.querySelector("button");
+  pickerTrigger.setAttribute("aria-controls", picker.id);
+  pickerTrigger.setAttribute("aria-expanded", "false");
+  var optionButtons = [];
+  var cancelRoot = document.createElement("div");
+  picker.append(cancelRoot);
+  var cancelPicker = mountButton(cancelRoot, {
+    label: "Cancel",
+    size: "sm",
+    variant: "secondary",
+    onClick: () => setPickerOpen(false)
+  });
   var pickerKey = "";
   var viewKey = "";
+  function setPickerOpen(open, restoreFocus = true) {
+    picker.hidden = !open;
+    pickerTrigger.setAttribute("aria-expanded", String(open));
+    if (open) choices.querySelector("button:enabled")?.focus();
+    else if (restoreFocus) pickerTrigger.focus();
+  }
+  function escapePicker(event) {
+    if (event.key !== "Escape" || picker.hidden) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPickerOpen(false);
+  }
+  panelRoot.addEventListener("keydown", escapePicker);
   function captureContext() {
     const capturedEpoch = epoch;
     return () => !disposed && epoch === capturedEpoch;
@@ -3013,13 +2814,12 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       note("Loading OpenSpec change\u2026", "status");
     }
     notes.hidden = !notes.childElementCount;
-    if ((view.kind === "tracked" || view.kind === "picker") && view.listing.changes.length)
-      updatePicker(view.listing, view.kind === "tracked" ? "Change\u2026" : "Choose a change");
-    else {
-      pickerKey = "";
-      menu?.dispose();
-      menu = void 0;
-    }
+    const listing = view.kind === "tracked" || view.kind === "picker" ? view.listing : null;
+    pickerRoot.hidden = !listing?.changes.length;
+    cancelRoot.hidden = view.kind !== "tracked";
+    if (listing?.changes.length)
+      updatePicker(listing, view.kind === "tracked" ? "Change\u2026" : "Choose a change");
+    else setPickerOpen(false, false);
     if (view.kind === "empty" || view.kind === "loading") {
       disclosure.open = false;
       taskKey = "";
@@ -3035,17 +2835,23 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     const nextKey = JSON.stringify([label, items]);
     if (pickerKey === nextKey) return;
     pickerKey = nextKey;
-    if (menu) menu.update({ label, items });
-    else {
-      menu = mountMenu(pickerRoot, {
-        label,
+    pickerButton.update({ label });
+    const focused = choices.contains(document.activeElement) ? document.activeElement?.textContent : null;
+    for (const button2 of optionButtons) button2.dispose();
+    choices.replaceChildren();
+    optionButtons = items.map(({ id, label: label2, disabled }) => {
+      const row = document.createElement("li");
+      choices.append(row);
+      const button2 = mountButton(row, {
+        label: label2,
+        disabled,
         size: "sm",
         variant: "secondary",
-        items,
-        onSelect: (id) => {
+        onClick: () => {
           const session = sessionId;
           const current = captureContext();
           if (!session || !current()) return;
+          setPickerOpen(false);
           void (async () => {
             const saved = await saveTrackedChange(host, session, id, current);
             if (!current()) return;
@@ -3054,7 +2860,11 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
           })();
         }
       });
-    }
+      if (focused === label2) row.querySelector("button")?.focus();
+      return button2;
+    });
+    if (focused && !choices.contains(document.activeElement))
+      (choices.querySelector("button:enabled") ?? pickerTrigger).focus();
   }
   async function showError(current, caught, fallback) {
     if (!current()) return;
@@ -3300,12 +3110,15 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         openBoard,
         primary2,
         verify,
+        pickerButton,
+        cancelPicker,
         stage,
         progress,
-        ...artifactBadges
+        ...artifactBadges,
+        ...optionButtons
       ])
         handle.dispose();
-      menu?.dispose();
+      panelRoot.removeEventListener("keydown", escapePicker);
       host.dispose();
     },
     { once: true }

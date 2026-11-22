@@ -419,6 +419,8 @@ function hostHtml(statusCase, pointer) {
       }
       if (["workspace-unsubscribe", "resize", "status-controls", "open-surface"].includes(message.type)) {
         window.__requests.push({path:message.type,body:message.payload});
+        if (statusCase && message.type === "resize")
+          document.querySelector("iframe").style.height = Math.max(24, Math.min(480, message.payload.height)) + "px";
         reply();
         return;
       }
@@ -488,7 +490,7 @@ function hostHtml(statusCase, pointer) {
               { artifactId: "tasks", selector: "tasks.md", label: "tasks.md" }]),
           ] });
     }
-  </script><style>body{margin:0}iframe{display:block;width:100%;height:100vh;border:0}</style><iframe src="/panel/${statusCase ? "status" : "index"}.html" title="OpenSpec test panel"></iframe>`;
+  </script><style>body{margin:0}iframe{display:block;width:100%;height:${statusCase ? "160px" : "100vh"};border:0}</style><iframe src="/panel/${statusCase ? "status" : "index"}.html" title="OpenSpec test panel"></iframe>`;
 }
 
 async function withPanel(run) {
@@ -566,7 +568,7 @@ for (const scenario of ["saved", "worktree", "archive", "stale", "new"]) {
         });
       } else {
         await frame.getByRole("button", { name: "Choose a change" }).click({ timeout: 3000 });
-        const option = frame.getByRole("menuitem", { name: "first-change" });
+        const option = frame.getByRole("button", { name: "first-change", exact: true });
         await option.waitFor();
         if (scenario === "new") {
           assert.equal(await option.isDisabled(), true);
@@ -584,7 +586,7 @@ for (const scenario of ["saved", "worktree", "archive", "stale", "new"]) {
           );
         if (scenario === "archive")
           assert.equal(
-            await frame.getByRole("menuitem", { name: "archive-all" }).isVisible(),
+            await frame.getByRole("button", { name: "archive-all", exact: true }).isVisible(),
             true,
           );
       }
@@ -686,7 +688,8 @@ test("session section orders the picker by task counts and persists a choice", a
     await page.goto(`${url}?status=picker`);
     const frame = page.frameLocator("iframe");
     await frame.getByRole("button", { name: "Choose a change" }).click({ timeout: 3000 });
-    const choices = frame.getByRole("menuitem");
+    const list = frame.getByRole("list", { name: "Changes", exact: true });
+    const choices = list.getByRole("button");
     await choices.first().waitFor();
     assert.deepEqual(
       (await choices.allTextContents()).map((text) => text.trim()),
@@ -698,7 +701,7 @@ test("session section orders the picker by task counts and persists a choice", a
         "complete-change",
       ],
     );
-    await frame.getByRole("menuitem", { name: "first-change", exact: true }).click();
+    await list.getByRole("button", { name: "first-change", exact: true }).click();
     await frame
       .getByRole("heading", { name: "first-change", exact: true })
       .waitFor({ timeout: 3000 });
@@ -706,7 +709,7 @@ test("session section orders the picker by task counts and persists a choice", a
       () => __stored()["session-change:fixture-session"]?.change === "first-change",
     );
     await frame.getByRole("button", { name: "Change…", exact: true }).click();
-    await frame.getByRole("menuitem", { name: "second-change", exact: true }).click();
+    await list.getByRole("button", { name: "second-change", exact: true }).click();
     await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
     await page.waitForFunction(
       () => __stored()["session-change:fixture-session"]?.change === "second-change",
@@ -718,6 +721,94 @@ test("session section orders the picker by task counts and persists a choice", a
     await page.close();
   });
 });
+
+for (const [width, pointer, scenario] of [
+  [720, "fine", "item"],
+  [320, "coarse", "item"],
+  [320, "coarse", "picker"],
+]) {
+  test(`session picker grows the ${width}px ${pointer} frame from ${scenario} context`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ viewport: { width, height: 720 } });
+      await page.goto(`${url}?status=${scenario}&pointer=${pointer}`);
+      const frame = page.frameLocator("iframe");
+      const trigger = frame.getByRole("button", {
+        name: scenario === "item" ? "Change…" : "Choose a change",
+        exact: true,
+      });
+      const list = frame.getByRole("list", { name: "Changes", exact: true });
+      await trigger.waitFor();
+      await page.waitForFunction(() => {
+        const frame = document.querySelector("iframe");
+        const resize = __requests.findLast((r) => r.path === "resize");
+        return (
+          resize?.body.height ===
+          Math.ceil(frame.contentDocument.querySelector("#root").getBoundingClientRect().height)
+        );
+      });
+      const closedHeight = await page.locator("iframe").evaluate((node) => node.clientHeight);
+
+      await trigger.press("Enter");
+      await frame.getByText("second-change", { exact: true }).waitFor();
+      await page
+        .waitForFunction(
+          (height) => __requests.findLast((r) => r.path === "resize")?.body.height > height,
+          closedHeight,
+          { timeout: 2000 },
+        )
+        .catch(() => assert.fail(`Opening the picker did not grow the ${closedHeight}px frame`));
+      const reportedHeight = await page.evaluate(
+        () => __requests.findLast((r) => r.path === "resize").body.height,
+      );
+      assert.equal(
+        await page.locator("iframe").evaluate((node) => node.clientHeight),
+        reportedHeight,
+      );
+      const options = list.getByRole("button");
+      assert.equal(await options.count(), scenario === "item" ? 2 : 5);
+      const boxes = await options.evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const { top, right, bottom, left, height } = button.getBoundingClientRect();
+          return { top, right, bottom, left, height, position: getComputedStyle(button).position };
+        }),
+      );
+      for (const box of boxes) {
+        assert.ok(box.top >= 0 && box.bottom <= reportedHeight);
+        assert.ok(box.left >= 0 && box.right <= width);
+        assert.ok(box.position === "static" || box.position === "relative");
+        if (pointer === "coarse") assert.ok(box.height >= 44);
+      }
+      assert.equal(await options.first().evaluate((node) => node === document.activeElement), true);
+      await options.first().press("Escape");
+      await options.first().waitFor({ state: "hidden" });
+      assert.equal(await trigger.evaluate((node) => node === document.activeElement), true);
+      await page.waitForFunction(
+        (height) => __requests.findLast((r) => r.path === "resize")?.body.height === height,
+        closedHeight,
+      );
+
+      await trigger.press("Enter");
+      const cancel = frame.getByRole("button", { name: "Cancel", exact: true });
+      if (scenario === "item") {
+        await cancel.click();
+        assert.equal(await trigger.evaluate((node) => node === document.activeElement), true);
+        await trigger.press("Enter");
+      } else assert.equal(await cancel.count(), 0);
+      await list.getByRole("button", { name: "second-change", exact: true }).press("Enter");
+      await page.waitForFunction(
+        () => __stored()["session-change:fixture-session"]?.change === "second-change",
+      );
+      await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
+      assert.equal(
+        await frame
+          .getByRole("button", { name: "Change…", exact: true })
+          .evaluate((node) => node === document.activeElement),
+        true,
+      );
+      await page.close();
+    });
+  });
+}
 
 test("session section continue prepares the board's unsent prompt and saves the choice", async () => {
   await withPanel(async (browser, url) => {
@@ -865,7 +956,7 @@ test("session section reads once on an idle session switch, then once for a fini
   });
 });
 
-test("session section preserves an open disclosure, focus and menu across finished-turn reads", async () => {
+test("session section preserves an open disclosure, focus and picker across finished-turn reads", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(`${url}?status=progress`);
@@ -884,14 +975,15 @@ test("session section preserves an open disclosure, focus and menu across finish
     assert.equal(await refresh.evaluate((node) => document.activeElement === node), true);
 
     await frame.getByRole("button", { name: "Change…", exact: true }).click();
-    await frame.getByRole("menu").waitFor();
+    const picker = frame.getByRole("list", { name: "Changes", exact: true });
+    await picker.waitFor();
     await page.evaluate(() => {
       __lifecycle("fixture-session", "started");
       __lifecycle("fixture-session", "completed");
     });
     await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 3);
     await frame.locator("#root").evaluate(() => new Promise(requestAnimationFrame));
-    assert.equal(await frame.getByRole("menu").isVisible(), true);
+    assert.equal(await picker.isVisible(), true);
     await page.close();
   });
 });
@@ -925,7 +1017,7 @@ for (const scenario of ["other-directory-error", "unregistered-saved", "unregist
         await frame.getByRole("button", { name: "Choose a change", exact: true }).click({
           timeout: 3000,
         });
-        await frame.getByRole("menuitem", { name: "first-change", exact: true }).waitFor();
+        await frame.getByRole("button", { name: "first-change", exact: true }).waitFor();
       } else {
         await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor({
           timeout: 3000,
@@ -1097,7 +1189,7 @@ for (const pointer of ["coarse", "fine"]) {
       const sectionHeight = (await change.boundingBox()).height;
       const summaryHeight = (await section.locator("details summary").boundingBox()).height;
       await change.click();
-      const option = section.getByRole("menuitem", { name: "second-change", exact: true });
+      const option = section.getByRole("button", { name: "second-change", exact: true });
       await option.waitFor();
       const optionHeight = (await option.boundingBox()).height;
       const heights = [
