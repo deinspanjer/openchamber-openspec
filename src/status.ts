@@ -8,6 +8,7 @@ import {
   type Workflow,
 } from "./contracts.js";
 import { deriveChange, taskWindow, type DerivedChange, type Stage } from "./model.js";
+import { addButtonIcon } from "./panel/button-icon.js";
 import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
@@ -62,20 +63,17 @@ let workflows: ReadonlySet<Workflow> | undefined;
 let refreshWorkflows = false;
 let contextRead: ReturnType<typeof setTimeout> | undefined;
 let selection: { active: Set<string>; saved: string[] | null; changes: string[] } | null = null;
-let hasStatusControls = false;
 let hasDeviceStorage = false;
 let hasPopovers = false;
 let popoverFrame = false;
-let headerRequest = 0;
 const notes = document.createElement("div");
 const content = document.createElement("div");
 content.className = "section-content";
-const controls = document.createElement("div");
+const controls = document.createElement("footer");
 controls.className = "section-controls";
 for (const element of [notes, content, controls]) element.hidden = true;
 panelRoot.append(notes, content, controls);
 
-const bodyRefresh = document.createElement("div");
 const pickerRoot = document.createElement("div");
 const picker = document.createElement("div");
 picker.className = "section-picker";
@@ -88,9 +86,37 @@ emptyChoices.className = "note";
 emptyChoices.textContent = "No untracked changes.";
 picker.append(choices, emptyChoices);
 panelRoot.append(picker);
-controls.append(bodyRefresh);
-const refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
-controls.append(pickerRoot);
+const footerActions = document.createElement("div");
+footerActions.className = "footer-actions";
+const newRoot = document.createElement("span");
+const boardRoot = document.createElement("span");
+const refreshRoot = document.createElement("span");
+footerActions.append(newRoot, boardRoot, refreshRoot);
+controls.append(pickerRoot, footerActions);
+const newButton = mountButton(newRoot, {
+  label: "new",
+  size: "sm",
+  variant: "secondary",
+  disabled: true,
+  onClick: () => {},
+});
+const boardButton = mountButton(boardRoot, {
+  label: "board",
+  size: "sm",
+  variant: "secondary",
+  onClick: () => void openBoard(captureContext()),
+});
+const refreshButton = mountButton(refreshRoot, {
+  label: "",
+  size: "sm",
+  variant: "secondary",
+  onClick: refresh,
+});
+addButtonIcon(refreshRoot, "refresh");
+const refreshTrigger = refreshRoot.querySelector("button")!;
+refreshTrigger.setAttribute("aria-label", "Refresh");
+for (const action of [newRoot, boardRoot, refreshRoot])
+  action.querySelector("button")!.classList.add("status-link");
 const pickerButton = mountButton(pickerRoot, {
   label: "＋ Track a change",
   size: "sm",
@@ -138,12 +164,13 @@ function captureContext() {
 }
 
 function render(view: View) {
+  newRoot.hidden = !workflows?.has("new");
   const nextViewKey = JSON.stringify([epoch, view]);
   if (viewKey === nextViewKey) return;
   viewKey = nextViewKey;
   showingLive = view.kind === "ready";
   markRefreshing(false);
-  controls.hidden = view.kind === "empty" || view.kind === "loading";
+  controls.hidden = !directory;
   const cards: Card[] =
     view.kind === "ready"
       ? view.cards
@@ -179,7 +206,7 @@ function render(view: View) {
     note("Loading OpenSpec change…", "status");
   }
   notes.hidden = !notes.childElementCount;
-  pickerRoot.hidden = view.kind !== "ready";
+  pickerButton.update({ disabled: view.kind !== "ready" || !sessionId });
   cancelRoot.hidden = !cards.length;
   if (view.kind === "ready")
     updatePicker(
@@ -203,7 +230,6 @@ function updatePicker(listing: Listing, tracked: string[]) {
   const nextKey = JSON.stringify([sessionId, items]);
   if (pickerKey === nextKey) return;
   pickerKey = nextKey;
-  pickerButton.update({ disabled: !sessionId });
   emptyChoices.hidden = items.length !== 0;
   const focused = choices.contains(document.activeElement)
     ? document.activeElement?.textContent
@@ -249,6 +275,15 @@ async function showError(current: () => boolean, caught: unknown, fallback: stri
       message: caught instanceof HostRequestError ? caught.message : fallback,
     })
     .catch((error: unknown) => console.warn("Could not show the OpenSpec error.", error));
+}
+
+async function openBoard(current: () => boolean, target?: { directory: string; change: string }) {
+  try {
+    if (target) await client.setFocus(target.directory, target.change);
+    if (current()) await host.openSurface("plugin:openspec-board");
+  } catch (caught) {
+    await showError(current, caught, "Could not open the OpenSpec board.");
+  }
 }
 
 async function preparePrompt(change: DerivedChange, text: string, current: () => boolean) {
@@ -394,24 +429,6 @@ function mountTrackedCard(id: string) {
       validationData = null;
     },
   );
-  const board = mountButton(actions, {
-    label: "board",
-    size: "xs",
-    variant: "secondary",
-    onClick: () => {
-      const targetDirectory = directory;
-      if (!targetDirectory || !change) return;
-      const current = captureContext();
-      void client
-        .setFocus(targetDirectory, id)
-        .then(() => {
-          if (current()) return host.openSurface("plugin:openspec-board");
-        })
-        .catch((caught: unknown) =>
-          showError(current, caught, "Could not open the OpenSpec board."),
-        );
-    },
-  });
   const details = document.createElement("div");
   details.className = "section-content";
   details.append(disclosure, currentTask.inline, actions, validationInline);
@@ -515,7 +532,7 @@ function mountTrackedCard(id: string) {
       validationAnchor.dispose();
       currentTask.dispose();
       for (const { title } of taskRows.values()) title.dispose();
-      for (const handle of [primary, sync, validate, board, retry]) handle.dispose();
+      for (const handle of [primary, sync, validate, retry]) handle.dispose();
       element.remove();
     },
   };
@@ -630,7 +647,12 @@ function decodeFlyout(value: unknown): Flyout | null {
   return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
 }
 
-function renderFlyout(container: HTMLElement, data: Flyout, untrack?: () => void) {
+function renderFlyout(
+  container: HTMLElement,
+  data: Flyout,
+  untrack?: () => void,
+  openInBoard?: () => void,
+) {
   container.classList.add("flyout");
   if (data.kind === "task") {
     const description = document.createElement("p");
@@ -676,6 +698,16 @@ function renderFlyout(container: HTMLElement, data: Flyout, untrack?: () => void
     goal.textContent = data.goal;
     container.append(goal);
   }
+  const actions: ReturnType<typeof mountButton>[] = [];
+  if (openInBoard)
+    actions.push(
+      mountButton(container, {
+        label: "Open in board",
+        variant: "secondary",
+        size: "xs",
+        onClick: openInBoard,
+      }),
+    );
   if (untrack) {
     const button = mountButton(container, {
       label: "Untrack",
@@ -683,9 +715,10 @@ function renderFlyout(container: HTMLElement, data: Flyout, untrack?: () => void
       size: "xs",
       onClick: untrack,
     });
-    container.querySelector("button")!.classList.add("status-link", "untrack-link");
-    return button;
+    container.lastElementChild!.classList.add("status-link", "untrack-link");
+    actions.push(button);
   }
+  return actions;
 }
 
 function mountFlyout(
@@ -696,10 +729,10 @@ function mountFlyout(
 ) {
   let anchor: ReturnType<typeof mountPopoverAnchor> | undefined;
   let openedId: string | null = null;
-  let action: ReturnType<typeof mountButton> | undefined;
+  let actions: ReturnType<typeof mountButton>[] | undefined;
   function closeInline() {
-    action?.dispose();
-    action = undefined;
+    actions?.forEach((action) => action.dispose());
+    actions = undefined;
     inline.hidden = true;
     if (!anchor) button.setAttribute("aria-expanded", "false");
   }
@@ -713,7 +746,8 @@ function mountFlyout(
       inline.hidden = false;
       const session = sessionId;
       const current = captureContext();
-      action = renderFlyout(
+      const targetDirectory = directory;
+      actions = renderFlyout(
         inline,
         data,
         session && data.kind === "change"
@@ -722,6 +756,9 @@ function mountFlyout(
                 closeInline();
                 read();
               })
+          : undefined,
+        targetDirectory && data.kind === "change"
+          ? () => void openBoard(current, { directory: targetDirectory, change: data.name })
           : undefined,
       );
       button.setAttribute("aria-expanded", "true");
@@ -867,6 +904,7 @@ function read() {
   refreshWorkflows = false;
   const current = () => !disposed && epoch === capturedEpoch;
   reading = true;
+  refreshTrigger.setAttribute("aria-busy", "true");
   if (showingLive && mountedCards.size) markRefreshing(true);
   void (async () => {
     try {
@@ -952,6 +990,7 @@ function read() {
     } finally {
       if (current()) markRefreshing(false);
       reading = false;
+      refreshTrigger.setAttribute("aria-busy", "false");
       if (queued) {
         queued = false;
         read();
@@ -996,27 +1035,6 @@ function refresh() {
   read();
 }
 
-function publishRefreshControl() {
-  const request = ++headerRequest;
-  const showHeader = (visible: boolean) => {
-    if (disposed || headerRequest !== request) return;
-    bodyRefresh.hidden = visible;
-  };
-  if (!directory || !hasStatusControls) {
-    showHeader(false);
-    return;
-  }
-  // OpenChamber can replace its header binding independently of the status document.
-  // It deduplicates identical definitions while the binding is still current.
-  void host
-    .setStatusControls([{ kind: "button", id: "refresh", label: "Refresh" }])
-    .then(() => showHeader(true))
-    .catch((caught: unknown) => {
-      showHeader(false);
-      console.warn("Could not publish OpenSpec Refresh.", caught);
-    });
-}
-
 function updateContext(nextDirectory: string | null, nextSession: string | null) {
   const directoryChanged = nextDirectory !== directory;
   if (!directoryChanged && nextSession === sessionId) return;
@@ -1028,6 +1046,10 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
   queued = false;
   readError = undefined;
   setPickerOpen(false, false);
+  if (directoryChanged) {
+    workflows = undefined;
+    refreshWorkflows = false;
+  }
   showCached();
   const current = captureContext();
   if (
@@ -1040,9 +1062,6 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
       if (current() && cards?.length && !showingLive) showCached();
     });
   if (directoryChanged) {
-    workflows = undefined;
-    refreshWorkflows = false;
-    bodyRefresh.hidden = false;
     projectEpoch++;
     offSessions?.();
     offSessions = undefined;
@@ -1054,7 +1073,7 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
 
 let lastHeight = 0;
 let popoverSession: string | null = null;
-let popoverAction: ReturnType<typeof mountButton> | undefined;
+let popoverActions: ReturnType<typeof mountButton>[] | undefined;
 const resize = new ResizeObserver(() => {
   const height = Math.ceil(panelRoot.getBoundingClientRect().height);
   if (height === lastHeight) return;
@@ -1064,7 +1083,6 @@ const resize = new ResizeObserver(() => {
     .catch((error: unknown) => console.warn("Could not resize the OpenSpec section.", error));
 });
 const offReady = host.onReady((ready) => {
-  hasStatusControls = ready.features?.statusControls === true;
   hasDeviceStorage = ready.features?.deviceStorage === true;
   applyHostReady(ready, document.documentElement);
   applyDevice(ready.device);
@@ -1076,8 +1094,9 @@ const offReady = host.onReady((ready) => {
       panelRoot.replaceChildren();
       const data = decodeFlyout(ready.popover?.data);
       const popoverId = ready.popover?.id;
+      const targetDirectory = ready.directory;
       if (data) {
-        popoverAction = renderFlyout(
+        popoverActions = renderFlyout(
           panelRoot,
           data,
           nextSession && popoverId && data.kind === "change"
@@ -1093,11 +1112,18 @@ const offReady = host.onReady((ready) => {
                     }),
                 )
             : undefined,
+          targetDirectory && data.kind === "change"
+            ? () =>
+                void openBoard(() => !disposed && popoverSession === nextSession, {
+                  directory: targetDirectory,
+                  change: data.name,
+                })
+            : undefined,
         );
       } else panelRoot.textContent = "OpenSpec details are unavailable.";
     } else if (nextSession !== popoverSession) {
       popoverSession = null;
-      popoverAction?.update({ disabled: true });
+      popoverActions?.forEach((action) => action.update({ disabled: true }));
     }
     resize.observe(panelRoot);
     return;
@@ -1107,20 +1133,16 @@ const offReady = host.onReady((ready) => {
     for (const card of mountedCards.values()) card.refreshAnchor();
   }
   updateContext(ready.directory, ready.session?.id ?? null);
-  publishRefreshControl();
   resize.observe(panelRoot);
 });
 const offDirectory = host.onDirectory((next) => {
-  if (!popoverFrame && next !== directory) {
-    updateContext(next, sessionId);
-    publishRefreshControl();
-  }
+  if (!popoverFrame && next !== directory) updateContext(next, sessionId);
 });
 const offSession = host.onSession((next) => {
   if (!popoverFrame) updateContext(directory, next?.id ?? null);
   else if (next?.id !== popoverSession) {
     popoverSession = null;
-    popoverAction?.update({ disabled: true });
+    popoverActions?.forEach((action) => action.update({ disabled: true }));
   }
 });
 const offLifecycle = host.onSessionLifecycle((event) => {
@@ -1128,9 +1150,6 @@ const offLifecycle = host.onSessionLifecycle((event) => {
   const completedTurn = turnStarted && event.phase === "completed";
   turnStarted = event.phase === "started";
   if (completedTurn) read();
-});
-const offStatusControl = host.onStatusControl(({ id }) => {
-  if (id === "refresh") refresh();
 });
 const offPopover = host.onPopoverClosed(({ reason }) => {
   const session = sessionId;
@@ -1154,12 +1173,18 @@ window.addEventListener(
     offDirectory();
     offSession();
     offLifecycle();
-    offStatusControl();
     offPopover();
     offSessions?.();
-    popoverAction?.dispose();
+    popoverActions?.forEach((action) => action.dispose());
     for (const card of mountedCards.values()) card.dispose();
-    for (const handle of [refreshButton, pickerButton, cancelPicker, ...optionButtons])
+    for (const handle of [
+      refreshButton,
+      newButton,
+      boardButton,
+      pickerButton,
+      cancelPicker,
+      ...optionButtons,
+    ])
       handle.dispose();
     panelRoot.removeEventListener("keydown", escapePicker);
     host.dispose();

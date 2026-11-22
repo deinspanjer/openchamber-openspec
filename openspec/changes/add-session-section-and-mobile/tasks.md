@@ -166,7 +166,7 @@ One commit per task.
       a failed `/workflows` shows core chips without an error. Wire it into the section's reads.
       Add `/workflows` to existing exact request-sequence assertions. Verify with `npm run build &&
       node --test test/service.test.mjs` and the focused panel tests.
-- [ ] 9.2 Footer. Fake host seam: add failing tests that one footer line follows the cards, or
+- [x] 9.2 Footer. Fake host seam: add failing tests that one footer line follows the cards, or
       stands alone with nothing tracked: `＋ Track a change` left; `new` (only when the fake set has
       `new`), `board` and an icon button named `Refresh` right. The footer `board` calls
       `openSurface("plugin:openspec-board")` without posting `/focus`; Refresh runs one read; cards

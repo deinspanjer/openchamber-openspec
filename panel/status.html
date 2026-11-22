@@ -73,14 +73,35 @@
       }
       .section-heading,
       .section-controls,
+      .footer-actions,
       .card-actions {
         display: flex;
         align-items: center;
         gap: 8px;
       }
-      .section-controls,
       .card-actions {
         flex-wrap: wrap;
+      }
+      .footer-actions {
+        margin-inline-start: auto;
+      }
+      .loading-action svg {
+        width: 1em;
+        height: 1em;
+      }
+      .loading-action button[aria-busy="true"] svg {
+        animation: refresh-spin 1s linear infinite;
+      }
+      @keyframes refresh-spin {
+        to {
+          transform: rotate(1turn);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .loading-action button[aria-busy="true"] svg {
+          animation: none;
+          opacity: 0.55;
+        }
       }
       .status-card {
         gap: 4px;

@@ -2513,6 +2513,30 @@ ${GUEST_UI_LOOK_CSS}`;
     return decodeTasks(item.tasks);
   }
 
+  // src/panel/button-icon.ts
+  var paths = {
+    refresh: "M20 11a8 8 0 1 1-2.4-5.7M20 4v5h-5",
+    create: "M12 5v14M5 12h14",
+    copy: "M9 9h11v11H9zM15 9V4H4v11h5",
+    archive: "M3 4h18v4H3zM5 8v12h14V8M10 12h4",
+    delete: "M4 7h16M10 4h4m4 3-1 13H7L6 7m4 4v5m4-5v5"
+  };
+  function addButtonIcon(root2, name) {
+    root2.classList.add("loading-action");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.8");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", paths[name]);
+    svg.append(path);
+    root2.querySelector("button").prepend(svg);
+  }
+
   // src/panel/client.ts
   var ServiceRequestError = class extends Error {
     constructor(code, message, outcome) {
@@ -3015,19 +3039,16 @@ Report what you synced without archiving the change.`;
   var refreshWorkflows = false;
   var contextRead;
   var selection2 = null;
-  var hasStatusControls = false;
   var hasDeviceStorage = false;
   var hasPopovers = false;
   var popoverFrame = false;
-  var headerRequest = 0;
   var notes = document.createElement("div");
   var content = document.createElement("div");
   content.className = "section-content";
-  var controls = document.createElement("div");
+  var controls = document.createElement("footer");
   controls.className = "section-controls";
   for (const element of [notes, content, controls]) element.hidden = true;
   panelRoot.append(notes, content, controls);
-  var bodyRefresh = document.createElement("div");
   var pickerRoot = document.createElement("div");
   var picker = document.createElement("div");
   picker.className = "section-picker";
@@ -3040,9 +3061,38 @@ Report what you synced without archiving the change.`;
   emptyChoices.textContent = "No untracked changes.";
   picker.append(choices, emptyChoices);
   panelRoot.append(picker);
-  controls.append(bodyRefresh);
-  var refreshButton = mountButton(bodyRefresh, { label: "Refresh", size: "sm", onClick: refresh });
-  controls.append(pickerRoot);
+  var footerActions = document.createElement("div");
+  footerActions.className = "footer-actions";
+  var newRoot = document.createElement("span");
+  var boardRoot = document.createElement("span");
+  var refreshRoot = document.createElement("span");
+  footerActions.append(newRoot, boardRoot, refreshRoot);
+  controls.append(pickerRoot, footerActions);
+  var newButton = mountButton(newRoot, {
+    label: "new",
+    size: "sm",
+    variant: "secondary",
+    disabled: true,
+    onClick: () => {
+    }
+  });
+  var boardButton = mountButton(boardRoot, {
+    label: "board",
+    size: "sm",
+    variant: "secondary",
+    onClick: () => void openBoard(captureContext())
+  });
+  var refreshButton = mountButton(refreshRoot, {
+    label: "",
+    size: "sm",
+    variant: "secondary",
+    onClick: refresh
+  });
+  addButtonIcon(refreshRoot, "refresh");
+  var refreshTrigger = refreshRoot.querySelector("button");
+  refreshTrigger.setAttribute("aria-label", "Refresh");
+  for (const action of [newRoot, boardRoot, refreshRoot])
+    action.querySelector("button").classList.add("status-link");
   var pickerButton = mountButton(pickerRoot, {
     label: "\uFF0B Track a change",
     size: "sm",
@@ -3085,12 +3135,13 @@ Report what you synced without archiving the change.`;
     return () => !disposed && epoch === capturedEpoch;
   }
   function render(view) {
+    newRoot.hidden = !workflows?.has("new");
     const nextViewKey = JSON.stringify([epoch, view]);
     if (viewKey === nextViewKey) return;
     viewKey = nextViewKey;
     showingLive = view.kind === "ready";
     markRefreshing(false);
-    controls.hidden = view.kind === "empty" || view.kind === "loading";
+    controls.hidden = !directory;
     const cards = view.kind === "ready" ? view.cards : view.kind === "stale" ? view.cards.map((display) => ({ id: display.id, display })) : [];
     content.hidden = !cards.length;
     for (const [id, mounted] of mountedCards) {
@@ -3121,7 +3172,7 @@ Report what you synced without archiving the change.`;
       note("Loading OpenSpec change\u2026", "status");
     }
     notes.hidden = !notes.childElementCount;
-    pickerRoot.hidden = view.kind !== "ready";
+    pickerButton.update({ disabled: view.kind !== "ready" || !sessionId });
     cancelRoot.hidden = !cards.length;
     if (view.kind === "ready")
       updatePicker(
@@ -3140,7 +3191,6 @@ Report what you synced without archiving the change.`;
     const nextKey = JSON.stringify([sessionId, items]);
     if (pickerKey === nextKey) return;
     pickerKey = nextKey;
-    pickerButton.update({ disabled: !sessionId });
     emptyChoices.hidden = items.length !== 0;
     const focused = choices.contains(document.activeElement) ? document.activeElement?.textContent : null;
     for (const button2 of optionButtons) button2.dispose();
@@ -3180,6 +3230,14 @@ Report what you synced without archiving the change.`;
       kind: "error",
       message: caught instanceof HostRequestError ? caught.message : fallback
     }).catch((error) => console.warn("Could not show the OpenSpec error.", error));
+  }
+  async function openBoard(current, target) {
+    try {
+      if (target) await client.setFocus(target.directory, target.change);
+      if (current()) await host.openSurface("plugin:openspec-board");
+    } catch (caught) {
+      await showError(current, caught, "Could not open the OpenSpec board.");
+    }
   }
   async function preparePrompt(change, text, current) {
     if (!current()) return;
@@ -3311,21 +3369,6 @@ Report what you synced without archiving the change.`;
         validationData = null;
       }
     );
-    const board = mountButton(actions, {
-      label: "board",
-      size: "xs",
-      variant: "secondary",
-      onClick: () => {
-        const targetDirectory = directory;
-        if (!targetDirectory || !change) return;
-        const current = captureContext();
-        void client.setFocus(targetDirectory, id).then(() => {
-          if (current()) return host.openSurface("plugin:openspec-board");
-        }).catch(
-          (caught) => showError(current, caught, "Could not open the OpenSpec board.")
-        );
-      }
-    });
     const details = document.createElement("div");
     details.className = "section-content";
     details.append(disclosure, currentTask.inline, actions, validationInline);
@@ -3428,7 +3471,7 @@ Report what you synced without archiving the change.`;
         validationAnchor.dispose();
         currentTask.dispose();
         for (const { title: title2 } of taskRows.values()) title2.dispose();
-        for (const handle of [primary2, sync, validate, board, retry]) handle.dispose();
+        for (const handle of [primary2, sync, validate, retry]) handle.dispose();
         element.remove();
       }
     };
@@ -3512,7 +3555,7 @@ Report what you synced without archiving the change.`;
       return null;
     return { kind: "change", name: value.name, goal: value.goal, stage: value.stage };
   }
-  function renderFlyout(container, data, untrack) {
+  function renderFlyout(container, data, untrack, openInBoard) {
     container.classList.add("flyout");
     if (data.kind === "task") {
       const description = document.createElement("p");
@@ -3558,6 +3601,16 @@ Report what you synced without archiving the change.`;
       goal.textContent = data.goal;
       container.append(goal);
     }
+    const actions = [];
+    if (openInBoard)
+      actions.push(
+        mountButton(container, {
+          label: "Open in board",
+          variant: "secondary",
+          size: "xs",
+          onClick: openInBoard
+        })
+      );
     if (untrack) {
       const button2 = mountButton(container, {
         label: "Untrack",
@@ -3565,17 +3618,18 @@ Report what you synced without archiving the change.`;
         size: "xs",
         onClick: untrack
       });
-      container.querySelector("button").classList.add("status-link", "untrack-link");
-      return button2;
+      container.lastElementChild.classList.add("status-link", "untrack-link");
+      actions.push(button2);
     }
+    return actions;
   }
   function mountFlyout(button2, inline, getData, onReset) {
     let anchor;
     let openedId = null;
-    let action;
+    let actions;
     function closeInline() {
-      action?.dispose();
-      action = void 0;
+      actions?.forEach((action) => action.dispose());
+      actions = void 0;
       inline.hidden = true;
       if (!anchor) button2.setAttribute("aria-expanded", "false");
     }
@@ -3589,13 +3643,15 @@ Report what you synced without archiving the change.`;
         inline.hidden = false;
         const session = sessionId;
         const current = captureContext();
-        action = renderFlyout(
+        const targetDirectory = directory;
+        actions = renderFlyout(
           inline,
           data,
           session && data.kind === "change" ? () => void untrackChange(session, data.name, current, seedTrackedChanges, () => {
             closeInline();
             read();
-          }) : void 0
+          }) : void 0,
+          targetDirectory && data.kind === "change" ? () => void openBoard(current, { directory: targetDirectory, change: data.name }) : void 0
         );
         button2.setAttribute("aria-expanded", "true");
       }
@@ -3720,6 +3776,7 @@ Report what you synced without archiving the change.`;
     refreshWorkflows = false;
     const current = () => !disposed && epoch === capturedEpoch;
     reading = true;
+    refreshTrigger.setAttribute("aria-busy", "true");
     if (showingLive && mountedCards.size) markRefreshing(true);
     void (async () => {
       try {
@@ -3803,6 +3860,7 @@ Report what you synced without archiving the change.`;
       } finally {
         if (current()) markRefreshing(false);
         reading = false;
+        refreshTrigger.setAttribute("aria-busy", "false");
         if (queued) {
           queued = false;
           read();
@@ -3841,21 +3899,6 @@ Report what you synced without archiving the change.`;
     refreshWorkflows = true;
     read();
   }
-  function publishRefreshControl() {
-    const request = ++headerRequest;
-    const showHeader = (visible) => {
-      if (disposed || headerRequest !== request) return;
-      bodyRefresh.hidden = visible;
-    };
-    if (!directory || !hasStatusControls) {
-      showHeader(false);
-      return;
-    }
-    void host.setStatusControls([{ kind: "button", id: "refresh", label: "Refresh" }]).then(() => showHeader(true)).catch((caught) => {
-      showHeader(false);
-      console.warn("Could not publish OpenSpec Refresh.", caught);
-    });
-  }
   function updateContext(nextDirectory, nextSession) {
     const directoryChanged = nextDirectory !== directory;
     if (!directoryChanged && nextSession === sessionId) return;
@@ -3867,6 +3910,10 @@ Report what you synced without archiving the change.`;
     queued = false;
     readError = void 0;
     setPickerOpen(false, false);
+    if (directoryChanged) {
+      workflows = void 0;
+      refreshWorkflows = false;
+    }
     showCached();
     const current = captureContext();
     if (hasDeviceStorage && nextSession && nextDirectory && !statusCache.get(nextSession, nextDirectory))
@@ -3874,9 +3921,6 @@ Report what you synced without archiving the change.`;
         if (current() && cards?.length && !showingLive) showCached();
       });
     if (directoryChanged) {
-      workflows = void 0;
-      refreshWorkflows = false;
-      bodyRefresh.hidden = false;
       projectEpoch++;
       offSessions?.();
       offSessions = void 0;
@@ -3887,7 +3931,7 @@ Report what you synced without archiving the change.`;
   }
   var lastHeight = 0;
   var popoverSession = null;
-  var popoverAction;
+  var popoverActions;
   var resize = new ResizeObserver(() => {
     const height = Math.ceil(panelRoot.getBoundingClientRect().height);
     if (height === lastHeight) return;
@@ -3895,7 +3939,6 @@ Report what you synced without archiving the change.`;
     void host.setHeight(height).catch((error) => console.warn("Could not resize the OpenSpec section.", error));
   });
   var offReady = host.onReady((ready2) => {
-    hasStatusControls = ready2.features?.statusControls === true;
     hasDeviceStorage = ready2.features?.deviceStorage === true;
     applyHostReady(ready2, document.documentElement);
     applyDevice(ready2.device);
@@ -3907,8 +3950,9 @@ Report what you synced without archiving the change.`;
         panelRoot.replaceChildren();
         const data = decodeFlyout(ready2.popover?.data);
         const popoverId = ready2.popover?.id;
+        const targetDirectory = ready2.directory;
         if (data) {
-          popoverAction = renderFlyout(
+          popoverActions = renderFlyout(
             panelRoot,
             data,
             nextSession && popoverId && data.kind === "change" ? () => void untrackChange(
@@ -3919,12 +3963,16 @@ Report what you synced without archiving the change.`;
               () => void host.closePopover(popoverId).catch((caught) => {
                 console.warn("Could not close the OpenSpec flyout.", caught);
               })
-            ) : void 0
+            ) : void 0,
+            targetDirectory && data.kind === "change" ? () => void openBoard(() => !disposed && popoverSession === nextSession, {
+              directory: targetDirectory,
+              change: data.name
+            }) : void 0
           );
         } else panelRoot.textContent = "OpenSpec details are unavailable.";
       } else if (nextSession !== popoverSession) {
         popoverSession = null;
-        popoverAction?.update({ disabled: true });
+        popoverActions?.forEach((action) => action.update({ disabled: true }));
       }
       resize.observe(panelRoot);
       return;
@@ -3934,20 +3982,16 @@ Report what you synced without archiving the change.`;
       for (const card of mountedCards.values()) card.refreshAnchor();
     }
     updateContext(ready2.directory, ready2.session?.id ?? null);
-    publishRefreshControl();
     resize.observe(panelRoot);
   });
   var offDirectory = host.onDirectory((next) => {
-    if (!popoverFrame && next !== directory) {
-      updateContext(next, sessionId);
-      publishRefreshControl();
-    }
+    if (!popoverFrame && next !== directory) updateContext(next, sessionId);
   });
   var offSession = host.onSession((next) => {
     if (!popoverFrame) updateContext(directory, next?.id ?? null);
     else if (next?.id !== popoverSession) {
       popoverSession = null;
-      popoverAction?.update({ disabled: true });
+      popoverActions?.forEach((action) => action.update({ disabled: true }));
     }
   });
   var offLifecycle = host.onSessionLifecycle((event) => {
@@ -3955,9 +3999,6 @@ Report what you synced without archiving the change.`;
     const completedTurn = turnStarted && event.phase === "completed";
     turnStarted = event.phase === "started";
     if (completedTurn) read();
-  });
-  var offStatusControl = host.onStatusControl(({ id }) => {
-    if (id === "refresh") refresh();
   });
   var offPopover = host.onPopoverClosed(({ reason }) => {
     const session = sessionId;
@@ -3979,12 +4020,18 @@ Report what you synced without archiving the change.`;
       offDirectory();
       offSession();
       offLifecycle();
-      offStatusControl();
       offPopover();
       offSessions?.();
-      popoverAction?.dispose();
+      popoverActions?.forEach((action) => action.dispose());
       for (const card of mountedCards.values()) card.dispose();
-      for (const handle of [refreshButton, pickerButton, cancelPicker, ...optionButtons])
+      for (const handle of [
+        refreshButton,
+        newButton,
+        boardButton,
+        pickerButton,
+        cancelPicker,
+        ...optionButtons
+      ])
         handle.dispose();
       panelRoot.removeEventListener("keydown", escapePicker);
       host.dispose();

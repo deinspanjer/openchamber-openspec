@@ -241,12 +241,6 @@ function hostHtml(statusCase, pointer, popovers) {
       for (const guest of guests) guest.postMessage({ channel: "openchamber.sdk", v: 1,
         type: "session-lifecycle", payload: { sessionId, phase } }, "*");
     };
-    let headerBinding = null;
-    window.__rebindStatusHeader = () => {
-      headerBinding = null;
-      document.querySelector("[data-work-status-controls]").replaceChildren();
-      for (const guest of guests) post(guest, "ready", readyFor(guest));
-    };
     window.__holdCompose = () => { holdCompose = true; };
     window.__releaseCompose = () => { holdCompose = false; pendingCompose.splice(0).forEach((finish) => finish()); };
     window.__failCompose = () => { failCompose = true; };
@@ -259,10 +253,6 @@ function hostHtml(statusCase, pointer, popovers) {
     window.__holdFiles = () => { holdFiles = true; };
     window.__releaseFile = () => { const finish = pending.shift(); finish?.(); };
     window.__directory = (next) => {
-      if (next !== ready.directory) {
-        headerBinding = null;
-        document.querySelector("[data-work-status-controls]").replaceChildren();
-      }
       ready.directory = next;
       for (const guest of guests) post(guest, "directory", { directory: next });
     };
@@ -574,31 +564,11 @@ function hostHtml(statusCase, pointer, popovers) {
        }
        if (message.type === "status-controls") {
          window.__requests.push({ path: message.type, body: message.payload });
-         const owner = event.source;
-         const context = readyFor(owner);
+         const context = readyFor(event.source);
          if (context.surface !== "status" || !context.features?.statusControls) {
-           owner.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id,
+           event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id,
              ok: false, code: "UNSUPPORTED", error: "This frame has no status header." }, "*");
            return;
-         }
-         const signature = JSON.stringify(message.payload.controls);
-         if (headerBinding?.signature !== signature) {
-           const binding = { owner, directory: context.directory, signature };
-           headerBinding = binding;
-           document.querySelector("[data-work-status-controls]").replaceChildren(
-             ...message.payload.controls.map((control) => {
-               const button = document.createElement("button");
-               button.textContent = control.label;
-               button.disabled = !!control.disabled;
-               button.onclick = () => {
-                 if (headerBinding === binding && binding.directory === ready.directory &&
-                     guests.has(owner) && !control.disabled && control.kind === "button") {
-                   post(owner, "status-control-event", { id: control.id });
-                 }
-               };
-               return button;
-             })
-           );
          }
          reply();
          return;
@@ -680,7 +650,7 @@ function hostHtml(statusCase, pointer, popovers) {
               { artifactId: "tasks", selector: "tasks.md", label: "tasks.md" }]),
           ] });
     }
-  </script><style>body{margin:0}iframe{display:block;width:100%;height:${statusCase ? "160px" : "100vh"};border:0}</style><div data-work-status-controls></div><iframe src="/panel/${statusCase ? "status" : "index"}.html" title="OpenSpec test panel"></iframe>`;
+  </script><style>body{margin:0}iframe{display:block;width:100%;height:${statusCase ? "160px" : "100vh"};border:0}</style><iframe src="/panel/${statusCase ? "status" : "index"}.html" title="OpenSpec test panel"></iframe>`;
 }
 
 async function withPanel(run) {
@@ -841,7 +811,7 @@ for (const [stage, chip, count, current, percent] of [
         [second, "apply"],
       ]) {
         const names = await card.getByRole("button").allTextContents();
-        assert.deepEqual(names.slice(-4), [action, "sync", "validate", "board"]);
+        assert.deepEqual(names.slice(-3), [action, "sync", "validate"]);
       }
       assert.equal(await second.getByText("0/0", { exact: true }).isVisible(), true);
       assert.equal(await second.locator("details").isVisible(), false);
@@ -1339,8 +1309,9 @@ for (const mode of ["mounted", "later", "other-directory"]) {
       await page.goto(`${url}?status=item${mode === "later" ? "&open-board" : ""}`);
       const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
       const board = page.frameLocator('iframe[title="OpenSpec test board"]');
-      const chip = section.getByRole("button", { name: "board", exact: true });
-      await chip.waitFor();
+      await section.getByRole("button", { name: "first-change", exact: true }).click();
+      const openInBoard = section.getByRole("button", { name: "Open in board", exact: true });
+      await openInBoard.waitFor();
       if (mode !== "later") {
         await page.evaluate(
           (target) => __mountBoard(target),
@@ -1348,7 +1319,7 @@ for (const mode of ["mounted", "later", "other-directory"]) {
         );
         await page.waitForFunction(() => __focusClaims.length === 1, null, { timeout: 3000 });
       }
-      await chip.click();
+      await openInBoard.click();
       await page.waitForFunction(
         () => __requests.some(({ path }) => path === "open-surface"),
         null,
@@ -1396,8 +1367,9 @@ for (const exists of [true, false]) {
       await page.goto(`${url}?status=item`);
       const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
       const board = page.frameLocator('iframe[title="OpenSpec test board"]');
-      const chip = section.getByRole("button", { name: "board", exact: true });
-      await chip.waitFor();
+      await section.getByRole("button", { name: "first-change", exact: true }).click();
+      const openInBoard = section.getByRole("button", { name: "Open in board", exact: true });
+      await openInBoard.waitFor();
       await page.evaluate(() => {
         __remove("first-change");
         __mountBoard();
@@ -1409,7 +1381,7 @@ for (const exists of [true, false]) {
         await other.click();
         await board.getByRole("button", { name: "Back to changes" }).waitFor();
       }
-      await chip.click();
+      await openInBoard.click();
       if (exists) {
         await board
           .getByRole("heading", { name: "first-change", exact: true })
@@ -1440,15 +1412,16 @@ test("a hidden board does not claim a focus event but a new board still claims o
     await page.goto(`${url}?status=item`);
     const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
     const board = page.frameLocator('iframe[title="OpenSpec test board"]');
-    const chip = section.getByRole("button", { name: "board", exact: true });
-    await chip.waitFor();
+    await section.getByRole("button", { name: "first-change", exact: true }).click();
+    const openInBoard = section.getByRole("button", { name: "Open in board", exact: true });
+    await openInBoard.waitFor();
     await page.evaluate(() => __mountBoard());
     await page.waitForFunction(() => __focusClaims.length === 1);
     const change = board.getByRole("button", { name: "first-change", exact: true });
     await change.evaluate(() =>
       Object.defineProperty(document, "visibilityState", { value: "hidden" }),
     );
-    await chip.click();
+    await openInBoard.click();
     await page.waitForFunction(() => __requests.some(({ path }) => path === "open-surface"));
     await page.evaluate(() => __theme("light"));
     await board.locator('html[data-oc-theme="light"]').waitFor();
@@ -2020,69 +1993,97 @@ test("session section re-resolves on session switch without remounting or render
   });
 });
 
-for (const [scenario, header] of [
+for (const [scenario, optional] of [
   ["header", true],
-  ["item", false],
+  ["archive", false],
 ]) {
-  test(`session section refreshes from the ${header ? "header" : "body"} control`, async () => {
+  test(`session section shows one footer after ${optional ? "the cards" : "no cards"}`, async () => {
     await withPanel(async (browser, url) => {
       const page = await browser.newPage();
-      await page.goto(`${url}?status=${scenario}`);
-      const frame = page.frameLocator("iframe");
-      await frame.getByText("1/2", { exact: true }).waitFor();
-      const refresh = frame.getByRole("button", { name: "Refresh", exact: true });
-      if (header) {
-        await page.waitForFunction(
-          () => __requests.some((r) => r.path === "status-controls"),
-          null,
-          {
-            timeout: 3000,
-          },
-        );
-        await refresh.waitFor({ state: "hidden" });
-        assert.deepEqual(
-          await page.evaluate(
-            () => __requests.find((r) => r.path === "status-controls").body.controls,
+      await page.goto(`${url}?status=${scenario}&hold-ready`);
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate((optional) => {
+        if (optional) __workflows(["new"]);
+        __releaseReady();
+      }, optional);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const footer = section.locator("footer");
+      const refresh = footer.getByRole("button", { name: "Refresh", exact: true });
+      await refresh.waitFor({ timeout: 3000 });
+      await footer
+        .getByRole("button", { name: "＋ Track a change" })
+        .and(footer.locator("button:enabled"))
+        .waitFor({ timeout: 3000 });
+      assert.deepEqual(
+        await footer
+          .getByRole("button")
+          .evaluateAll((buttons) =>
+            buttons.map((node) => node.getAttribute("aria-label") ?? node.textContent),
           ),
-          [{ kind: "button", id: "refresh", label: "Refresh" }],
+        optional
+          ? ["＋ Track a change", "new", "board", "Refresh"]
+          : ["＋ Track a change", "board", "Refresh"],
+      );
+      assert.equal(await refresh.innerText(), "");
+      assert.equal(await refresh.locator("svg").count(), 1);
+      assert.equal(await section.getByRole("article").count(), optional ? 1 : 0);
+      assert.equal(
+        await section
+          .locator("article")
+          .getByRole("button", { name: "board", exact: true })
+          .count(),
+        0,
+      );
+      if (optional) {
+        const card = await section.getByRole("article").boundingBox();
+        assert.ok((await footer.boundingBox()).y >= card.y + card.height);
+        await page.evaluate(() => {
+          delete window.__releaseReady;
+          __mountBoard();
+        });
+        await page.waitForFunction(() => typeof window.__releaseReady === "function", null, {
+          timeout: 3000,
+        });
+        await page.evaluate(() => __releaseReady());
+        const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+        await board
+          .getByRole("button", { name: "first-change", exact: true })
+          .click({ timeout: 3000 });
+        await board.getByRole("button", { name: "Back to changes" }).waitFor();
+        await footer.getByRole("button", { name: "board", exact: true }).click();
+        await page.waitForFunction(() => __requests.some(({ path }) => path === "open-surface"));
+        await page.evaluate(() => __theme("light"));
+        await board.locator('html[data-oc-theme="light"]').waitFor();
+        assert.equal(
+          await board.getByRole("heading", { name: "first-change", exact: true }).isVisible(),
+          true,
         );
-        await page.evaluate(() => __edit("Completed"));
-        await page.getByRole("button", { name: "Refresh", exact: true }).click();
-      } else {
+        assert.deepEqual(
+          await page.evaluate(() =>
+            __requests.filter(({ path }) => path === "open-surface" || path === "/focus"),
+          ),
+          [{ path: "open-surface", body: { surfaceId: "plugin:openspec-board" } }],
+        );
         await page.evaluate(() => __edit("Completed"));
         await refresh.click();
+        await section.getByText("2/2", { exact: true }).waitFor();
+        assert.equal(
+          await page.evaluate(() => __completed.filter((path) => path === "/workflows").length),
+          2,
+        );
+        assert.equal(
+          await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
+          3,
+        );
       }
-      await frame.getByText("2/2", { exact: true }).waitFor();
-      await page.waitForFunction(() => __requests.filter((r) => r.path === "/tasks").length === 2);
       assert.equal(
-        await page.evaluate(() => __requests.some((r) => r.path === "status-controls")),
-        header,
+        await page.evaluate(() => __requests.some(({ path }) => path === "status-controls")),
+        false,
       );
       await page.close();
     });
   });
 }
-
-test("the Work Status header republishes after the host retires its same-directory binding", async () => {
-  await withPanel(async (browser, url) => {
-    const page = await browser.newPage();
-    await page.goto(`${url}?status=header`);
-    const frame = page.frameLocator("iframe");
-    const refresh = page.getByRole("button", { name: "Refresh", exact: true });
-    await frame.getByText("1/2", { exact: true }).waitFor();
-    await refresh.waitFor();
-    await page.evaluate(() => {
-      __rebindStatusHeader();
-      __edit("Completed");
-    });
-    await refresh.click({ timeout: 3000 });
-    await frame.getByText("2/2", { exact: true }).waitFor({ timeout: 3000 });
-    assert.equal(
-      await page.evaluate(() => __requests.filter(({ path }) => path === "/changes").length),
-      2,
-    );
-  });
-});
 
 test("a long Work Status change name truncates before the count wraps", async () => {
   await withPanel(async (browser, url) => {
@@ -2174,7 +2175,7 @@ for (const pointer of ["coarse", "fine"]) {
       const heights = await controls.evaluateAll((nodes) =>
         nodes.map((node) => node.getBoundingClientRect().height),
       );
-      assert.equal(heights.length, 17);
+      assert.equal(heights.length, 15);
       for (const height of heights) assert.equal(height >= 44, pointer === "coarse");
       assert.ok(
         await frame
