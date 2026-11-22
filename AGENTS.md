@@ -63,3 +63,6 @@
   (`http://127.0.0.1:57123` on this machine). The OpenChamber browser tool cannot see inside the
   extension iframe.
 - Ask the user before a check creates real sessions or worktrees.
+- Git-URL installs update only when `package.json` `version` increases. OpenChamber compares semver,
+  not commits, so bump the version (`npm version <x.y.z> --no-git-tag-version`) in any release
+  users should receive.
