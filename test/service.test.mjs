@@ -2713,5 +2713,7 @@ test("service reads a document only from the selected change", async () => {
 
 test("manifest declares the host-managed OpenSpec service", async () => {
   const manifest = await readFile(new URL("../package.json", import.meta.url), "utf8");
-  assert.equal(parseManifestJson(manifest).ok, true);
+  const parsed = parseManifestJson(manifest);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.manifest.engines?.openchamber, ">=2.7.1");
 });

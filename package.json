@@ -22,6 +22,9 @@
   },
   "openchamber": {
     "apiVersion": 1,
+    "engines": {
+      "openchamber": ">=2.7.1"
+    },
     "contributes": {
       "panel": {
         "id": "openspec-board",
