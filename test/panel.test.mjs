@@ -169,7 +169,7 @@ function hostHtml(statusCase, pointer, popovers) {
     window.__requests = [];
     window.__completed = [];
     window.__edit = (text) => { proposal = text;
-      if (statusCase === "progress") { tasks[3].done = true; changes[0].completedTasks = 4; }
+      if (statusCase === "progress" || statusCase === "compact-progress") { tasks[3].done = true; changes[0].completedTasks = 4; }
       else { tasks[1].done = true; changes[0].completedTasks = 2; }
     };
     window.__unedit = () => { tasks[1].done = false; changes[0].completedTasks = 1; };
@@ -285,7 +285,7 @@ function hostHtml(statusCase, pointer, popovers) {
       if (statusCase === "escaped-goal") changes[0].goal = String.fromCharCode(1).repeat(17000);
       if (statusCase.startsWith("compact-"))
         storage.set("session-change:fixture-session", { changes: ["first-change", "second-change"], savedAt: 1 });
-      if (["progress", "complete", "read-error", "compact-progress", "compact-complete"].includes(statusCase)) {
+      if (["progress", "complete", "compact-progress", "compact-complete", "compact-read-error", "compact-touch"].includes(statusCase)) {
         changes[0].completedTasks = statusCase.endsWith("complete") ? 7 : 3;
         changes[0].totalTasks = 7;
         tasks = Array.from({ length: 7 }, (_, index) => ({
@@ -293,8 +293,9 @@ function hostHtml(statusCase, pointer, popovers) {
           description: index === 3 ? "2.1 Add a section that tracks a change\\nKeep the whole description readable when expanded." : "Task " + (index + 1),
           done: index < changes[0].completedTasks,
         }));
-        failTasks = statusCase === "read-error";
       }
+      if (statusCase === "compact-touch") tasks[3].description = "long-task-title-".repeat(20);
+      if (statusCase === "compact-read-error") failSummary = true;
       if (statusCase === "planning" || statusCase === "compact-planning") {
         changes[0].completedTasks = changes[0].totalTasks = 0;
         tasks = [];
@@ -863,21 +864,57 @@ for (const scenario of ["saved", "worktree", "archive", "stale", "legacy-value",
   });
 }
 
-test("session section shows no partial progress after a read failure and can refresh", async () => {
+test("session section isolates a failed card and refreshes each tracked change without a batch read", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
-    await page.goto(`${url}?status=read-error`);
+    await page.goto(`${url}?status=compact-read-error`);
     const frame = page.frameLocator("iframe");
-    const error = frame.getByRole("alert");
+    const first = frame
+      .getByRole("article")
+      .filter({ has: frame.getByRole("heading", { name: "first-change" }) });
+    const second = frame
+      .getByRole("article")
+      .filter({ has: frame.getByRole("heading", { name: "second-change" }) });
+    const error = first.getByRole("alert");
     await error.waitFor({ timeout: 3000 });
-    assert.match(await error.innerText(), /Retry these tasks/);
-    assert.equal(await frame.getByRole("progressbar").count(), 0);
-    assert.equal(await frame.getByText("3/7", { exact: true }).count(), 0);
-    await frame.getByRole("button", { name: "Refresh", exact: true }).click();
-    await frame.getByText("3/7", { exact: true }).waitFor();
+    assert.match(await error.innerText(), /Read failed/);
+    assert.equal(await first.getByRole("progressbar").count(), 0);
+    assert.equal(await first.getByText("3/7", { exact: true }).count(), 0);
+    assert.equal(await second.getByText("0/0", { exact: true }).isVisible(), true);
+    const before = await page.evaluate(() =>
+      __requests
+        .filter(
+          ({ path }) =>
+            path === "/changes" ||
+            path === "/summary" ||
+            path === "/tasks" ||
+            path === "/summaries",
+        )
+        .map(({ path, body }) => (body.change ? `${path} ${body.change}` : path)),
+    );
+    const expected = [
+      "/changes",
+      "/summary first-change",
+      "/summary second-change",
+      "/tasks first-change",
+      "/tasks second-change",
+    ];
+    assert.deepEqual(before.slice().sort(), expected.slice().sort());
+    await first.getByRole("button", { name: "Refresh", exact: true }).click();
+    await first.getByText("3/7", { exact: true }).waitFor();
     assert.equal(await error.count(), 0);
-    await page.waitForFunction(() => __requests.filter((r) => r.path === "/tasks").length === 2);
-    assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/summaries")), false);
+    const after = await page.evaluate(() =>
+      __requests
+        .filter(
+          ({ path }) =>
+            path === "/changes" ||
+            path === "/summary" ||
+            path === "/tasks" ||
+            path === "/summaries",
+        )
+        .map(({ path, body }) => (body.change ? `${path} ${body.change}` : path)),
+    );
+    assert.deepEqual(after.slice(before.length).sort(), expected.slice().sort());
     await page.close();
   });
 });
@@ -1362,34 +1399,43 @@ test("session section reads once on an idle session switch, then once for a fini
   });
 });
 
-test("session section preserves an open disclosure, focus and picker across finished-turn reads", async () => {
+test("session section preserves an open disclosure, focus, flyout and picker across finished-turn reads", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
-    await page.goto(`${url}?status=progress`);
+    await page.goto(`${url}?status=compact-progress`);
     const frame = page.frameLocator("iframe");
-    const detail = frame.locator("details");
-    const refresh = frame.getByRole("button", { name: "Refresh", exact: true });
+    const first = frame
+      .getByRole("article")
+      .filter({ has: frame.getByRole("heading", { name: "first-change" }) });
+    const detail = first.locator("details");
     await detail.locator("summary").getByText("Tasks:", { exact: true }).click();
-    await refresh.focus();
+    const task = detail.getByRole("button", { name: "Task 5", exact: true });
+    await task.click();
+    await detail.getByText("Task 5", { exact: true }).last().waitFor({ timeout: 3000 });
     await page.evaluate(() => {
       __lifecycle("fixture-session", "started");
       __lifecycle("fixture-session", "completed");
     });
-    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 2);
-    await frame.locator("#root").evaluate(() => new Promise(requestAnimationFrame));
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 4);
+    await page.evaluate(() => __theme("light"));
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
     assert.notEqual(await detail.getAttribute("open"), null);
-    assert.equal(await refresh.evaluate((node) => document.activeElement === node), true);
+    assert.equal(await task.evaluate((node) => document.activeElement === node), true);
+    assert.equal(await task.getAttribute("aria-expanded"), "true");
 
     await frame.getByRole("button", { name: "＋ Track a change", exact: true }).click();
     const picker = frame.getByRole("list", { name: "Changes", exact: true });
-    await picker.waitFor();
+    const noChoices = frame.getByText("No untracked changes.");
+    await noChoices.waitFor();
     await page.evaluate(() => {
       __lifecycle("fixture-session", "started");
       __lifecycle("fixture-session", "completed");
     });
-    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 3);
-    await frame.locator("#root").evaluate(() => new Promise(requestAnimationFrame));
-    assert.equal(await picker.isVisible(), true);
+    await page.waitForFunction(() => __completed.filter((p) => p === "/tasks").length === 6);
+    await page.evaluate(() => __theme("dark"));
+    await frame.locator('html[data-oc-theme="dark"]').waitFor();
+    assert.equal(await noChoices.isVisible(), true);
+    assert.equal(await picker.getByRole("button").count(), 0);
     await page.close();
   });
 });
@@ -1566,6 +1612,30 @@ for (const [scenario, header] of [
 }
 
 for (const pointer of ["coarse", "fine"]) {
+  test(`session section keeps two cards within 320px for a ${pointer} pointer`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+      await page.goto(`${url}?status=compact-touch&pointer=${pointer}`);
+      const frame = page.frameLocator("iframe");
+      await frame
+        .getByRole("article")
+        .filter({ hasText: "second-change" })
+        .waitFor({ timeout: 3000 });
+      await frame.locator("summary:visible").getByText("Tasks:", { exact: true }).click();
+      const controls = frame.locator("article :is(button, summary):visible");
+      const heights = await controls.evaluateAll((nodes) =>
+        nodes.map((node) => node.getBoundingClientRect().height),
+      );
+      assert.equal(heights.length, 17);
+      for (const height of heights) assert.equal(height >= 44, pointer === "coarse");
+      assert.ok(
+        await frame
+          .locator("html")
+          .evaluate(({ scrollWidth, clientWidth }) => scrollWidth <= clientWidth),
+      );
+    });
+  });
+
   test(`phone controls respect the host's ${pointer} pointer at 320px`, async () => {
     await withPanel(async (browser, url) => {
       const page = await browser.newPage({ viewport: { width: 320, height: 720 } });

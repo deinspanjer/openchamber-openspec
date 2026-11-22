@@ -3207,10 +3207,19 @@ Report what you synced without archiving the change.`;
     });
     const details = document.createElement("div");
     details.className = "section-content";
-    details.append(heading, inline, meter, disclosure, currentTask.inline, actions, validationInline);
+    details.append(meter, disclosure, currentTask.inline, actions, validationInline);
+    const errorCard = document.createElement("div");
+    errorCard.className = "section-content";
     const error = document.createElement("p");
     error.setAttribute("role", "alert");
-    element.append(details, error);
+    errorCard.append(error);
+    const retry = mountButton(errorCard, {
+      label: "Refresh",
+      size: "sm",
+      variant: "secondary",
+      onClick: refresh
+    });
+    element.append(heading, inline, details, errorCard);
     return {
       element,
       refreshAnchor() {
@@ -3222,10 +3231,16 @@ Report what you synced without archiving the change.`;
       update(card, listing) {
         scope = listing;
         details.hidden = "message" in card;
-        error.hidden = !details.hidden;
+        errorCard.hidden = !details.hidden;
+        count2.hidden = details.hidden;
+        nameButton.disabled = details.hidden;
         if ("message" in card) {
           error.textContent = card.message;
           change = null;
+          nameAnchor.reset();
+          currentTask.update(null);
+          for (const { title: title2 } of taskRows.values()) title2.update(null);
+          validationAnchor.reset();
           return;
         }
         change = card.change;
@@ -3276,7 +3291,7 @@ Report what you synced without archiving the change.`;
         validationAnchor.dispose();
         currentTask.dispose();
         for (const { title: title2 } of taskRows.values()) title2.dispose();
-        for (const handle of [primary2, sync, validate, board]) handle.dispose();
+        for (const handle of [primary2, sync, validate, board, retry]) handle.dispose();
         element.remove();
       }
     };
@@ -3555,10 +3570,17 @@ Report what you synced without archiving the change.`;
         const cards = await Promise.all(
           changes.map(async (id) => {
             try {
-              const summary = await client.summary(listing, id);
-              if (!current()) return { id, message: "" };
-              const tasks = await client.tasks(listing, id);
-              return { id, change: deriveChange({ ...summary, ...byId.get(id) }), tasks };
+              const [summaryResponse, taskResponse] = await Promise.allSettled([
+                client.summary(listing, id),
+                client.tasks(listing, id)
+              ]);
+              if (summaryResponse.status === "rejected") throw summaryResponse.reason;
+              if (taskResponse.status === "rejected") throw taskResponse.reason;
+              return {
+                id,
+                change: deriveChange({ ...summaryResponse.value, ...byId.get(id) }),
+                tasks: taskResponse.value
+              };
             } catch (caught) {
               return {
                 id,

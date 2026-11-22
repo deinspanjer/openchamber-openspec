@@ -116,7 +116,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       invalid results in a flyout; `board` posts the focus, calls
       `openSurface("plugin:openspec-board")`, and a board on the same project (mounted, or mounted
       later) opens that change's detail while another project's board stays at its list.
-- [ ] 7.7 Same seam: read and interaction behaviour with two changes. One listing plus summary and
+- [x] 7.7 Same seam: read and interaction behaviour with two changes. One listing plus summary and
       tasks per change; a failure on one card leaves the other; an expanded `Tasks:` and focus
       survive an unchanged finished-turn read; no `/summaries`. Coarse pointer at 320px: 44px
       targets and no horizontal overflow; fine pointer stays compact.
