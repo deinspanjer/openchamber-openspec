@@ -88,9 +88,11 @@ for (const shared of [false, true])
         const reply = (payload) => event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id, ok: true, payload }, "*");
         if (message.type === "hello") { event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "ready", payload: ready }, "*"); return; }
         if (message.type === "service-request") {
-          window.__requests.push({ path: message.payload.path, body: JSON.parse(message.payload.body) });
+          const { path, body, method, query } = message.payload;
+          window.__requests.push({ path, body: body ? JSON.parse(body) : null });
           try {
-            const response = await fetch("/service" + message.payload.path, { method: "POST", headers: { "content-type": "application/json" }, body: message.payload.body });
+            const search = query ? "?" + new URLSearchParams(query) : "";
+            const response = await fetch("/service" + path + search, { method, headers: { "content-type": "application/json" }, body });
             reply({ status: response.status, body: await response.text() });
           } catch (error) { event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id, ok: false, error: { code: "NETWORK", message: String(error) } }, "*"); }
           return;
@@ -100,17 +102,17 @@ for (const shared of [false, true])
       });
     </script><style>iframe{width:100%;height:100vh;border:0}</style><iframe src="/panel/index.html" title="OpenSpec integration panel"></iframe>`;
         host = createServer(async (request, response) => {
-          const path = new URL(request.url, "http://127.0.0.1").pathname;
+          const { pathname: path, search } = new URL(request.url, "http://127.0.0.1");
           if (path.startsWith("/service/")) {
             const chunks = [];
             for await (const chunk of request) chunks.push(chunk);
-            const forwarded = await fetch(serviceUrl + path.slice("/service".length), {
-              method: "POST",
+            const forwarded = await fetch(serviceUrl + path.slice("/service".length) + search, {
+              method: request.method,
               headers: {
                 authorization: "Bearer integration-token",
                 "content-type": "application/json",
               },
-              body: Buffer.concat(chunks),
+              ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
             });
             response.writeHead(forwarded.status, { "content-type": "application/json" });
             response.end(Buffer.from(await forwarded.arrayBuffer()));

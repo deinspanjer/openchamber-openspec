@@ -37,13 +37,19 @@ installed.
 The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
 `openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
 
-## Track a change from Work Status
+## Track changes from Work Status
 
-Open **Work Status > OpenSpec change** to see the current session's tracked change, task progress,
-and planning artefacts. Choose a change when the section cannot find one, or select **Change…** to
-switch. Your choice follows that session on devices connected to the same server. The section
-refreshes when the session finishes a turn. Its workflow action prepares a draft without sending it,
-and **Open board** opens the project board.
+Open **Work Status > OpenSpec** to see task progress for the current session. Select **＋ Track a
+change** to add another active change. To remove one, select its name and then **Untrack**. Your
+choices follow the session on devices connected to the same server.
+
+Expand **Tasks:** to see up to five tasks around the current task. Select a task title to read its
+description. The **propose**, **apply**, **archive**, and **sync** chips prepare drafts without
+sending them. **validate** runs OpenSpec validation and shows a preview of the result. For the full
+validation report, run `openspec validate <change> --type change --json`. Select **board** to open
+the change's detail if the board is in the same directory.
+
+The section refreshes when the session finishes a turn. You can also select **Refresh**.
 
 The Work Status section and phone board require OpenChamber 2.7.1 or later. On a phone, open the
 board from the workspace drawer or the sessions list's **More** menu.

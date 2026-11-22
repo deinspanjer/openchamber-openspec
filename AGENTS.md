@@ -35,6 +35,10 @@
   starts the host-managed service. `src/service/http.ts` owns authentication and request bounds;
   `src/service/openspec.ts` owns scoped CLI translation and safe paths; `src/service/cli.ts` runs
   processes.
+- `/validate` runs only for the Work Status **validate** chip. It uses the selected change's root
+  and planning identity. The focus handoff stores one target for 30 seconds. The `focus` service
+  event signals that a target is pending; only a matching directory can claim it with `GET /focus`.
+  Claiming focus never reloads the board.
 - The extension manifest is `package.json`'s `openchamber` field, not `service/package.json`. The
   latter keeps generated `service/main.js` CommonJS inside this ESM repository.
 - `panel/main.js` and `panel/status.js` are generated ES2022 browser IIFEs. `service/main.js` is the
@@ -47,8 +51,9 @@
 - Load the board only on initial/context loads, explicit Refresh, and after the panel's own create
   or delete. Do not add polling, visibility revalidation, TTL, or board-wide document prefetch.
 - Load the Work Status section on mount, session or project changes, explicit Refresh, and after the
-  shown session finishes a turn. Read the listing and only the tracked change's summary and tasks.
-  Do not poll, refresh on visibility changes, or read board-wide summaries.
+  shown session finishes a turn. Re-read after tracking changes. Read one listing and the summary
+  and tasks for each tracked change only. Keep unchanged card controls mounted across reads. Do not
+  poll, refresh on visibility changes, or read board-wide summaries.
 - Retained reads do not authorise writes or recovery. Reconcile uncertain writes with a fresh
   listing in the original context; do not retry the mutation automatically.
 - Deletion checks the active parent and target after its final CLI context check. These checks and

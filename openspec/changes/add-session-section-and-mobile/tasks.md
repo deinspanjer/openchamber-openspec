@@ -120,7 +120,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       tasks per change; a failure on one card leaves the other; an expanded `Tasks:` and focus
       survive an unchanged finished-turn read; no `/summaries`. Coarse pointer at 320px: 44px
       targets and no horizontal overflow; fine pointer stays compact.
-- [ ] 7.8 Update README and AGENTS.md for the multi-change section, `/validate` and the focus
+- [x] 7.8 Update README and AGENTS.md for the multi-change section, `/validate` and the focus
       handoff. Bump the version to 1.4.0 with `npm version 1.4.0 --no-git-tag-version`. Verify
       with `npm run check` and `npm run format:check`.
 

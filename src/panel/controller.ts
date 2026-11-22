@@ -168,8 +168,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         pendingSummaries = listedCount;
         settled = true;
         render();
+        const summaryRequest = client.summaries(current, listing.changes);
         if (checkFocus) claimFocus();
-        const summaries = await client.summaries(current, listing.changes);
+        const summaries = await summaryRequest;
         if (epoch !== startingEpoch || scope !== current || operation !== boardOperation) return;
         for (const entry of summaries) {
           try {

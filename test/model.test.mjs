@@ -125,8 +125,14 @@ test("task window centres the first incomplete task and clamps at either end", (
     [8, [6, 7, 8, 9, 10], [8, 9, 10]],
   ]) {
     const tasks = Array.from({ length: 10 }, (_, index) => ({ id: index + 1, done: index < done }));
-    assert.deepEqual(taskWindow(tasks).map(({ id }) => id), expected);
-    assert.deepEqual(taskWindow(tasks, 3).map(({ id }) => id), short);
+    assert.deepEqual(
+      taskWindow(tasks).map(({ id }) => id),
+      expected,
+    );
+    assert.deepEqual(
+      taskWindow(tasks, 3).map(({ id }) => id),
+      short,
+    );
   }
 });
 

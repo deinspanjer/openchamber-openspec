@@ -4473,7 +4473,8 @@ test("propose preserves goals and conditionally records a missing goal without s
           (before) =>
             __requests
               .slice(before)
-              .filter((r) => r.path !== "toast" && r.path !== "storage")
+              // Saving a new tracked list may inspect session metadata.
+              .filter(({ path }) => !["toast", "storage", "workspace-read"].includes(path))
               .map((r) => r.path),
           before,
         ),
