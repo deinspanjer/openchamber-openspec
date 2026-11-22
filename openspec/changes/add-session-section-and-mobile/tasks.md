@@ -94,7 +94,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
       `taskWindow`, with failing cases first (see design's test seams). Update callers so
       `npm run typecheck` passes. Verify with `npm run build:model:test && node --test
       test/model.test.mjs`.
-- [ ] 7.2 Service seam: add `/validate` and `/focus` (set, read-once, 30 s expiry, `emit`). Check
+- [x] 7.2 Service seam: add `/validate` and `/focus` (set, read-once, 30 s expiry, `emit`). Check
       the CLI's issue JSON against an invalid fixture first. Verify with `npm run build && node
       --test test/service.test.mjs`.
 - [ ] 7.3 Fake host seam: model `openPopover` (loads the status entry with `surface: "popover"` and

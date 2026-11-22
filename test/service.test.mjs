@@ -705,6 +705,141 @@ test("summary returns one scoped change from the real CLI", async (t) => {
   });
 });
 
+test("validate reports valid and invalid changes from the real CLI", async (t) => {
+  await withProjects(async (root, other) => {
+    const change = "check-example";
+    await fixtureChange(root, change, "Validate the example");
+    const directory = join(root, "openspec", "changes", change, "specs", "example");
+    await mkdir(directory, { recursive: true });
+    const spec = join(directory, "spec.md");
+    await writeFile(
+      spec,
+      "## ADDED Requirements\n\n### Requirement: Example\nThe system SHALL work.\n\n#### Scenario: Example\n- **WHEN** it starts\n- **THEN** it works\n",
+    );
+
+    await withService(async (url) => {
+      const post = async (path, body) => {
+        const response = await fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory: root, ...body }),
+        });
+        return { status: response.status, value: await response.json() };
+      };
+      const { value: listing } = await post("/changes");
+      const { value: otherListing } = await post("/changes", { directory: other });
+      const scope = { change, expectedRoot: root, planning: listing.planning };
+      await t.test("valid delta", async () => {
+        assert.deepEqual(await post("/validate", scope), {
+          status: 200,
+          value: { valid: true, issues: [] },
+        });
+      });
+      await t.test("nonzero exit with validation issues", async () => {
+        await writeFile(spec, "# Malformed delta\n");
+        const { status, value } = await post("/validate", scope);
+        assert.equal(status, 200);
+        assert.equal(value.valid, false);
+        assert.ok(value.issues.length > 1);
+        const issue = value.issues.find(({ path }) => path === "example/spec.md");
+        assert.equal(issue?.level, "ERROR");
+        assert.match(issue.message, /No delta sections found/);
+      });
+      await t.test("wrong root, stale planning identity, and missing change", async () => {
+        for (const [overrides, status, code] of [
+          [{ expectedRoot: other, planning: otherListing.planning }, 409, "ROOT_CHANGED"],
+          [{ planning: "stale" }, 409, "PLANNING_CHANGED"],
+          [{ change: "missing" }, 404, "CHANGE_UNAVAILABLE"],
+        ]) {
+          const result = await post("/validate", { ...scope, ...overrides });
+          assert.deepEqual([result.status, result.value.error?.code], [status, code]);
+        }
+      });
+    });
+  });
+});
+
+test("validate does not report partial results from malformed CLI output", async () => {
+  const root = await mockProject("openspec-validate-");
+  await mkdir(join(root, "openspec", "changes", "check-example"));
+  try {
+    await withService(
+      async (url) => {
+        const headers = { authorization: "Bearer test-token" };
+        const listing = await fetch(`${url}/changes`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ directory: root }),
+        }).then((response) => response.json());
+        const response = await fetch(`${url}/validate`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            directory: root,
+            change: "check-example",
+            expectedRoot: root,
+            planning: listing.planning,
+          }),
+        });
+        const value = await response.json();
+        assert.deepEqual([response.status, value.error?.code], [502, "BAD_CLI_OUTPUT"]);
+      },
+      async (_directory, [command]) => ({
+        ok: true,
+        value: {
+          root: { path: root, source: "nearest" },
+          ...(command === "list"
+            ? { changes: [] }
+            : command === "validate"
+              ? { items: [{ valid: false, issues: [{ level: "ERROR", path: "file" }] }] }
+              : {}),
+        },
+      }),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("focus emits the latest target and retains it for one read within 30 seconds", async (t) => {
+  const emitted = [];
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  await withService(
+    async (url) => {
+      const first = { directory: "/project", change: "first-change" };
+      const second = { directory: "/other-project", change: "second-change" };
+      const headers = { authorization: "Bearer test-token" };
+      const readFocus = () =>
+        fetch(`${url}/focus`, { headers }).then((response) => response.json());
+      const setFocus = async (body) => {
+        const response = await fetch(`${url}/focus`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+        assert.equal(response.status, 200);
+        await response.json();
+      };
+      assert.equal(await readFocus(), null);
+      await setFocus(first);
+      await setFocus(second);
+      assert.deepEqual(emitted, [
+        ["focus", first],
+        ["focus", second],
+      ]);
+      now += 29_999;
+      assert.deepEqual(await readFocus(), second);
+      assert.equal(await readFocus(), null);
+      await setFocus(first);
+      now += 30_000;
+      assert.equal(await readFocus(), null);
+    },
+    undefined,
+    { emit: async (topic, data) => emitted.push([topic, data]) },
+  );
+});
+
 test("slimmer read routes use only their working command and reconcile missing tasks", async () => {
   const root = await mockProject("openspec-slim-");
   const changeRoot = join(root, "openspec", "changes", "slim");

@@ -7333,16 +7333,210 @@ module.exports = __toCommonJS(service_exports);
 
 // src/service/http.ts
 var import_node_http = require("node:http");
+var import_node_path2 = require("node:path");
 
-// src/service/openspec.ts
-var import_promises = require("node:fs/promises");
-var import_node_path = require("node:path");
-var import_yaml = __toESM(require_dist(), 1);
+// node_modules/@openchamber/sdk/dist/scrollbar-style.js
+var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
+var GUEST_SCROLLBAR_CSS = `
+:root {
+  /* Quiet at rest like the app's own thumbs; hover gives a clear grab target. */
+  --oc-scrollbar-thumb: color-mix(in srgb, var(--oc-muted, currentColor) 18%, transparent);
+  --oc-scrollbar-thumb-hover: color-mix(in srgb, var(--oc-muted, currentColor) 36%, transparent);
+  scrollbar-gutter: stable;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+:hover, [${GUEST_SCROLLING_ATTRIBUTE}] {
+  scrollbar-color: var(--oc-scrollbar-thumb) transparent;
+}
+/* Chromium's standard scrollbar properties otherwise override its pseudo-elements. */
+@supports selector(::-webkit-scrollbar) {
+  *, :hover, [${GUEST_SCROLLING_ATTRIBUTE}] { scrollbar-width: auto; scrollbar-color: auto; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    min-width: 24px;
+    min-height: 24px;
+  }
+  :hover::-webkit-scrollbar-thumb, [${GUEST_SCROLLING_ATTRIBUTE}]::-webkit-scrollbar-thumb { background: var(--oc-scrollbar-thumb); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--oc-scrollbar-thumb-hover); }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+}
+@media (forced-colors: active) {
+  *, :hover, [${GUEST_SCROLLING_ATTRIBUTE}] { scrollbar-color: auto; }
+  ::-webkit-scrollbar-thumb, ::-webkit-scrollbar-thumb:hover { background: CanvasText; }
+}
+`;
+function installGuestScrollbarActivity(doc) {
+  const root = doc.documentElement;
+  if (root.hasAttribute("data-oc-scrollbar-activity"))
+    return;
+  root.setAttribute("data-oc-scrollbar-activity", "");
+  const timers = /* @__PURE__ */ new WeakMap();
+  doc.addEventListener("scroll", (event) => {
+    const target = event.target === doc ? root : event.target;
+    if (!(target instanceof Element))
+      return;
+    if (!target.hasAttribute("data-oc-scrolling"))
+      target.setAttribute("data-oc-scrolling", "");
+    const pending = timers.get(target);
+    if (pending !== void 0)
+      clearTimeout(pending);
+    timers.set(target, setTimeout(() => {
+      timers.delete(target);
+      target.removeAttribute("data-oc-scrolling");
+    }, 1e3));
+  }, { capture: true, passive: true });
+}
+var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
+
+// node_modules/@openchamber/sdk/dist/manifest.js
+var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
+var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
+var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
+
+// node_modules/@openchamber/sdk/dist/session-events.js
+var GUEST_SESSION_EVENT_TYPES = [
+  "turn-finished",
+  "turn-failed",
+  "permission-asked",
+  "question-asked",
+  "turn-started",
+  "session-created",
+  "session-archived",
+  "session-deleted"
+];
+var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
+var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
+
+// node_modules/@openchamber/sdk/dist/service-host.js
+var SERVICE_HOST_PATH = "/service/call";
+var OPENCHAMBER_HOST_CALLBACK_URL_ENV = "OPENCHAMBER_HOST_CALLBACK_URL";
+var SERVICE_HOST_TIMEOUT_MS = 3e4;
+var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
+var MENTIONS_IDLE_MS = 10 * 6e4;
+var ServiceHostError = class extends Error {
+  code;
+  status;
+  constructor(message, code, status) {
+    super(message);
+    this.name = "ServiceHostError";
+    this.code = code;
+    this.status = status;
+  }
+};
+var createServiceHost = ({ env }) => {
+  const call = async (method, input) => {
+    const base = env[OPENCHAMBER_HOST_CALLBACK_URL_ENV];
+    const token2 = env.OPENCHAMBER_SERVICE_TOKEN;
+    if (!base || !token2)
+      throw new ServiceHostError("This service was not started by OpenChamber.", "HOST_UNAVAILABLE", 0);
+    let response;
+    try {
+      response = await fetch(`${base.replace(/\/+$/, "")}${SERVICE_HOST_PATH}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token2}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ method, input }),
+        signal: AbortSignal.timeout(SERVICE_HOST_TIMEOUT_MS)
+      });
+    } catch {
+      throw new ServiceHostError("OpenChamber did not answer.", "HOST_UNAVAILABLE", 0);
+    }
+    const body = await response.json().catch(() => null);
+    if (response.ok && body?.result !== void 0)
+      return body.result;
+    throw new ServiceHostError(body?.error?.message ?? `OpenChamber answered HTTP ${response.status}.`, body?.error?.code ?? "HOST_UNAVAILABLE", response.status);
+  };
+  return {
+    sessions: {
+      start: (input) => call("sessions.start", input),
+      send: (sessionId, prompt) => call("sessions.send", { sessionId, prompt }),
+      retry: (sessionId) => call("sessions.retry", { sessionId }),
+      status: (sessionId) => call("sessions.status", { sessionId }),
+      lastReply: (sessionId) => call("sessions.lastReply", { sessionId }),
+      stop: (sessionId) => call("sessions.stop", { sessionId }),
+      answerPermission: (sessionId, requestId, answer) => call("sessions.answerPermission", { sessionId, requestId, ...answer }),
+      answerForm: (sessionId, formId, values, message) => call("sessions.answerForm", { sessionId, formId, values, ...message === void 0 ? {} : { message } })
+    },
+    setInstructions: (directory, text) => call("instructions.set", { directory, text }),
+    emit: (topic, data) => call("panels.emit", { topic, data }),
+    readSettings: () => call("settings.read", {}).then(({ settings }) => settings),
+    needsConfiguration: (message) => call("status.set", { needsConfiguration: message }),
+    setMark: (target, mark) => call("marks.set", { target, mark })
+  };
+};
+
+// node_modules/@openchamber/sdk/dist/contract.js
+var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
+var GUEST_GENERATE_LATE_KEEP_MS = 60 * 6e4;
+var HOST_REQUEST_ERROR_CODES = [
+  "HOST_UNAVAILABLE",
+  "HOST_TIMEOUT",
+  "HOST_REJECTED",
+  "DISCONNECTED",
+  "DISABLED",
+  "BAD_PATH",
+  "NO_INTEGRATION",
+  "NO_SERVICE",
+  "SERVICE_FAILED",
+  "REQUEST_FAILED",
+  "RESPONSE_TOO_LARGE",
+  "NO_SESSION",
+  "SESSION_BUSY",
+  "NOT_GRANTED",
+  "NO_DIRECTORY",
+  "NOT_FOUND",
+  "FILE_TOO_LARGE",
+  "DENIED",
+  "NO_MODEL",
+  "MODEL_FAILED",
+  "UNSUPPORTED"
+];
+var SERVICE_STATUS_VALUES = ["stopped", "starting", "ready", "failed"];
+var hostRequestErrorCodeSet = new Set(HOST_REQUEST_ERROR_CODES);
+var serviceStatusSet = new Set(SERVICE_STATUS_VALUES);
+var fileStatKindSet = new Set(GUEST_FILE_STAT_KINDS);
+
+// node_modules/@openchamber/sdk/dist/service-providers.js
+var BROWSER_CONTROL_ACTIONS = [
+  "browser.open",
+  "browser.snapshot",
+  "browser.click",
+  "browser.type",
+  "browser.select",
+  "browser.scroll",
+  "browser.back",
+  "browser.forward",
+  "browser.inspect",
+  "browser.capture",
+  "browser.resize",
+  "browser.close"
+];
+var BROWSER_PROVIDER_IDLE_MS = 10 * 6e4;
+var CONTROL_ACTIONS = new Set(BROWSER_CONTROL_ACTIONS);
+var SOURCE_CONTROL_PROVIDER_IDLE_MS = 10 * 6e4;
+var NOTIFICATIONS_PROVIDER_IDLE_MS = 10 * 6e4;
+var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
+var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
+
+// node_modules/@openchamber/sdk/dist/service-surface.js
+var SURFACE_CONTROLLERS = ["none", "agent", "user"];
+var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
 // src/model.ts
 function isChangeName(value) {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
+
+// src/service/openspec.ts
+var import_promises = require("node:fs/promises");
+var import_node_path = require("node:path");
+var import_yaml = __toESM(require_dist(), 1);
 
 // src/contracts.ts
 function record(value) {
@@ -7361,6 +7555,18 @@ function count(value) {
 function names(value) {
   if (!Array.isArray(value)) throw new Error("Invalid dependency list.");
   return value.map(string);
+}
+function decodeValidation(value) {
+  const { valid, issues } = record(value);
+  if (typeof valid !== "boolean" || !Array.isArray(issues))
+    throw new Error("Invalid validation result.");
+  return {
+    valid,
+    issues: issues.map((value2) => {
+      const { level, path, message } = record(value2);
+      return { level: string(level), path: string(path), message: string(message) };
+    })
+  };
 }
 function decodeListingEntry(value, key = "id") {
   const item = record(value);
@@ -7641,7 +7847,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     try {
       target = await validatedChange(current, change);
     } catch (caught) {
-      if (caught.code === "ENOENT") return;
+      if (caught.code === "ENOENT") return false;
       throw caught;
     }
     const pending = [target];
@@ -7671,6 +7877,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
         } else if (entry.isDirectory()) pending.push(path);
       }
     }
+    return true;
   }
   async function reconcileChange(directory, change, current, error) {
     if (error.code === "OPENSPEC_ERROR") {
@@ -7786,6 +7993,31 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     const result = await summaryFor(state, change);
     await planningScope(expectedRoot, current.planning);
     return result;
+  }
+  async function validate(directory, change, expectedRoot, planning) {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await context(directory, expectedRoot, planning);
+    if ("code" in current) return failure(current);
+    if (!await validateInputs(current, change))
+      return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
+    const result = await checked(
+      directory,
+      ["validate", change, "--type", "change"],
+      current,
+      true
+    );
+    if (!result.ok && result.error.code !== "OPENSPEC_ERROR") return result;
+    await planningScope(expectedRoot, current.planning);
+    try {
+      const items = result.value?.items;
+      if (!Array.isArray(items) || items.length !== 1) throw new Error("Invalid validation items.");
+      const validation = decodeValidation(items[0]);
+      if (!result.ok && validation.valid) throw new Error("Invalid validation exit.");
+      return { ok: true, value: validation };
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec validation results.", 502));
+    }
   }
   async function summaries(directory, expectedRoot, expectedPlanning) {
     const current = await planningScope(expectedRoot, expectedPlanning);
@@ -8048,12 +8280,13 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       throw caught;
     }
   }
-  return { changes, summary, summaries, tasks, documentFor, createChange, deleteChange };
+  return { changes, summary, summaries, validate, tasks, documentFor, createChange, deleteChange };
 }
 
 // src/service/http.ts
 var MAX_BODY_BYTES = 64e3;
 var REQUEST_TIMEOUT_MS = 15e3;
+var FOCUS_TTL_MS = 3e4;
 function send(response, status, value) {
   const encoded = JSON.stringify(value);
   if (Buffer.byteLength(encoded, "utf8") > MAX_RESPONSE_BYTES) {
@@ -8089,6 +8322,8 @@ function requiredString(body, key) {
   return value;
 }
 function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
+  const emit = options.emit ?? createServiceHost({ env: process.env }).emit;
+  let pendingFocus = null;
   return (0, import_node_http.createServer)(async (request, response) => {
     if (request.headers.authorization !== `Bearer ${token2}`) {
       send(response, 401, {
@@ -8098,6 +8333,11 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
     }
     if (request.method === "GET" && request.url === "/health")
       return send(response, 200, { ok: true });
+    if (request.method === "GET" && request.url === "/focus") {
+      const pending = pendingFocus;
+      pendingFocus = null;
+      return send(response, 200, pending && Date.now() < pending.expiresAt ? pending.target : null);
+    }
     if (request.method !== "POST" || !request.url)
       return send(response, 404, { error: serviceError("NOT_FOUND", "Route not found.", 404) });
     let mutationDispatched = false;
@@ -8127,12 +8367,30 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         })
       ]).finally(() => clearTimeout(bodyTimer));
       const directory = requiredString(body, "directory");
+      const path = new URL(request.url, "http://localhost").pathname;
+      if (path === "/focus") {
+        if (!(0, import_node_path2.isAbsolute)(directory))
+          throw serviceError("BAD_DIRECTORY", "Directory must be absolute.");
+        const change = requiredString(body, "change");
+        if (!isChangeName(change)) throw serviceError("BAD_CHANGE", "Change name is invalid.");
+        const target = { directory, change };
+        pendingFocus = { target, expiresAt: Date.now() + FOCUS_TTL_MS };
+        await emit("focus", target);
+        return send(response, 200, { ok: true });
+      }
       const expectedRoot = body.expectedRoot === void 0 ? void 0 : requiredString(body, "expectedRoot");
       const expectedPlanning = body.expectedPlanning === void 0 ? void 0 : requiredString(body, "expectedPlanning");
       if (expectedPlanning && (expectedPlanning.length > 4096 || expectedPlanning.includes("\0")))
         throw serviceError("BAD_REQUEST", "Invalid planning identity.");
-      const path = new URL(request.url, "http://localhost").pathname;
-      const work = path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(directory, requiredString(body, "expectedRoot"), expectedPlanning) : path === "/tasks" ? adapter.tasks(
+      const validatePlanning = path === "/validate" ? requiredString(body, "planning") : void 0;
+      if (validatePlanning && (validatePlanning.length > 4096 || validatePlanning.includes("\0")))
+        throw serviceError("BAD_REQUEST", "Invalid planning identity.");
+      const work = validatePlanning ? adapter.validate(
+        directory,
+        requiredString(body, "change"),
+        requiredString(body, "expectedRoot"),
+        validatePlanning
+      ) : path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(directory, requiredString(body, "expectedRoot"), expectedPlanning) : path === "/tasks" ? adapter.tasks(
         directory,
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),

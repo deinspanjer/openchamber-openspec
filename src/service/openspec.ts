@@ -5,6 +5,7 @@ import {
   decodeArtifacts,
   decodeListingEntry,
   decodeTasks,
+  decodeValidation,
   type ListingEntry,
   type ChangeMetadata,
 } from "../contracts.js";
@@ -166,14 +167,13 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     return target;
   }
 
-  // CLI schemas restrict task inputs to relative paths. Check every existing link before the
-  // CLI can choose its schema-specific tracking input, without parsing task source text.
-  async function validateInputs(current: Scope, change: string): Promise<void> {
+  // Check existing links before the CLI reads schema-specific inputs or spec deltas.
+  async function validateInputs(current: Scope, change: string): Promise<boolean> {
     let target: string;
     try {
       target = await validatedChange(current, change);
     } catch (caught) {
-      if ((caught as NodeJS.ErrnoException).code === "ENOENT") return;
+      if ((caught as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw caught;
     }
     const pending = [target];
@@ -203,6 +203,7 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
         } else if (entry.isDirectory()) pending.push(path);
       }
     }
+    return true;
   }
 
   async function reconcileChange(
@@ -345,6 +346,37 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     const result = await summaryFor(state, change);
     await planningScope(expectedRoot, current.planning);
     return result;
+  }
+
+  async function validate(
+    directory: string,
+    change: string,
+    expectedRoot: string,
+    planning: string,
+  ): Promise<CliResult> {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await context(directory, expectedRoot, planning);
+    if ("code" in current) return failure(current);
+    if (!(await validateInputs(current, change)))
+      return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
+    const result = await checked(
+      directory,
+      ["validate", change, "--type", "change"],
+      current,
+      true,
+    );
+    if (!result.ok && result.error.code !== "OPENSPEC_ERROR") return result;
+    await planningScope(expectedRoot, current.planning);
+    try {
+      const items = result.value?.items;
+      if (!Array.isArray(items) || items.length !== 1) throw new Error("Invalid validation items.");
+      const validation = decodeValidation(items[0]);
+      if (!result.ok && validation.valid) throw new Error("Invalid validation exit.");
+      return { ok: true, value: validation };
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec validation results.", 502));
+    }
   }
 
   async function summaries(
@@ -677,5 +709,5 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     }
   }
 
-  return { changes, summary, summaries, tasks, documentFor, createChange, deleteChange };
+  return { changes, summary, summaries, validate, tasks, documentFor, createChange, deleteChange };
 }

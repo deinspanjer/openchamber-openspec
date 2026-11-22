@@ -12,6 +12,10 @@ export type Task = {
   description: string;
   done: boolean;
 };
+export type ValidationResult = {
+  valid: boolean;
+  issues: { level: string; path: string; message: string }[];
+};
 export type DocumentDescriptor = { artifactId: string; selector: string; label: string };
 export const documentKey = (artifactId: string, selector: string): string =>
   JSON.stringify([artifactId, selector]);
@@ -45,6 +49,19 @@ function count(value: unknown): number {
 function names(value: unknown): string[] {
   if (!Array.isArray(value)) throw new Error("Invalid dependency list.");
   return value.map(string);
+}
+
+export function decodeValidation(value: unknown): ValidationResult {
+  const { valid, issues } = record(value);
+  if (typeof valid !== "boolean" || !Array.isArray(issues))
+    throw new Error("Invalid validation result.");
+  return {
+    valid,
+    issues: issues.map((value) => {
+      const { level, path, message } = record(value);
+      return { level: string(level), path: string(path), message: string(message) };
+    }),
+  };
 }
 
 export function decodeListingEntry(value: unknown, key: "name" | "id" = "id"): ListingEntry {
