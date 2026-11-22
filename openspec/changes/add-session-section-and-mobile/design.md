@@ -66,7 +66,7 @@ layout below. Each tracked change is a card:
 - Line 1: name (a button opening the change flyout), then `completed/total`.
 - A 3px bar. It's the section's own element, not `mountProgress`, which draws a caption and a
   checkmark.
-- When tasks exist: a `<details>` whose `<summary>` is `▸ Tasks:` (underlined) and the current
+- When tasks exist: a `<details>` whose `<summary>` is `▸ Tasks:` and the current
   task's title clamped to one line. The title is its own button opening the task flyout. Expanded,
   it lists the five-task window from `taskWindow` (below). Each row is a read-only checkbox and a
   title button opening that task's flyout.

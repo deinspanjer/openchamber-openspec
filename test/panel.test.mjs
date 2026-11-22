@@ -304,6 +304,14 @@ function hostHtml(statusCase, pointer, popovers) {
         }));
       }
       if (statusCase === "compact-touch") tasks[3].description = "long-task-title-".repeat(20);
+      if (statusCase === "long-card-name") {
+        changes[0].id = "long-name-".repeat(15) + "change";
+        changes[0].completedTasks = changes[0].totalTasks = 6;
+        sessions[0].items = [{ id: changes[0].id }];
+        tasks = Array.from({ length: 6 }, (_, i) => ({
+          id: String(i + 1), description: "Task " + (i + 1), done: true,
+        }));
+      }
       if (statusCase === "compact-read-error") failSummary = true;
       if (statusCase === "planning" || statusCase === "compact-planning") {
         changes[0].completedTasks = changes[0].totalTasks = 0;
@@ -1824,6 +1832,43 @@ for (const [scenario, header] of [
     });
   });
 }
+
+test("a long Work Status change name truncates before the count wraps", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+    await page.goto(`${url}?status=long-card-name&pointer=coarse`);
+    const frame = page.frameLocator("iframe");
+    const name = frame.getByRole("button", { name: /^long-name-/ });
+    await name.waitFor();
+    const count = frame.getByText("6/6", { exact: true });
+    const lines = await count.evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return range.getClientRects().length;
+    });
+    assert.equal(lines, 1);
+    assert.equal(
+      await name.evaluate(
+        (node) =>
+          node.scrollWidth > node.clientWidth && getComputedStyle(node).textOverflow === "ellipsis",
+      ),
+      true,
+    );
+    const summary = frame.locator("summary:visible");
+    assert.equal(
+      await summary
+        .getByText("Tasks:", { exact: true })
+        .evaluate((node) => getComputedStyle(node).textDecorationLine),
+      "none",
+    );
+    assert.equal(
+      await summary
+        .getByRole("button", { name: "Task 6" })
+        .evaluate((node) => getComputedStyle(node).textDecorationLine),
+      "underline",
+    );
+  });
+});
 
 for (const pointer of ["coarse", "fine"]) {
   test(`session section keeps two cards within 320px for a ${pointer} pointer`, async () => {

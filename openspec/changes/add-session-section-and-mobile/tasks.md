@@ -126,7 +126,7 @@ delivery in both directions. No new test files or shared helpers. One commit per
 
 ## 8. Live-use polish (2026-11-22, from the user's phone screenshot of 1.4.1)
 
-- [ ] 8.1 Fake host seam: card line 1 never wraps the count. The name truncates with an ellipsis
+- [x] 8.1 Fake host seam: card line 1 never wraps the count. The name truncates with an ellipsis
       and `n/m` stays on one line (e.g. `6/6` with a long name at 320px). `Tasks:` is not
       underlined; the task title keeps its flyout affordance.
 - [ ] 8.2 Same seam: `＋ Track a change` renders as a compact link-style control, no taller than a

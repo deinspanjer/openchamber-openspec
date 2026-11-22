@@ -88,9 +88,10 @@ chat without a session SHALL disable tracking and explain that a session is requ
 ### Requirement: Show each tracked change as a compact card
 
 Each tracked change SHALL show as a card: its name followed by `completed/total` task counts on
-one line, then a thin completion bar. When the change has tasks, a `Tasks:` disclosure SHALL
-follow, labelled with a disclosure icon and underlined, followed on the same line by the first
-incomplete task's title, or by the last task's title when all are complete.
+one line, then a thin completion bar. The name SHALL truncate with an ellipsis before the count
+wraps. When the change has tasks, a `Tasks:` disclosure SHALL follow, labelled with a disclosure
+icon and no underline. On the same line, show the underlined title of the first incomplete task,
+or the last task when all are complete.
 
 #### Scenario: Change in progress
 
