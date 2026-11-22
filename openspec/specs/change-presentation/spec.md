@@ -121,14 +121,15 @@ preserve the copy button's DOM identity and keyboard focus.
 
 ### Requirement: Modal dialogs dim the background clearly
 
-The viewer SHALL cover the viewport behind each open modal dialog with a 35% black backdrop without
-blur. Dimming SHALL apply in light and dark themes. Existing keyboard focus and cancellation
+The viewer SHALL retain the browser-default modal backdrop tint without an extension-defined colour
+or opacity override and SHALL blur the background by 4 CSS pixels. This SHALL apply to create,
+delete and archive dialogues in light and dark themes. Existing keyboard focus and cancellation
 behaviour SHALL remain unchanged.
 
 #### Scenario: Open a modal dialog
 
 - **WHEN** the user opens a create, delete, or archive dialog
-- **THEN** the background across the viewport is dimmed by a black backdrop with 0.35 opacity
+- **THEN** the backdrop uses the browser-default tint with 4px blur across the extension viewport
 - **AND** the dialog remains undimmed and its controls remain reachable by keyboard
 
 #### Scenario: Close the modal dialog
