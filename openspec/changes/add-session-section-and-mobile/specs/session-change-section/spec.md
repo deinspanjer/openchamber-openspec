@@ -56,11 +56,17 @@ section SHALL NOT infer a change from conversation content or tool activity.
 
 ### Requirement: Let the user choose the tracked change
 
-When no change resolves, the section SHALL show a picker of active changes with Ready and In
-Progress changes first. `Change…` SHALL open the same picker when a change is shown. A choice SHALL
-be saved for that session so that every device connected to the same OpenChamber server resolves
-it. A new chat without a session SHALL show the picker's choices disabled with an explanation that
-a choice can be saved once the session exists.
+When no change resolves, the section SHALL show a picker of active changes in this order:
+
+1. Some but not all tasks complete.
+2. Tasks exist but none are complete.
+3. No tasks.
+4. At least one task exists and all tasks are complete.
+
+The picker SHALL preserve listing order within each group. `Change…` SHALL open the same picker
+when a change is shown. A choice SHALL be saved for that session so that every device connected to
+the same OpenChamber server resolves it. A new chat without a session SHALL show the picker's
+choices disabled with an explanation that a choice can be saved once the session exists.
 
 #### Scenario: Choose a change
 

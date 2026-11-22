@@ -50,9 +50,9 @@
       current-task disclosure with the first incomplete task's name and full description on
       expand, `0/0` without disclosure in Planning, full bar without disclosure when complete,
       artefact statuses, error with Refresh and no partial progress on read failure. Implement.
-- [ ] 4.3 At the same seam, add failing tests for the picker (Ready and In Progress first, choice
-      saved and shown), the stage action composing the board's prompt unsent and saving the change,
-      no replay after a session switch, and `Open board` calling `openSurface("openspec-board")`.
+- [ ] 4.3 At the same seam, add failing tests for the picker (task-count order, choice saved and
+      shown), the stage action composing the board's prompt unsent and saving the change, no replay
+      after a session switch, and `Open board` calling `openSurface("plugin:openspec-board")`.
       Implement.
 - [ ] 4.4 At the same seam, extend the fake host to push `onSessionLifecycle`, then add failing
       tests: `completed` for the shown session re-reads once; another session's completion does

@@ -115,6 +115,8 @@ and `client.summary()` with `decodeSummary`. A section read is `list` → `summa
 resolved change; stage comes from `deriveChange` with the listing's counts. The private protocol is
 internal, so no compatibility shim.
 
+The picker orders by listing task counts because exact stage ordering would read every change's status.
+
 ### Refresh triggers
 
 Reads happen on mount, session change, directory change, Refresh, and `onSessionLifecycle` with
@@ -131,9 +133,11 @@ through the same helper.
 
 ### `Open board`
 
-`host.openSurface("openspec-board")` opens the rail panel on desktop and the workspace tab on a
-phone. **Upstream cause:** `openSurface` takes no target, so the board opens at its root rather
-than on the change.
+`host.openSurface("plugin:openspec-board")` opens the rail panel on desktop and the workspace tab
+on a phone once the panel opts in. The 2.7.3 host checks the surface ID in
+`packages/ui/src/lib/guests/host-bridge.ts:299-304`; extension modes require the `plugin:` prefix
+(`packages/ui/src/lib/surfaces/modes.ts:21-30`, tag `v2.7.3`). **Upstream cause:** `openSurface`
+takes no target item, so the board opens at its root rather than on the change.
 
 ### Phone and touch
 
