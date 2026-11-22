@@ -74,7 +74,7 @@
 - [x] 5.3 At the same seam, add failing tests that closing detail and deleting a change on a coarse
       pointer focus a non-text control, and fine-pointer focus is unchanged. Implement in
       `controller.ts`.
-- [ ] 5.4 Set `panel.mobile: true` in the manifest and widen the scope in `openspec/config.yaml`
+- [x] 5.4 Set `panel.mobile: true` in the manifest and widen the scope in `openspec/config.yaml`
       to include OpenChamber's phone clients (2.7.1+). Verify `npm run check`.
 
 ## 6. Integration checks

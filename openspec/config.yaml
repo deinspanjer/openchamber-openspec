@@ -9,8 +9,8 @@ context: |
   Surface potential breakages for these consumers, and any risk mitigation that
   adds code or tests, and let the user choose which to handle. Add handling only
   for what the user chooses.
-  Scope: one person's OpenChamber, desktop or web, in Chromium, Firefox and
-  WebKit.
+  Scope: one person's OpenChamber on desktop or web in Chromium, Firefox and
+  WebKit, and in OpenChamber's phone clients (2.7.1+).
   CLI compatibility is best effort: when a change relies on an OpenSpec CLI
   command, flag or output field that older CLI versions lack, the proposal
   names it and offers documenting the requirement or one small fallback.

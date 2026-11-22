@@ -45,8 +45,8 @@ switch. Your choice follows that session on devices connected to the same server
 refreshes when the session finishes a turn. Its workflow action prepares a draft without sending it,
 and **Open board** opens the project board.
 
-The Work Status section requires OpenChamber 2.7.1 or later. The phone board also requires
-OpenChamber 2.7.1 or later and is not enabled in this build.
+The Work Status section and phone board require OpenChamber 2.7.1 or later. On a phone, open the
+board from the workspace drawer or the sessions list's **More** menu.
 
 ## Planning across worktrees
 
