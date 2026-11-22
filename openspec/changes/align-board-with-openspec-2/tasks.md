@@ -13,7 +13,7 @@ task.
       `/workflows` and `/changes` answer, and a failed `/workflows` shows core actions without an
       error. Implement the `workflows` flag in `loadBoard` using `loadWorkflows`. Add `/workflows` to
       existing exact request-sequence assertions. Verify with `npm run build` and the focused tests.
-- [ ] 1.2 Planning primary and verify. Same seam: add failing tests that a Planning card and its
+- [x] 1.2 Planning primary and verify. Same seam: add failing tests that a Planning card and its
       detail label the primary action `ff`, `continue` or `propose` by the fake set. Activating it
       composes `openspec-ff-change`, `openspec-continue-change` or the existing propose prompt. A
       card rendered with `ff` still composes `ff` after a refresh changes the set. `verify` shows on

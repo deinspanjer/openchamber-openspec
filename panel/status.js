@@ -2871,12 +2871,32 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     return "Use your skill tool to load and invoke the openspec-new-change skill.\n\nAsk me what the change is for before creating it.";
   }
 
+  // src/panel/workflows.ts
+  async function loadWorkflows(client2, directory2) {
+    try {
+      return new Set(await client2.workflows(directory2));
+    } catch (caught) {
+      console.warn("Could not read OpenSpec workflows; using the core workflows.", caught);
+      return new Set(CORE_WORKFLOWS);
+    }
+  }
+  function planningWorkflow(set) {
+    return set.has("ff") ? "ff" : set.has("continue") ? "continue" : "propose";
+  }
+  function cardChips(change, set) {
+    return {
+      primary: change.stage === "planning" ? planningWorkflow(set) : change.stage === "complete" ? "archive" : "apply",
+      secondary: change.stage === "planning" ? "explore" : change.stage === "complete" && set.has("verify") ? "verify" : null,
+      sync: !change.artifacts.some(({ id, status }) => id === "specs" && status === "skipped")
+    };
+  }
+
   // src/panel/workflow.ts
   var stages = [
-    { id: "planning", label: "Planning", action: "propose" },
-    { id: "ready", label: "Ready", action: "apply" },
-    { id: "progress", label: "In Progress", action: "continue" },
-    { id: "complete", label: "Complete", action: "archive" }
+    { id: "planning", label: "Planning" },
+    { id: "ready", label: "Ready" },
+    { id: "progress", label: "In Progress" },
+    { id: "complete", label: "Complete" }
   ];
   var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
 
@@ -3021,26 +3041,6 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       seed,
       (choices2) => choices2.includes(change) ? choices2 : [...choices2, change]
     );
-  }
-
-  // src/panel/workflows.ts
-  async function loadWorkflows(client2, directory2) {
-    try {
-      return new Set(await client2.workflows(directory2));
-    } catch (caught) {
-      console.warn("Could not read OpenSpec workflows; using the core workflows.", caught);
-      return new Set(CORE_WORKFLOWS);
-    }
-  }
-  function planningWorkflow(set) {
-    return set.has("ff") ? "ff" : set.has("continue") ? "continue" : "propose";
-  }
-  function cardChips(change, set) {
-    return {
-      primary: change.stage === "planning" ? planningWorkflow(set) : change.stage === "complete" ? "archive" : "apply",
-      secondary: change.stage === "planning" ? "explore" : change.stage === "complete" && set.has("verify") ? "verify" : null,
-      sync: !change.artifacts.some(({ id, status }) => id === "specs" && status === "skipped")
-    };
   }
 
   // src/status.ts

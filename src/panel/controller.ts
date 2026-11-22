@@ -9,7 +9,8 @@ import { mountCreateDialog } from "./create-dialog.js";
 import { mountDeleteDialog } from "./delete-dialog.js";
 import { mountArchiveDialog } from "./archive-dialog.js";
 import { archiveAllPrompt } from "./archive-prompt.js";
-import { actionPrompt } from "./prompts.js";
+import { actionPrompt, planningPrompt } from "./prompts.js";
+import type { PrimaryIntent } from "./primary-action.js";
 import { appendTrackedChange, resolveSessionChanges } from "./tracked-change.js";
 import { findProject } from "./project.js";
 import { inspectWorktreeDestination } from "./worktree.js";
@@ -295,7 +296,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     change: DerivedChange,
     captured: Scope | null,
     originatingEpoch: number,
-    intent: "primary" | "worktree" | "verify" | "explore",
+    intent: PrimaryIntent | "verify" | "explore",
     originatingSession: string | null = sessionId,
   ) {
     const current = changes.find((item) => item.id === change.id);
@@ -306,9 +307,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       sessionId !== originatingSession ||
       unavailableIds.has(change.id) ||
       !current ||
-      (intent === "verify" && current.stage !== "complete") ||
-      (intent === "explore" && current.stage !== "planning") ||
-      ((intent === "primary" || intent === "worktree") && current.stage !== change.stage)
+      current.stage !== change.stage ||
+      (intent === "verify" && (current.stage !== "complete" || !workflows.has("verify"))) ||
+      (intent === "explore" && current.stage !== "planning")
     )
       return;
     if (intent === "worktree") {
@@ -320,7 +321,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     const currentContext = () =>
       scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
     try {
-      await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
+      const text =
+        intent === "ff" || intent === "continue"
+          ? planningPrompt(change, intent)
+          : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+      await host.compose({ text, mode: "replace" });
       if (!currentContext()) return;
       if (expectedSession !== null)
         void appendTrackedChange(host, expectedSession, change.id, currentContext, async () => {
@@ -880,6 +885,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       settled,
       error: errorMessage,
       failures,
+      workflows,
       cards: changes.map((change) => ({
         change,
         stale: staleIds.has(change.id),
@@ -900,6 +906,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       selectedChange
         ? {
             change: selectedChange,
+            workflows,
             selectedArtifact,
             activeView,
             files,

@@ -1,7 +1,8 @@
 import { mountButton, mountProgress, mountSearchField } from "@openchamber/sdk/ui";
+import type { Workflow } from "../contracts.js";
 import type { DerivedChange } from "../model.js";
-import { stages } from "./workflow.js";
-import { mountPrimaryAction } from "./primary-action.js";
+import { stages, workflowLabel } from "./workflow.js";
+import { mountPrimaryAction, type PrimaryIntent } from "./primary-action.js";
 import { mountHelpButton } from "./help-button.js";
 import { addButtonIcon } from "./button-icon.js";
 import { mountAreaBadges } from "./area-badges.js";
@@ -12,7 +13,7 @@ export type BoardCard = {
   unavailable: boolean;
   open: () => void;
   pending?: boolean;
-  action: (intent: "primary" | "worktree" | "verify" | "explore") => void;
+  action: (intent: PrimaryIntent | "verify" | "explore") => void;
 };
 export type BoardState = {
   directory: string | null;
@@ -29,6 +30,7 @@ export type BoardState = {
   error: string | null;
   failures: { id: string; error: string }[];
   cards: BoardCard[];
+  workflows: ReadonlySet<Workflow>;
 };
 
 export function mountBoardView(
@@ -151,7 +153,7 @@ export function mountBoardView(
       mountButton(mount, { label, variant: "secondary", size: "sm", onClick: callbacks.retry }),
     );
   }
-  function cardFor(item: BoardCard) {
+  function cardFor(item: BoardCard, workflows: ReadonlySet<Workflow>) {
     let entry = cards.get(item.change.id);
     if (!entry) {
       const node = document.createElement("article");
@@ -219,13 +221,14 @@ export function mountBoardView(
     entry.action.update({
       id: change.id,
       stage: change.stage,
+      workflow: workflowLabel(change.stage, workflows),
       disabled: item.unavailable,
       pending: item.pending,
       action: item.action,
     });
     entry.explore.update({ disabled: item.unavailable });
     entry.exploreRoot.hidden = change.stage !== "planning";
-    entry.verifyRoot.hidden = change.stage !== "complete";
+    entry.verifyRoot.hidden = change.stage !== "complete" || !workflows.has("verify");
     entry.verify.update({ disabled: item.unavailable });
     entry.status.hidden = !item.stale && !item.unavailable;
     if (item.unavailable) entry.status.textContent = `${change.id} is no longer available.`;
@@ -327,7 +330,7 @@ export function mountBoardView(
           if (empty.parentElement !== grid) grid.append(empty);
         } else empty.remove();
         matching.forEach((item, index) => {
-          const node = cardFor(item);
+          const node = cardFor(item, state.workflows);
           if (grid.children[index] !== node) grid.insertBefore(node, grid.children[index] ?? null);
         });
       }

@@ -2841,7 +2841,10 @@ test("presentation footer keeps equal 12px control gaps and an external separato
         'Use your skill tool to load and invoke the openspec-apply-change skill for OpenSpec change "first-change".',
       ),
     );
-    await page.evaluate(() => __edit("Completed"));
+    await page.evaluate(() => {
+      __edit("Completed");
+      __workflows(["verify"]);
+    });
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     await footer.getByRole("button", { name: "verify", exact: true }).waitFor();
     await page.setViewportSize({ width: 320, height: 700 });
@@ -5369,7 +5372,7 @@ test("canonical-root replacement discards late composer success and failure with
   });
 });
 
-test("planning, ready and complete actions prepare the appropriate unsent composer text", async () => {
+test("core planning, ready and complete actions prepare the appropriate unsent composer text", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(url);
@@ -5395,12 +5398,12 @@ test("planning, ready and complete actions prepare the appropriate unsent compos
     await panel
       .locator(".change-card")
       .filter({ hasText: "first-change" })
-      .getByRole("button", { name: "verify" })
+      .getByRole("button", { name: "archive", exact: true })
       .click();
-    await page.waitForFunction(() => __draft().includes("openspec-verify-change"));
+    await page.waitForFunction(() => __draft().includes("openspec-archive-change"));
     assert.equal(
       await page.evaluate(() => __draft()),
-      'Use your skill tool to load and invoke the openspec-verify-change skill for OpenSpec change "first-change".',
+      'Use your skill tool to load and invoke the openspec-archive-change skill for OpenSpec change "first-change".',
     );
     assert.doesNotMatch(await page.evaluate(() => __draft()), /\/tmp\/fixture-project/);
     await page.evaluate(() => __readiness("pending"));
@@ -5827,6 +5830,7 @@ test("long change titles and completed-card actions remain reachable at sidebar 
     await page.evaluate((next) => {
       __rename("first-change", next);
       __edit("done");
+      __workflows(["verify"]);
     }, name);
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     const card = panel.locator(".change-card").filter({ hasText: name });
@@ -6206,7 +6210,7 @@ test("a context switch during uncertain deletion reconciles the original root on
   });
 });
 
-test("completed board and detail independently prepare Verify and Archive without changing stage", async () => {
+test("completed board and detail offer Verify only when configured", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage({ viewport: { width: 320, height: 700 } });
     await page.goto(url);
@@ -6216,6 +6220,15 @@ test("completed board and detail independently prepare Verify and Archive withou
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     const card = panel.locator(".change-card").filter({ hasText: "first-change" });
     await card.getByRole("button", { name: "archive", exact: true }).waitFor();
+    assert.equal(await card.getByRole("button", { name: "verify", exact: true }).count(), 0);
+    await card.getByRole("button", { name: "first-change", exact: true }).click();
+    const footer = panel.locator(".detail-footer");
+    await footer.getByRole("button", { name: "archive", exact: true }).waitFor();
+    assert.equal(await footer.getByRole("button", { name: "verify", exact: true }).count(), 0);
+    await panel.getByRole("button", { name: "Back to changes" }).click();
+    await page.evaluate(() => __workflows(["verify"]));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await card.getByRole("button", { name: "verify", exact: true }).waitFor({ timeout: 3000 });
     assert.deepEqual(await card.locator(".card-actions button:visible").allTextContents(), [
       "verify",
       "archive",
@@ -6296,6 +6309,83 @@ test("completed board and detail independently prepare Verify and Archive withou
     );
     assert.equal(await panel.locator(".stage-label").innerText(), "Complete");
     await page.close();
+  });
+});
+
+for (const [label, workflows, skill] of [
+  ["ff", ["continue", "ff"], "openspec-ff-change"],
+  ["continue", ["continue"], "openspec-continue-change"],
+  ["propose", ["propose"], "openspec-propose"],
+]) {
+  test(`board and detail Planning primary prepare ${label} for the configured workflows`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?hold-ready`);
+      const panel = page.frameLocator("iframe");
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate((configured) => {
+        __workflows(configured);
+        __readiness("pending");
+        __releaseReady();
+      }, workflows);
+      const card = panel.locator(".change-card").filter({ hasText: "first-change" });
+      await card.getByRole("button", { name: label, exact: true }).click({ timeout: 3000 });
+      await card.getByRole("button", { name: "first-change", exact: true }).click();
+      await panel
+        .locator(".detail-footer")
+        .getByRole("button", { name: label, exact: true })
+        .click({ timeout: 3000 });
+      await page.waitForFunction(() => __requests.filter((r) => r.path === "compose").length === 2);
+      const prompts = await page.evaluate(() =>
+        __requests.filter((r) => r.path === "compose").map(({ body }) => body),
+      );
+      for (const prompt of prompts) {
+        assert.equal(prompt.mode, "replace");
+        assert.ok(
+          prompt.text.startsWith(
+            `Use your skill tool to load and invoke the ${skill} skill for OpenSpec change "first-change"`,
+          ),
+          prompt.text,
+        );
+        assert.match(prompt.text, /Goal: Read the proposal/);
+      }
+    });
+  });
+}
+
+test("a previously rendered Planning card keeps its captured ff intent after refresh", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?hold-ready`);
+    const panel = page.frameLocator("iframe");
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __workflows(["ff"]);
+      __readiness("pending");
+      __releaseReady();
+    });
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "first-change" })
+      .getByRole("button", { name: "ff", exact: true })
+      .evaluate(
+        (button) => {
+          window.previousPrimary = button;
+        },
+        undefined,
+        { timeout: 3000 },
+      );
+    await panel.getByRole("searchbox", { name: "Search changes" }).fill("second-change");
+    await page.evaluate(() => __workflows(["continue"]));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "second-change" })
+      .getByRole("button", { name: "continue", exact: true })
+      .waitFor({ timeout: 3000 });
+    await panel.locator("html").evaluate(() => window.previousPrimary.click());
+    await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
+    assert.match(await page.evaluate(() => __draft()), /openspec-ff-change.*"first-change"/);
   });
 });
 

@@ -3121,14 +3121,27 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   }
 
+  // src/panel/workflows.ts
+  async function loadWorkflows(client, directory) {
+    try {
+      return new Set(await client.workflows(directory));
+    } catch (caught) {
+      console.warn("Could not read OpenSpec workflows; using the core workflows.", caught);
+      return new Set(CORE_WORKFLOWS);
+    }
+  }
+  function planningWorkflow(set) {
+    return set.has("ff") ? "ff" : set.has("continue") ? "continue" : "propose";
+  }
+
   // src/panel/workflow.ts
   var stages = [
-    { id: "planning", label: "Planning", action: "propose" },
-    { id: "ready", label: "Ready", action: "apply" },
-    { id: "progress", label: "In Progress", action: "continue" },
-    { id: "complete", label: "Complete", action: "archive" }
+    { id: "planning", label: "Planning" },
+    { id: "ready", label: "Ready" },
+    { id: "progress", label: "In Progress" },
+    { id: "complete", label: "Complete" }
   ];
-  var workflowLabel = (stage) => stages.find((item) => item.id === stage).action;
+  var workflowLabel = (stage, workflows) => stage === "planning" ? planningWorkflow(workflows) : stage === "complete" ? "archive" : "apply";
   var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
 
   // src/panel/primary-action.ts
@@ -3141,7 +3154,9 @@ ${GUEST_UI_LOOK_CSS}`;
     const button2 = mountButton(buttonRoot, {
       label: "propose",
       size: "sm",
-      onClick: () => state?.action("primary")
+      onClick: () => {
+        if (state) state.action(state.workflow);
+      }
     });
     const menu = mountMenu(menuRoot, {
       label: "apply",
@@ -3153,7 +3168,7 @@ ${GUEST_UI_LOOK_CSS}`;
         opened = null;
         if (!captured || captured.disabled || state?.disabled || captured.id !== state?.id || captured.stage !== state?.stage || id === "worktree" && state?.pending)
           return;
-        captured.action(id === "worktree" ? "worktree" : "primary");
+        captured.action(id === "worktree" ? "worktree" : captured.workflow);
       }
     });
     const trigger = menuRoot.querySelector("button");
@@ -3167,7 +3182,7 @@ ${GUEST_UI_LOOK_CSS}`;
         const apply3 = next.stage === "ready" || next.stage === "progress";
         buttonRoot.hidden = apply3;
         menuRoot.hidden = !apply3;
-        button2.update({ label: workflowLabel(next.stage), disabled: next.disabled });
+        button2.update({ label: next.workflow, disabled: next.disabled });
         menu.update({
           items: [
             { id: "current", label: "Prepare in current chat", disabled: next.disabled },
@@ -3374,7 +3389,7 @@ ${GUEST_UI_LOOK_CSS}`;
         mountButton(mount, { label, variant: "secondary", size: "sm", onClick: callbacks.retry })
       );
     }
-    function cardFor(item) {
+    function cardFor(item, workflows) {
       let entry = cards.get(item.change.id);
       if (!entry) {
         const node = document.createElement("article");
@@ -3442,13 +3457,14 @@ ${GUEST_UI_LOOK_CSS}`;
       entry.action.update({
         id: change.id,
         stage: change.stage,
+        workflow: workflowLabel(change.stage, workflows),
         disabled: item.unavailable,
         pending: item.pending,
         action: item.action
       });
       entry.explore.update({ disabled: item.unavailable });
       entry.exploreRoot.hidden = change.stage !== "planning";
-      entry.verifyRoot.hidden = change.stage !== "complete";
+      entry.verifyRoot.hidden = change.stage !== "complete" || !workflows.has("verify");
       entry.verify.update({ disabled: item.unavailable });
       entry.status.hidden = !item.stale && !item.unavailable;
       if (item.unavailable) entry.status.textContent = `${change.id} is no longer available.`;
@@ -3536,7 +3552,7 @@ ${GUEST_UI_LOOK_CSS}`;
             if (empty.parentElement !== grid) grid.append(empty);
           } else empty.remove();
           matching.forEach((item, index) => {
-            const node = cardFor(item);
+            const node = cardFor(item, state.workflows);
             if (grid.children[index] !== node) grid.insertBefore(node, grid.children[index] ?? null);
           });
         }
@@ -7354,6 +7370,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         action.update({
           id: state.change.id,
           stage: state.change.stage,
+          workflow: workflowLabel(state.change.stage, state.workflows),
           disabled: state.unavailable,
           pending: state.pending,
           action: state.primaryAction
@@ -7361,7 +7378,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         exploreRoot.hidden = state.change.stage !== "planning";
         explore.update({ disabled: state.unavailable });
         deleteAction.update({ disabled: state.unavailable });
-        verifyRoot.hidden = state.change.stage !== "complete";
+        verifyRoot.hidden = state.change.stage !== "complete" || !state.workflows.has("verify");
         verify.update({ disabled: state.unavailable });
         currentOwner = taskArtifact(state.change);
         const items = state.change.artifacts.map((item) => ({
@@ -7982,6 +7999,22 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
     return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
   }
+  function planningPrompt(change, intent) {
+    const target = `OpenSpec change "${change.id}"`;
+    const goal = change.goal?.trim() ? `
+Goal: ${change.goal}` : "";
+    if (intent === "ff")
+      return `Use your skill tool to load and invoke the openspec-ff-change skill for ${target} (existing change).${goal}
+
+Create every remaining planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not create another change or implement code.`;
+    if (intent === "continue")
+      return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}
+
+Write the next planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not implement code.`;
+    return `Use your skill tool to load and invoke the openspec-update-change skill for ${target}.${goal}
+
+Revise ${target}'s existing planning artefacts as I describe and keep them consistent with each other. If I have not described a revision, ask me what to change. Do not edit code.`;
+  }
 
   // src/panel/tracked-change.ts
   var prefix = "session-change:";
@@ -8137,16 +8170,6 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         `Worktree or session for ${name} already exists${collision ? ` at ${collision.directory}` : ` (session ${session.id})`}. Inspect it instead of creating another worktree.`
       );
     return project;
-  }
-
-  // src/panel/workflows.ts
-  async function loadWorkflows(client, directory) {
-    try {
-      return new Set(await client.workflows(directory));
-    } catch (caught) {
-      console.warn("Could not read OpenSpec workflows; using the core workflows.", caught);
-      return new Set(CORE_WORKFLOWS);
-    }
   }
 
   // src/panel/controller.ts
@@ -8390,7 +8413,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     async function preparePrompt(change, captured, originatingEpoch, intent, originatingSession = sessionId) {
       const current = changes.find((item) => item.id === change.id);
-      if (!captured || scope !== captured || epoch !== originatingEpoch || sessionId !== originatingSession || unavailableIds.has(change.id) || !current || intent === "verify" && current.stage !== "complete" || intent === "explore" && current.stage !== "planning" || (intent === "primary" || intent === "worktree") && current.stage !== change.stage)
+      if (!captured || scope !== captured || epoch !== originatingEpoch || sessionId !== originatingSession || unavailableIds.has(change.id) || !current || current.stage !== change.stage || intent === "verify" && (current.stage !== "complete" || !workflows.has("verify")) || intent === "explore" && current.stage !== "planning")
         return;
       if (intent === "worktree") {
         if (current.stage !== "ready" && current.stage !== "progress") return;
@@ -8400,7 +8423,8 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       const expectedSession = sessionId;
       const currentContext = () => scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
       try {
-        await host2.compose({ text: actionPrompt(change, intent), mode: "replace" });
+        const text2 = intent === "ff" || intent === "continue" ? planningPrompt(change, intent) : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+        await host2.compose({ text: text2, mode: "replace" });
         if (!currentContext()) return;
         if (expectedSession !== null)
           void appendTrackedChange(host2, expectedSession, change.id, currentContext, async () => {
@@ -8855,6 +8879,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
         settled,
         error: errorMessage,
         failures,
+        workflows,
         cards: changes.map((change) => ({
           change,
           stale: staleIds.has(change.id),
@@ -8872,6 +8897,7 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
       detailView.update(
         selectedChange ? {
           change: selectedChange,
+          workflows,
           selectedArtifact,
           activeView,
           files,
