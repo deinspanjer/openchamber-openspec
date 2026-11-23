@@ -30,8 +30,9 @@ capability beyond those already declared.
 When the user has saved a tracked-change list for the session, that list SHALL be the session's
 tracked changes, even when it is empty. Otherwise the section SHALL derive at most one change: the
 extension's own item on the session naming a change, else the session's worktree when its name
-equals a change name. Only changes in the active listing for the session's project SHALL show. The
-section SHALL NOT infer changes from conversation content or tool activity.
+equals a change name. Only changes in the active listing for the session's project, or archived
+but not landed in the current checkout, SHALL show. The section SHALL NOT infer changes from
+conversation content or tool activity.
 
 #### Scenario: Saved list wins
 
@@ -42,6 +43,12 @@ section SHALL NOT infer changes from conversation content or tool activity.
 
 - **WHEN** a session was started by new-worktree Apply for `add-login` and nothing is saved
 - **THEN** the section shows `add-login`
+
+#### Scenario: Worktree Apply session after archiving
+
+- **WHEN** a session was started by new-worktree Apply for `add-login`, nothing is saved, and the
+  session archived `add-login` without the archive landing
+- **THEN** the section shows `add-login` as archived and not landed
 
 #### Scenario: Bulk archive session
 
@@ -55,8 +62,13 @@ section SHALL NOT infer changes from conversation content or tool activity.
 
 #### Scenario: Tracked change no longer active
 
-- **WHEN** a saved change has been archived or deleted
+- **WHEN** a saved change has been deleted, or archived with the archive landed
 - **THEN** that change is not shown, and the other saved changes still are
+
+#### Scenario: Active change wins over an archived one of the same name
+
+- **WHEN** a tracked name is in the active listing and also has an archive that has not landed
+- **THEN** the section shows the active change
 
 ### Requirement: Close the section with a footer line
 
@@ -88,11 +100,12 @@ contribute no Refresh control to the Work Status header.
 
 ### Requirement: Track and untrack changes
 
-`＋ Track a change` SHALL list active changes that are not already tracked and add only the chosen
-change to the session's saved list. Choices with a local Git hint SHALL appear first, with each
-group in task-progress order. `Untrack`, in a change's name flyout, SHALL remove it. Saved lists
-SHALL persist for that session across devices on the same server. A new chat without a session
-SHALL disable tracking and explain that a session is required.
+`＋ Track a change` SHALL list active changes that are not already tracked, then archived changes
+that have not landed and are not already tracked, and add only the chosen change to the session's
+saved list. Among active choices, those with a local Git hint SHALL appear first, with each group
+in task-progress order. `Untrack`, in a change's name flyout, SHALL remove it. Saved lists SHALL
+persist for that session across devices on the same server. A new chat without a session SHALL
+disable tracking and explain that a session is required.
 
 #### Scenario: Order choices by task progress
 
@@ -114,6 +127,19 @@ SHALL disable tracking and explain that a session is required.
 
 - **WHEN** the user activates `Untrack` for `fix-cache`
 - **THEN** only `add-login` remains for S
+
+#### Scenario: Track an archived change again
+
+- **WHEN** `add-login` is archived without the archive landing, is not tracked, and the user opens
+  `＋ Track a change`
+- **THEN** `add-login` is listed after every active choice, labelled `Archived · not landed`
+- **AND** choosing it shows its archived card
+
+#### Scenario: Pending archives are unknown when the picker opens
+
+- **WHEN** the user opens the picker before the pending-archive check returns, or the check cannot
+  run
+- **THEN** the picker shows the active choices at once, and archived choices only once known
 
 ### Requirement: Filter the tracking picker by change name
 
@@ -159,9 +185,9 @@ with staged, unstaged, or non-ignored untracked files SHALL have an icon labelle
 
 Each tracked change SHALL show as a card: its name followed by `completed/total` task counts on
 one line, then a thin completion bar. The name SHALL truncate with an ellipsis before the count
-wraps. When the change has tasks, a `Tasks:` disclosure SHALL follow, labelled with a disclosure
-icon and no underline. On the same line, show the underlined title of the first incomplete task,
-or the last task when all are complete.
+wraps. When an active change has tasks, a `Tasks:` disclosure SHALL follow, labelled with a
+disclosure icon and no underline. On the same line, show the underlined title of the first
+incomplete task, or the last task when all are complete.
 
 #### Scenario: Change in progress
 
@@ -203,10 +229,10 @@ sides, and otherwise shift to show five tasks. The checkboxes SHALL be read-only
 
 ### Requirement: Flyouts show detail on demand
 
-Activating a change's name SHALL open a flyout with the name, stage label, goal and change actions.
-Activating a task title, in the `Tasks:` line or the expanded list, SHALL open a flyout with that
-task's full description. On a phone, flyouts open as the host's bottom sheet. Where the host offers
-no flyouts, the same content SHALL expand inline below the activated element.
+Activating an active change's name SHALL open a flyout with the name, stage label, goal and change
+actions. Activating a task title, in the `Tasks:` line or the expanded list, SHALL open a flyout
+with that task's full description. On a phone, flyouts open as the host's bottom sheet. Where the
+host offers no flyouts, the same content SHALL expand inline below the activated element.
 
 #### Scenario: Task flyout
 
@@ -215,14 +241,14 @@ no flyouts, the same content SHALL expand inline below the activated element.
 
 #### Scenario: Host without flyouts
 
-- **WHEN** the host does not support flyouts and the user activates a change's name
+- **WHEN** the host does not support flyouts and the user activates an active change's name
 - **THEN** the name, stage, goal, actions and `Untrack` expand inline under the name
 
 ### Requirement: Offer change actions in the name flyout
 
-The name flyout SHALL offer `update` and `Open in board`, preceded by `continue` when the change is
-in Planning and both `ff` and `continue` are configured. `Untrack` SHALL follow as a small control
-aligned right.
+The active change's name flyout SHALL offer `update` and `Open in board`, preceded by `continue`
+when the change is in Planning and both `ff` and `continue` are configured. `Untrack` SHALL
+follow as a small control aligned right.
 
 #### Scenario: Name flyout actions
 
@@ -261,10 +287,10 @@ installed, not as proof that its skill exists.
 
 ### Requirement: Offer workflow chips on each card
 
-Each card SHALL show chips in this order: the stage chip, the stage's secondary chip when it has
-one, `sync`, `validate`. `sync` SHALL be hidden when the change's specs artefact is skipped. Cards
-SHALL have no `board` chip. Workflow chips SHALL replace the open composer's text with an unsent
-prompt and SHALL NOT send, create sessions or worktrees, or change OpenSpec files.
+Each active change card SHALL show chips in this order: the stage chip, the stage's secondary chip
+when it has one, `sync`, `validate`. `sync` SHALL be hidden when the change's specs artefact is
+skipped. Cards SHALL have no `board` chip. Workflow chips SHALL replace the open composer's text
+with an unsent prompt and SHALL NOT send, create sessions or worktrees, or change OpenSpec files.
 
 #### Scenario: Specs skipped
 
@@ -343,9 +369,9 @@ or omitted-issue counts. Validation SHALL change no files and SHALL run only whe
 
 ### Requirement: Open the board on the change
 
-`Open in board`, in a change's name flyout, SHALL open the extension's board showing that change's
-detail when the board's project is the session's project, whether the board was already open or
-opens now. Otherwise the board SHALL open at its list.
+`Open in board`, in an active change's name flyout, SHALL open the extension's board showing that
+change's detail when the board's project is the session's project, whether the board was already
+open or opens now. Otherwise the board SHALL open at its list.
 
 #### Scenario: Board already open
 
@@ -362,8 +388,9 @@ opens now. Otherwise the board SHALL open at its list.
 
 The section SHALL read when it loads, when the session or project changes, when the user activates
 the footer's Refresh, and when the shown session finishes a turn. Each read SHALL cover the listing
-and, for each shown change, its planning status and tasks, never every change's summary. The
-section SHALL NOT poll or refresh on visibility changes.
+and, for each shown active change, its planning status and tasks, never every change's summary.
+A read SHALL check for archives that have not landed only when a tracked name is missing from the
+active listing. The section SHALL NOT poll or refresh on visibility changes.
 
 #### Scenario: Initial host signals arrive together
 
@@ -379,6 +406,16 @@ section SHALL NOT poll or refresh on visibility changes.
 
 - **WHEN** a session other than the shown one finishes a turn
 - **THEN** the section does not read
+
+#### Scenario: Every tracked change is active
+
+- **WHEN** every tracked name is in the active listing
+- **THEN** the read does not check archived changes or Git
+
+#### Scenario: The session archives its change
+
+- **WHEN** the shown session's turn archives tracked change `add-login`
+- **THEN** the finished-turn read shows `add-login` as archived and not landed, without user action
 
 ### Requirement: Show read failures without partial progress
 
@@ -428,3 +465,64 @@ SHALL keep their compact height.
 - **AND** each chip is 28px tall with at least 8px to the next chip
 - **AND** `＋ Track a change`, the footer controls, `Tasks:` lines, task titles and names are no
   taller than their line of text
+
+### Requirement: Decide whether an archive has landed
+
+A tracked change archived in the current checkout SHALL count as not landed while its archive
+folder is missing from the base ref: the first of `origin/HEAD`, `origin/main`, `origin/master`,
+`main`, `master` and `HEAD` that exists. The check SHALL apply only to local planning inside the
+checkout. When it cannot run, the change SHALL not show, as before this change.
+
+#### Scenario: Archive committed on a feature branch
+
+- **WHEN** a worktree branch committed the archive of `add-login` and `origin/HEAD` lacks it
+- **THEN** `add-login` shows as archived and not landed
+
+#### Scenario: Archive merged and fetched
+
+- **WHEN** the fetched base ref contains `add-login`'s archive folder
+- **THEN** the next read no longer shows `add-login`
+
+#### Scenario: Repository without remotes or default branches
+
+- **WHEN** only `HEAD` exists among the candidate refs
+- **THEN** `add-login` shows only while its archive is uncommitted
+
+#### Scenario: Check cannot run
+
+- **WHEN** Git is missing or unavailable, the planning target is shared or outside the checkout, or
+  the CLI cannot list archived changes
+- **THEN** the archived change does not show, and the section shows no error for it
+
+#### Scenario: Malformed output
+
+- **WHEN** the CLI or Git returns output the extension cannot decode
+- **THEN** each tracked name missing from the active listing shows an error card with Refresh
+
+### Requirement: Show an archived change as a read-only card
+
+A tracked change archived but not landed SHALL show as a card with its name, final
+`completed/total` task counts, the completion bar and the label `Archived · not landed`. It SHALL
+show no workflow chips and no `Tasks:` line. Activating its name SHALL open a flyout with the name,
+the label, `Open in board` and a small right-aligned `Untrack`.
+
+#### Scenario: Archived card
+
+- **WHEN** tracked change `add-login` was archived with 7 of 7 tasks and has not landed
+- **THEN** its card shows `add-login`, `7/7`, a full bar and `Archived · not landed`
+- **AND** it shows no chips and no `Tasks:` line
+
+#### Scenario: Archived name flyout
+
+- **WHEN** the user activates `add-login`'s name on its archived card
+- **THEN** the flyout shows the name, `Archived · not landed`, `Open in board` and `Untrack`
+
+#### Scenario: Untrack an archived change
+
+- **WHEN** the user activates `Untrack` in the archived card's flyout
+- **THEN** the card is removed, and `add-login` is offered again in `＋ Track a change`
+
+#### Scenario: Open an archived change in the board
+
+- **WHEN** the user activates `Open in board` in the archived card's flyout
+- **THEN** the board opens at its `Archived` view with `add-login` highlighted

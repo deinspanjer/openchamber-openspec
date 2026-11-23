@@ -65,14 +65,10 @@
 ## 5. Verification
 
 - [x] 5.1 Run `npm run check` and confirm it passes.
-- [ ] 5.2 Run the live-host check in AGENTS.md. Build, then disable and re-enable the extension in
+- [x] 5.2 Run the live-host check in AGENTS.md. Build, then disable and re-enable the extension in
   Settings > Extensions and confirm it is Enabled. With Playwright against the running web UI,
   use an existing session in a worktree that tracks a change. Archive the change there without
   committing, finish a turn or press Refresh, and confirm the archived card, its flyout, and that
   `Open in board` highlights the row in `Archived`. Commit the archive and confirm the card
   stays; check the 320px phone width. Ask the user before creating any real session or worktree.
   Report Firefox and WebKit as not verified.
-
-## Workflow follow-up
-
-- Push after automated verification. The maintainer will run the live-host check.
