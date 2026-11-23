@@ -4,8 +4,8 @@
 
 - Use Node 22.13+, npm, and `openspec` on `PATH`. After `npm ci`, install test Chromium with
   `npx playwright install chromium`.
-- `npm run check` runs lint → format:check → typecheck → test → build. Use `npm run format` to
-  format. Lint and typecheck cover `src`, not the JavaScript tests or Python worktree helper.
+- Run `npm run check` for full verification. Use `npm run format` to format.
+  Lint and typecheck cover `src`, not the JavaScript tests or Python worktree helper.
 - Focused browser or service test: `npm run build`, then `node --test test/panel.test.mjs`
   (substitute `document`, `service`, or `integration`). Filter with
   `node --test --test-name-pattern='pattern' test/panel.test.mjs`; do not pass flags through
@@ -77,6 +77,3 @@
   (`http://127.0.0.1:57123` on this machine). The OpenChamber browser tool cannot see inside the
   extension iframe.
 - Ask the user before a check creates real sessions or worktrees.
-- Git-URL installs update only when `package.json` `version` increases. OpenChamber compares semver,
-  not commits, so bump the version (`npm version <x.y.z> --no-git-tag-version`) in any release users
-  should receive.

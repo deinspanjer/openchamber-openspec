@@ -1,6 +1,6 @@
 {
   "name": "openchamber-openspec-v2",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "OpenSpec board for OpenChamber. Fork of jaythomasonprojects/openchamber-openspec by Jay Thomason.",
   "private": true,
   "type": "module",
@@ -11,13 +11,15 @@
     "build:service": "esbuild src/service.ts --bundle --format=cjs --platform=node --target=node22 --outfile=service/main.js",
     "build:model:test": "esbuild src/model.ts --bundle --format=esm --platform=node --target=node22 --outfile=build/model.mjs",
     "build:resources:test": "esbuild src/panel/resources.ts --bundle --format=esm --platform=node --target=node22 --outfile=build/resources.mjs",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run build && npm run check:version && npm run test:built",
+    "check:version": "node scripts/check-extension-version.mjs",
     "lint": "eslint src eslint.config.mjs",
     "lint:fix": "eslint src eslint.config.mjs --fix",
-    "format:check": "prettier --check src test panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
-    "format": "prettier --write src test panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
+    "format:check": "prettier --check src test scripts/*.mjs panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
+    "format": "prettier --write src test scripts/*.mjs panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && npm run build:model:test && npm run build:resources:test && node --test test/*.test.mjs",
+    "test": "npm run build && npm run test:built",
+    "test:built": "npm run build:model:test && npm run build:resources:test && node --test test/*.test.mjs",
     "clean": "node -e \"for (const file of ['panel/main.js', 'panel/status.js', 'service/main.js']) require('node:fs').rmSync(file, { force: true })\""
   },
   "openchamber": {
@@ -69,6 +71,7 @@
     "eslint": "^10.11.0",
     "playwright": "^1.58.2",
     "prettier": "^3.9.9",
+    "semver": "^7.8.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1"
   }
