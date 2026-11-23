@@ -750,7 +750,6 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
   async function createChange(
     directory: string,
     name: string,
-    goal: string,
     expectedRoot?: string,
     expectedPlanning?: string,
   ): Promise<CliResult> {
@@ -758,7 +757,6 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
       return failure(
         serviceError("BAD_CHANGE", "Use lowercase letters or digits separated by single hyphens."),
       );
-    if (!goal.trim()) return failure(serviceError("BAD_GOAL", "Goal is required."));
     const current = await context(directory, expectedRoot, expectedPlanning);
     if ("code" in current) return failure(current);
     const pinned = await context(dirname(current.planningRoot));
@@ -774,11 +772,7 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
         serviceError("BAD_CHANGE_ROOT", "Changes parent is not a real directory.", 409),
       );
     try {
-      const result = await checked(
-        pinned.root,
-        ["new", "change", name, "--goal", goal.trim()],
-        pinned,
-      );
+      const result = await checked(pinned.root, ["new", "change", name], pinned);
       if (!result.ok)
         return failure(
           serviceError(result.error.code, result.error.message, result.error.status, "unknown"),

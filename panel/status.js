@@ -1,10 +1,10 @@
 "use strict";
 (() => {
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
   var OPENCHAMBER_SDK_CHANNEL = "openchamber.sdk";
   var OPENCHAMBER_SDK_API_VERSION = 1;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
   var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
   var GUEST_SCROLLBAR_CSS = `
 :root {
@@ -64,15 +64,15 @@
   }
   var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
   var GUEST_STORAGE_KEY_MAX = 128;
   var GUEST_STORAGE_VALUE_BYTES = 65536;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
   var GUEST_SHELL_ID_MAX = 128;
   var GUEST_SHELL_OUTPUT_TAIL_MAX = 65536;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
   var GUEST_MICROPHONE_SAMPLE_RATE_MIN = 8e3;
   var GUEST_MICROPHONE_SAMPLE_RATE_MAX = 192e3;
   var GUEST_MICROPHONE_OPEN_TIMEOUT_MS = 12e4;
@@ -117,7 +117,7 @@
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
   var GUEST_STATUS_CONTROLS_MAX = 4;
   var GUEST_STATUS_CONTROL_ID = /^[a-z][a-z0-9-]{0,39}$/;
   var GUEST_STATUS_CONTROL_LABEL_MAX = 60;
@@ -160,12 +160,12 @@
     return true;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
   var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
   var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
   var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
   var GUEST_SESSION_EVENT_TYPES = [
     "turn-finished",
     "turn-failed",
@@ -179,11 +179,11 @@
   var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
   var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
   var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
   var MENTIONS_IDLE_MS = 10 * 6e4;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
   var GUEST_FILE_EDITOR_CONTENT_MAX = 2e7;
   var GUEST_FILE_EDITOR_VERSION_MAX = 256;
   var fileEditorPayloadSize = (value) => "bytes" in value ? value.bytes.byteLength : value.content.length;
@@ -202,7 +202,7 @@
     return true;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
   var GUEST_POPOVER_ID = /^[A-Za-z0-9_-]{1,80}$/;
   var GUEST_POPOVER_COORDINATE_MAX = 1e5;
   var GUEST_POPOVER_WIDTH_MIN = 160;
@@ -245,7 +245,7 @@
     }
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
   var GUEST_BLOCK_ANSWER_MAX = 2e3;
   var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
   var isStartSessionResult = (value) => Boolean(value && "sessionId" in value);
@@ -464,7 +464,7 @@
     return wire;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
   var isKeyEvent = (event) => "key" in event && "metaKey" in event && "ctrlKey" in event;
   var isSaveShortcut = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "s";
   var HostRequestError = class extends Error {
@@ -1546,7 +1546,7 @@
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
   var BROWSER_CONTROL_ACTIONS = [
     "browser.open",
     "browser.snapshot",
@@ -1568,11 +1568,11 @@
   var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
   var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
   var SURFACE_CONTROLLERS = ["none", "agent", "user"];
   var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
   var TOKEN_VARS = [
     ["--oc-bg", "background"],
     ["--oc-elevated", "elevated"],
@@ -1662,7 +1662,7 @@
     }
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
   var OC_ALIAS = {
     "surface-background": "bg",
     "surface-elevated": "elevated",
@@ -1973,7 +1973,7 @@ ${GUEST_SCROLLBAR_CSS}
 ${UI_SIZE_CSS}
 ${GUEST_UI_LOOK_CSS}`;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
   var STYLE_ID = "oc-sdk-ui-style";
   var ensureStyle = (css) => {
     const existing = document.getElementById(STYLE_ID);
@@ -2015,7 +2015,7 @@ ${GUEST_UI_LOOK_CSS}`;
     }
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
     const spinner = document.createElement("span");
     spinner.className = "oc-sdk-spinner-ring";
@@ -2063,7 +2063,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
   var SVG_NS = "http://www.w3.org/2000/svg";
   var ICON_PATH = {
     search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
@@ -2089,7 +2089,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return node;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
   var mountSearchField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2150,7 +2150,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
   var nextPopoverAnchorId = 0;
   var isKeyboardEvent = (event) => "key" in event;
   var mountPopoverAnchor = (element, options2) => {
@@ -2616,7 +2616,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return {
       id,
       root: string(item.root),
-      goal: item.goal,
+      goal: item.goal?.trim() ? item.goal : null,
       affectedAreas: names(item.affectedAreas),
       artifacts,
       applyRequires: names(item.applyRequires),
@@ -2881,7 +2881,7 @@ ${GUEST_UI_LOOK_CSS}`;
           throw invalid();
         return value.content;
       },
-      create: async (scope, name, goal) => {
+      create: async (scope, name) => {
         let value;
         try {
           value = record2(
@@ -2889,8 +2889,7 @@ ${GUEST_UI_LOOK_CSS}`;
               ...scope,
               expectedRoot: scope.root,
               expectedPlanning: scope.planning,
-              name,
-              goal
+              name
             })
           );
         } catch (caught) {
@@ -3011,11 +3010,11 @@ Goal: ${change.goal}` : "";
     if (intent === "explore")
       return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}
 
-Investigate the goal, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation. If no goal is recorded, inspect existing context and ask the user to clarify it if necessary; do not invent a goal.`;
+Investigate the purpose, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation.`;
     if (change.stage === "planning")
       return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}
 
-Inspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
+Inspect ${target}'s status and preserve existing decisions. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
     if (change.stage === "ready" || change.stage === "progress") {
       const progress = change.stage === "progress" ? `
 ${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.` : "";
@@ -3039,11 +3038,11 @@ Goal: ${change.goal}` : "";
     if (intent === "ff")
       return `Use your skill tool to load and invoke the openspec-ff-change skill for ${target} (existing change).${goal}
 
-Create every remaining planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not create another change or implement code.`;
+Create every remaining planning artefact for ${target}, preserving existing decisions. Do not create another change or implement code.`;
     if (intent === "continue")
       return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}
 
-Write the next planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not implement code.`;
+Write the next planning artefact for ${target}, preserving existing decisions. Do not implement code.`;
     return `Use your skill tool to load and invoke the openspec-update-change skill for ${target}.${goal}
 
 Revise ${target}'s existing planning artefacts as I describe and keep them consistent with each other. If I have not described a revision, ask me what to change. Do not edit code.`;

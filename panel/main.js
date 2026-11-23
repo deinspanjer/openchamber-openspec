@@ -1,10 +1,10 @@
 "use strict";
 (() => {
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
   var OPENCHAMBER_SDK_CHANNEL = "openchamber.sdk";
   var OPENCHAMBER_SDK_API_VERSION = 1;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
   var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
   var GUEST_SCROLLBAR_CSS = `
 :root {
@@ -64,15 +64,15 @@
   }
   var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
   var GUEST_STORAGE_KEY_MAX = 128;
   var GUEST_STORAGE_VALUE_BYTES = 65536;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
   var GUEST_SHELL_ID_MAX = 128;
   var GUEST_SHELL_OUTPUT_TAIL_MAX = 65536;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
   var GUEST_MICROPHONE_SAMPLE_RATE_MIN = 8e3;
   var GUEST_MICROPHONE_SAMPLE_RATE_MAX = 192e3;
   var GUEST_MICROPHONE_OPEN_TIMEOUT_MS = 12e4;
@@ -117,7 +117,7 @@
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
   var GUEST_STATUS_CONTROLS_MAX = 4;
   var GUEST_STATUS_CONTROL_ID = /^[a-z][a-z0-9-]{0,39}$/;
   var GUEST_STATUS_CONTROL_LABEL_MAX = 60;
@@ -160,12 +160,12 @@
     return true;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
   var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
   var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
   var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
   var GUEST_SESSION_EVENT_TYPES = [
     "turn-finished",
     "turn-failed",
@@ -179,11 +179,11 @@
   var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
   var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
   var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
   var MENTIONS_IDLE_MS = 10 * 6e4;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
   var GUEST_FILE_EDITOR_CONTENT_MAX = 2e7;
   var GUEST_FILE_EDITOR_VERSION_MAX = 256;
   var fileEditorPayloadSize = (value) => "bytes" in value ? value.bytes.byteLength : value.content.length;
@@ -202,7 +202,7 @@
     return true;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
   var GUEST_POPOVER_ID = /^[A-Za-z0-9_-]{1,80}$/;
   var GUEST_POPOVER_COORDINATE_MAX = 1e5;
   var GUEST_POPOVER_WIDTH_MIN = 160;
@@ -245,7 +245,7 @@
     }
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
   var GUEST_BLOCK_ANSWER_MAX = 2e3;
   var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
   var isStartSessionResult = (value) => Boolean(value && "sessionId" in value);
@@ -464,7 +464,7 @@
     return wire;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
   var isKeyEvent = (event) => "key" in event && "metaKey" in event && "ctrlKey" in event;
   var isSaveShortcut = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "s";
   var HostRequestError = class extends Error {
@@ -1546,7 +1546,7 @@
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
   var BROWSER_CONTROL_ACTIONS = [
     "browser.open",
     "browser.snapshot",
@@ -1568,11 +1568,11 @@
   var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
   var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
   var SURFACE_CONTROLLERS = ["none", "agent", "user"];
   var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
   var TOKEN_VARS = [
     ["--oc-bg", "background"],
     ["--oc-elevated", "elevated"],
@@ -1662,7 +1662,7 @@
     }
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
   var OC_ALIAS = {
     "surface-background": "bg",
     "surface-elevated": "elevated",
@@ -1973,7 +1973,7 @@ ${GUEST_SCROLLBAR_CSS}
 ${UI_SIZE_CSS}
 ${GUEST_UI_LOOK_CSS}`;
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
   var STYLE_ID = "oc-sdk-ui-style";
   var clearNode = (node) => {
     while (node.firstChild) {
@@ -2032,7 +2032,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
     const spinner = document.createElement("span");
     spinner.className = "oc-sdk-spinner-ring";
@@ -2080,7 +2080,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/field.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/field.js
   var mountTextField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2128,7 +2128,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
   var SVG_NS = "http://www.w3.org/2000/svg";
   var ICON_PATH = {
     search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
@@ -2154,7 +2154,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return node;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
   var mountSearchField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2215,7 +2215,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/navigation.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/navigation.js
   var navigationKey = (event, axis = "vertical") => {
     const [next, previous] = axis === "vertical" ? ["ArrowDown", "ArrowUp"] : ["ArrowRight", "ArrowLeft"];
     if (event.key === next || event.ctrlKey && event.key.toLowerCase() === "n")
@@ -2249,7 +2249,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return target?.id ?? null;
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/option.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/option.js
   var optionId = (uid, id) => `${uid}-${id ?? ""}`;
   var createOption = (uid, role, spec, on) => {
     const node = button("oc-sdk-option");
@@ -2290,7 +2290,7 @@ ${GUEST_UI_LOOK_CSS}`;
     container.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popup.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popup.js
   var placePopup = (popup, trigger) => {
     const rect = trigger.getBoundingClientRect();
     popup.style.minWidth = `${Math.round(rect.width)}px`;
@@ -2329,7 +2329,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/tabs.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/tabs.js
   var mountTabs = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2389,7 +2389,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/badge.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/badge.js
   var applyTone = (node, tone2) => {
     setAttr(node, "data-tone", tone2 && tone2 !== "neutral" ? tone2 : null);
   };
@@ -2414,7 +2414,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/progress.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/progress.js
   var clampProgress = (value) => Number.isFinite(value) ? Math.min(100, Math.max(0, Math.floor(value))) : 0;
   var mountProgress = (root2, initial) => {
     ensureStyle(UI_CSS);
@@ -2463,7 +2463,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/menu.js
+  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/menu.js
   var actions = (items) => items.filter((item) => !("separator" in item));
   var menuCount = 0;
   var mountMenu = (root2, initial) => {
@@ -2804,7 +2804,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return {
       id,
       root: string(item.root),
-      goal: item.goal,
+      goal: item.goal?.trim() ? item.goal : null,
       affectedAreas: names(item.affectedAreas),
       artifacts,
       applyRequires: names(item.applyRequires),
@@ -3045,7 +3045,7 @@ ${GUEST_UI_LOOK_CSS}`;
           throw invalid();
         return value.content;
       },
-      create: async (scope, name, goal) => {
+      create: async (scope, name) => {
         let value;
         try {
           value = record2(
@@ -3053,8 +3053,7 @@ ${GUEST_UI_LOOK_CSS}`;
               ...scope,
               expectedRoot: scope.root,
               expectedPlanning: scope.planning,
-              name,
-              goal
+              name
             })
           );
         } catch (caught) {
@@ -3865,7 +3864,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   }
 
-  // ../openchamber-openspec/node_modules/marked/lib/marked.esm.js
+  // ../../../../../../src/openchamber-openspec/node_modules/marked/lib/marked.esm.js
   function I() {
     return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
   }
@@ -5188,7 +5187,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   var Rn = T.parse;
   var Tn = R.lex;
 
-  // ../openchamber-openspec/node_modules/dompurify/dist/purify.es.mjs
+  // ../../../../../../src/openchamber-openspec/node_modules/dompurify/dist/purify.es.mjs
   function _OverloadYield(e, d) {
     this.v = e, this.k = d;
   }
@@ -7644,7 +7643,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         }
         title.textContent = state.change.id;
         areas.update(state.change.affectedAreas);
-        goal.textContent = state.change.goal ?? "Goal unavailable";
+        goal.hidden = !state.change.goal;
+        goal.textContent = state.change.goal ?? "";
         stageBadge.update({
           label: stageLabel(state.change.stage),
           tone: tones[state.change.stage]
@@ -7845,9 +7845,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     dialog.setAttribute("aria-labelledby", heading.id);
     heading.textContent = "New change";
     const nameRoot = document.createElement("div");
-    const goalRoot = document.createElement("div");
     let name = "";
-    let goal = "";
     let mode = "editing";
     let attempt = null;
     let draftScope = null;
@@ -7862,17 +7860,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       onChange: (value) => {
         name = value;
         nameField.update({ value, error: void 0 });
-      }
-    });
-    const goalField = mountTextField(goalRoot, {
-      label: "Goal",
-      value: "",
-      placeholder: "What should this change make possible?",
-      multiline: true,
-      rows: 4,
-      onChange: (value) => {
-        goal = value;
-        goalField.update({ value, error: void 0 });
       }
     });
     const message = document.createElement("p");
@@ -7939,7 +7926,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       }
     });
     actions2.append(cancelRoot, forgetRoot, retryRoot, inspectRoot, submitRoot);
-    form.append(heading, nameRoot, goalRoot, message, actions2);
+    form.append(heading, nameRoot, message, actions2);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       void submitChange();
@@ -7953,10 +7940,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     function discardDraft() {
       draftScope = null;
       name = "";
-      goal = "";
       messageText = "";
       nameField.update({ value: "", error: void 0 });
-      goalField.update({ value: "", error: void 0 });
     }
     dialog.addEventListener("close", () => {
       if (!attempt && draftScope && !sameContext(draftScope)) discardDraft();
@@ -7968,7 +7953,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       const usable = origin ? sameContext(origin) : current !== null;
       const busy = mode === "submitting" || mode === "reconciling";
       nameField.update({ disabled: busy || mode === "read-failed" || mode === "observed-existing" });
-      goalField.update({ disabled: busy || mode === "read-failed" || mode === "observed-existing" });
       submit.update({ disabled: mode !== "editing" || !usable, loading: mode === "submitting" });
       retryRoot.hidden = mode !== "read-failed";
       retry.update({ disabled: mode !== "read-failed", loading: mode === "reconciling" });
@@ -8016,23 +8000,18 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         return;
       }
       const submittedName = name.trim();
-      const submittedGoal = goal.trim();
       if (!isChangeName(submittedName)) {
         nameField.update({ error: "Use lowercase letters or digits separated by single hyphens." });
         return;
       }
-      if (!submittedGoal) {
-        goalField.update({ error: "Goal is required." });
-        return;
-      }
-      attempt = { scope: current, name: submittedName, goal: submittedGoal };
+      attempt = { scope: current, name: submittedName };
       const original = attempt;
       const currentGeneration = ++generation;
       mode = "submitting";
       messageText = "";
       paint();
       try {
-        await client.create(original.scope, original.name, original.goal);
+        await client.create(original.scope, original.name);
         if (disposed || currentGeneration !== generation) return;
         mode = "confirmed-success";
         messageText = "Change created.";
@@ -8042,9 +8021,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         attempt = null;
         draftScope = null;
         name = "";
-        goal = "";
         nameField.update({ value: "" });
-        goalField.update({ value: "" });
         mode = "editing";
         messageText = "";
         paint();
@@ -8079,7 +8056,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         inspect.dispose();
         forget.dispose();
         nameField.dispose();
-        goalField.dispose();
         if (dialog.open) dialog.close();
         dialog.remove();
       }
@@ -8342,11 +8318,11 @@ Goal: ${change.goal}` : "";
     if (intent === "explore")
       return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}
 
-Investigate the goal, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation. If no goal is recorded, inspect existing context and ask the user to clarify it if necessary; do not invent a goal.`;
+Investigate the purpose, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation.`;
     if (change.stage === "planning")
       return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}
 
-Inspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
+Inspect ${target}'s status and preserve existing decisions. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
     if (change.stage === "ready" || change.stage === "progress") {
       const progress = change.stage === "progress" ? `
 ${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.` : "";
@@ -8365,11 +8341,11 @@ Goal: ${change.goal}` : "";
     if (intent === "ff")
       return `Use your skill tool to load and invoke the openspec-ff-change skill for ${target} (existing change).${goal}
 
-Create every remaining planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not create another change or implement code.`;
+Create every remaining planning artefact for ${target}, preserving existing decisions. Do not create another change or implement code.`;
     if (intent === "continue")
       return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}
 
-Write the next planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not implement code.`;
+Write the next planning artefact for ${target}, preserving existing decisions. Do not implement code.`;
     return `Use your skill tool to load and invoke the openspec-update-change skill for ${target}.${goal}
 
 Revise ${target}'s existing planning artefacts as I describe and keep them consistent with each other. If I have not described a revision, ask me what to change. Do not edit code.`;

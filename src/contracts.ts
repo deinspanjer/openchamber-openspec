@@ -251,7 +251,7 @@ export function decodeSummary(value: unknown): ChangeMetadata {
   return {
     id,
     root: string(item.root),
-    goal: item.goal as string | null,
+    goal: item.goal?.trim() ? item.goal : null,
     affectedAreas: names(item.affectedAreas),
     artifacts,
     applyRequires: names(item.applyRequires),

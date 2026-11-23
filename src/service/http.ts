@@ -172,7 +172,6 @@ export function createOpenSpecService(
                   ? adapter.createChange(
                       directory,
                       requiredString(body, "name"),
-                      requiredString(body, "goal"),
                       requiredString(body, "expectedRoot"),
                       expectedPlanning,
                     )

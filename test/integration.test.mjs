@@ -295,7 +295,6 @@ for (const shared of [false, true])
         );
         await panelFrame.getByRole("button", { name: "new change" }).click();
         await panelFrame.getByLabel("Change name", { exact: true }).fill("created-in-fixture");
-        await panelFrame.getByLabel("Goal").fill("Fixture creation goal");
         await panelFrame.getByRole("button", { name: "create", exact: true }).click();
         await panelFrame
           .getByRole("button", { name: "created-in-fixture" })
@@ -309,7 +308,7 @@ for (const shared of [false, true])
         assert.equal(await page.evaluate(() => window.__compose.mode), "replace");
         assert.match(
           await page.evaluate(() => window.__compose.text),
-          /^Use your skill tool to load and invoke the openspec-propose skill for OpenSpec change "created-in-fixture" \(existing change\)\.\nGoal: Fixture creation goal\n\nInspect/,
+          /^Use your skill tool to load and invoke the openspec-propose skill for OpenSpec change "created-in-fixture" \(existing change\)\.\n\nInspect/,
         );
         await panelFrame.getByRole("button", { name: "created-in-fixture" }).click();
         await panelFrame

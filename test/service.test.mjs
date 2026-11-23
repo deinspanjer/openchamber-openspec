@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { request as httpRequest } from "node:http";
 import {
+  access,
   chmod,
   mkdir,
   mkdtemp,
@@ -297,7 +298,6 @@ test("shared planning scope rejects link retargets without changing the CLI root
                 change: "shared-change",
                 artifactId: "proposal",
                 name: "new-change",
-                goal: "Goal",
               })
             ).value.error.code,
             "PLANNING_CHANGED",
@@ -452,7 +452,6 @@ test("invalid planning links fail without dispatching mutations", async () => {
                 expectedRoot: root,
                 name: "safe-change",
                 change: "safe-change",
-                goal: "Goal",
               }),
             });
             assert.equal((await response.json()).error.code, "NO_OPENSPEC_ROOT");
@@ -520,19 +519,12 @@ test("shared planning creation pins dispatch and reports retargeted outcomes as 
               expectedRoot: listing.root,
               expectedPlanning: listing.planning,
               name: "pinned-change",
-              goal: "Pinned goal",
             }),
           });
           const value = await response.json();
           assert.equal(value.error.outcome, "unknown");
           assert.equal(writes, 1);
-          assert.match(
-            await readFile(
-              join(main, "openspec", "changes", "pinned-change", ".openspec.yaml"),
-              "utf8",
-            ),
-            /Pinned goal/,
-          );
+          await access(join(main, "openspec", "changes", "pinned-change", ".openspec.yaml"));
           assert.deepEqual(await readdir(join(replacement, "openspec", "changes")), ["archive"]);
         },
         async (cwd, args, remaining) => {
@@ -567,7 +559,6 @@ test("shared creation rejects a planning link retarget before dispatch", async (
               directory: checkout,
               expectedRoot: checkout,
               name: "no-dispatch",
-              goal: "Never create",
             }),
           });
           assert.equal((await response.json()).error.code, "PLANNING_CHANGED");
@@ -1809,7 +1800,6 @@ test("scoped routes expose distinct current documents and reject root changes an
       async (url) => {
         const mismatch = await post(url, "/create", {
           name: "not-written",
-          goal: "No write",
           expectedRoot: "/different",
         });
         assert.equal(mismatch.status, 409);
@@ -2059,7 +2049,6 @@ test("scoped routes read and create changes in a disposable real OpenSpec projec
       const created = await post("/create", {
         expectedRoot: root,
         name: "another-change",
-        goal: "Another goal",
       });
       assert.equal(created.status, 200);
       assert.equal((await created.json()).change, "another-change");
@@ -2097,14 +2086,14 @@ test("real CLI numeric-prefixed changes remain listed, readable and scoped for w
         200,
       );
       assert.equal((await post("/tasks", { change: "100-add-feature" })).status, 200);
-      const created = await post("/create", { name: "00001-next", goal: "Next goal" });
+      const created = await post("/create", { name: "00001-next" });
       assert.equal(created.status, 200);
       assert.equal((await created.json()).change, "00001-next");
       const deleted = await post("/delete", { change: "100-add-feature" });
       assert.equal(deleted.status, 200);
       assert.equal((await deleted.json()).change, "100-add-feature");
       for (const name of ["../other", "a/b", "a--b", "Upper", "a b"]) {
-        assert.equal((await post("/create", { name, goal: "Invalid" })).status, 400, name);
+        assert.equal((await post("/create", { name })).status, 400, name);
         assert.equal((await post("/delete", { change: name })).status, 400, name);
       }
       assert.equal(
@@ -2403,7 +2392,6 @@ test("creation stays in the validated root after a selected-directory alias move
               directory: alias,
               expectedRoot,
               name: "bound-change",
-              goal: "Remain in the first root",
             }),
           });
         const rejected = await post(second);
@@ -2413,15 +2401,7 @@ test("creation stays in the validated root after a selected-directory alias move
         assert.equal(response.status, 409);
         assert.equal((await response.json()).error.outcome, "unknown");
         assert.equal(writes, 1);
-        assert.equal(
-          (
-            await readFile(
-              join(first, "openspec", "changes", "bound-change", ".openspec.yaml"),
-              "utf8",
-            )
-          ).includes("Remain in the first root"),
-          true,
-        );
+        await access(join(first, "openspec", "changes", "bound-change", ".openspec.yaml"));
         assert.equal(
           (await readdir(join(second, "openspec", "changes"))).includes("bound-change"),
           false,
@@ -2560,7 +2540,6 @@ test("creation stays in the validated registered store when its pointer changes"
             directory: project,
             expectedRoot: first,
             name: "bound-change",
-            goal: "Stay in the first store",
           }),
         });
         assert.equal(response.status, 409);
@@ -2604,7 +2583,6 @@ test("creation distinguishes local rejection from outcomes after dispatch", asyn
                 directory: root,
                 expectedRoot: root,
                 name,
-                goal: "Keep this goal",
               }),
             });
           const rejected = await post("Invalid Name");
@@ -2646,7 +2624,6 @@ test("creation timeout after dispatch has an unknown outcome and never retries",
             directory: root,
             expectedRoot: root,
             name: "slow-change",
-            goal: "Slow goal",
           }),
         });
         assert.equal(response.status, 504);
@@ -2864,7 +2841,6 @@ test("service refuses invalid change creation without writing", async () => {
           directory,
           expectedRoot: join(directory, "openspec"),
           name: "Bad Name",
-          goal: "No write",
         }),
       });
       assert.equal(response.status, 400);

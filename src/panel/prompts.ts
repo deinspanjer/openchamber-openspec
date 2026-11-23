@@ -7,9 +7,9 @@ export function actionPrompt(
   const target = `OpenSpec change "${change.id}"`;
   const goal = change.goal?.trim() ? `\nGoal: ${change.goal}` : "";
   if (intent === "explore")
-    return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}\n\nInvestigate the goal, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation. If no goal is recorded, inspect existing context and ask the user to clarify it if necessary; do not invent a goal.`;
+    return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}\n\nInvestigate the purpose, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation.`;
   if (change.stage === "planning")
-    return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}\n\nInspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
+    return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}\n\nInspect ${target}'s status and preserve existing decisions. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
   if (change.stage === "ready" || change.stage === "progress") {
     const progress =
       change.stage === "progress"
@@ -33,9 +33,9 @@ export function planningPrompt(
   const target = `OpenSpec change "${change.id}"`;
   const goal = change.goal?.trim() ? `\nGoal: ${change.goal}` : "";
   if (intent === "ff")
-    return `Use your skill tool to load and invoke the openspec-ff-change skill for ${target} (existing change).${goal}\n\nCreate every remaining planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not create another change or implement code.`;
+    return `Use your skill tool to load and invoke the openspec-ff-change skill for ${target} (existing change).${goal}\n\nCreate every remaining planning artefact for ${target}, preserving existing decisions. Do not create another change or implement code.`;
   if (intent === "continue")
-    return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}\n\nWrite the next planning artefact for ${target}, preserving existing decisions and any recorded goal. Do not implement code.`;
+    return `Use your skill tool to load and invoke the openspec-continue-change skill for ${target} (existing change).${goal}\n\nWrite the next planning artefact for ${target}, preserving existing decisions. Do not implement code.`;
   return `Use your skill tool to load and invoke the openspec-update-change skill for ${target}.${goal}\n\nRevise ${target}'s existing planning artefacts as I describe and keep them consistent with each other. If I have not described a revision, ask me what to change. Do not edit code.`;
 }
 

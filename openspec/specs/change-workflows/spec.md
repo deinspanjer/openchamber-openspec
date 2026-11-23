@@ -3,8 +3,8 @@
 ## Purpose
 
 Connect the board, change cards and detail to OpenSpec's named workflows: create change scaffolds,
-prepare goal-aware prompts unsent in the current chat, and launch sessions only when the user
-explicitly chooses a new worktree or bulk archiving.
+prepare prompts unsent in the current chat, and launch sessions only when the user explicitly
+chooses a new worktree or bulk archiving.
 
 ## Requirements
 

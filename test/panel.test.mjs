@@ -529,13 +529,13 @@ function hostHtml(statusCase, pointer, popovers) {
           else finish();
         }
         else if (path === "/create") {
-          if (createWrites) changes.push({ id: body.name, goal: body.goal, completedTasks: 0, totalTasks: 0 });
+          if (createWrites) changes.push({ id: body.name, goal: null, completedTasks: 0, totalTasks: 0 });
           const finish = () => {
             if (createReply === "invalid-json") reply({ status: 200, body: "{" });
             else if (createReply === "null") send(null);
             else if (createReply === "bad-success") send({ root: "wrong-root", change: body.name });
             else if (createReply === "bad-error") send({ error: null }, 500);
-            else if (createReply === "known-error") send({ error: { code: "BAD_GOAL", message: "Known rejection" } }, 400);
+            else if (createReply === "known-error") send({ error: { code: "BAD_CHANGE", message: "Known rejection" } }, 400);
             else if (unknownCreate) send({ error: { code: "CLI_TIMEOUT", message: "Write outcome unknown", outcome: "unknown" } }, 504);
             else send({ root, change: body.name });
           };
@@ -1872,7 +1872,7 @@ for (const [action, stage, workflows, surface, skill, instruction] of [
     "openspec-update-change",
     /Revise .* existing planning artefacts/,
   ],
-  ["explore", "planning", [], "card", "openspec-explore", /Investigate the goal/],
+  ["explore", "planning", [], "card", "openspec-explore", /Investigate the purpose/],
   ["verify", "complete", ["verify"], "card", "openspec-verify-change", null],
   [
     "new",
@@ -5895,7 +5895,6 @@ test("create dialogue keeps concise actions and a width-stable busy button", asy
         28,
       );
       await panel.getByLabel("Change name", { exact: true }).fill("created-change");
-      await panel.getByLabel("Goal").fill("Test creation");
       await page.evaluate(() => __holdCreate());
       await create.click();
       await create.locator(".oc-sdk-spinner-ring").waitFor();
@@ -5951,7 +5950,6 @@ test("numeric-prefixed names are created and shown on the board", async () => {
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("100-add-feature");
-    await panel.getByLabel("Goal").fill("Numeric change");
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "100-add-feature" }).waitFor();
     assert.equal(
@@ -5969,7 +5967,6 @@ test("safe creation refreshes the board and prompts stay unsent", async () => {
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("created-change");
-    await panel.getByLabel("Goal").fill("Test creation");
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "created-change" }).waitFor();
     assert.equal(
@@ -6381,7 +6378,7 @@ test("core planning, ready and complete actions prepare the appropriate unsent c
   });
 });
 
-test("propose preserves goals and conditionally records a missing goal without sending or writing", async () => {
+test("propose includes only recorded goals without sending or writing", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(url);
@@ -6405,11 +6402,6 @@ test("propose preserves goals and conditionally records a missing goal without s
           `Use your skill tool to load and invoke the openspec-propose skill for OpenSpec change "first-change" (existing change).${goal?.trim() ? `\nGoal: ${goal}` : ""}\n\n`,
         ),
       );
-      assert.match(draft, /Inspect .*status and current metadata/);
-      assert.match(draft, /Preserve existing decisions and any recorded goal/);
-      assert.match(draft, /only if current metadata has no goal/);
-      assert.match(draft, /establish and record a concise goal from existing change context/);
-      assert.match(draft, /Ask the user for clarification if the goal is unclear/);
       assert.match(
         draft,
         /complete missing planning artefacts using OpenSpec's artefact instructions/,
@@ -6493,7 +6485,6 @@ test("explore is a secondary, unsent goal-aware action only in Planning", async 
     await card.getByRole("button", { name: "explore" }).click();
     await page.waitForFunction(() => __draft().includes('"first-change".\n\n'));
     const draft = await page.evaluate(() => __draft());
-    assert.match(draft, /inspect existing context and ask the user to clarify it if necessary/);
     assert.doesNotMatch(draft, /Goal:|record a|write a/);
     assert.equal(
       await page.evaluate(
@@ -8100,7 +8091,6 @@ test("uncertain creation reconciles in the original context and opens the observ
     await page.evaluate(() => __unknownCreate());
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("observed-change");
-    await panel.getByLabel("Goal").fill("Observe before retry");
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "Inspect change" }).click();
     await panel.locator(".detail").getByRole("heading", { name: "observed-change" }).waitFor();
@@ -8135,7 +8125,6 @@ test("malformed creation replies reconcile instead of permitting another write",
       await page.evaluate((value) => __createReply(value), reply);
       await panel.getByRole("button", { name: "new change" }).click();
       await panel.getByLabel("Change name", { exact: true }).fill(`created-${reply}`);
-      await panel.getByLabel("Goal").fill("Retain uncertain write");
       await panel.getByRole("button", { name: "create", exact: true }).click();
       await panel.getByRole("button", { name: "Inspect change" }).waitFor({ timeout: 5000 });
       assert.equal(
@@ -8168,7 +8157,6 @@ test("failed creation reconciliation survives dismissal and closes safely across
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("uncertain-change");
-    await panel.getByLabel("Goal").fill("Retain the draft");
     await page.evaluate(() => {
       __createReply("null");
       __failNextListing();
@@ -8215,11 +8203,9 @@ test("creation no-match reconciliation permits only explicit resubmission and kn
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("not-created");
-    await panel.getByLabel("Goal").fill("A retained draft");
     await page.evaluate(() => __createReply("invalid-json", false));
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByText(/no matching change was found/).waitFor();
-    assert.equal(await panel.getByLabel("Goal").inputValue(), "A retained draft");
     assert.equal(
       await page.evaluate(() => __requests.filter((request) => request.path === "/create").length),
       1,
@@ -8233,11 +8219,9 @@ test("creation no-match reconciliation permits only explicit resubmission and kn
     );
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("known-rejected");
-    await panel.getByLabel("Goal").fill("Retain on rejection");
     await page.evaluate(() => __createReply("known-error", false));
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByText("Known rejection").waitFor();
-    assert.equal(await panel.getByLabel("Goal").inputValue(), "Retain on rejection");
     assert.equal(
       await panel.getByRole("button", { name: "create", exact: true }).isEnabled(),
       true,
@@ -8255,7 +8239,6 @@ test("uncertain creation still inspects while board summaries are pending", asyn
     await create.waitFor();
     await create.click();
     await panel.getByLabel("Change name", { exact: true }).fill("observed-while-loading");
-    await panel.getByLabel("Goal").fill("Confirm a pending write");
     await page.evaluate(() => __unknownCreate());
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "Inspect change" }).click();
@@ -8279,7 +8262,6 @@ test("uncertain creation checks its original project after the selected project 
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("observed-after-switch");
-    await panel.getByLabel("Goal").fill("Keep the original scope");
     await page.evaluate(() => {
       __unknownCreate();
       __holdCreate();

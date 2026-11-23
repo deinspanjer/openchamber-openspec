@@ -275,7 +275,8 @@ export function mountDetailView(
       }
       title.textContent = state.change.id;
       areas.update(state.change.affectedAreas);
-      goal.textContent = state.change.goal ?? "Goal unavailable";
+      goal.hidden = !state.change.goal;
+      goal.textContent = state.change.goal ?? "";
       stageBadge.update({
         label: stageLabel(state.change.stage),
         tone: tones[state.change.stage],

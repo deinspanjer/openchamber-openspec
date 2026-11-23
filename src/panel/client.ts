@@ -250,7 +250,7 @@ export function createClient(host: HostClient) {
         throw invalid();
       return value.content;
     },
-    create: async (scope: Scope, name: string, goal: string): Promise<void> => {
+    create: async (scope: Scope, name: string): Promise<void> => {
       let value: Record<string, unknown>;
       try {
         value = record(
@@ -259,7 +259,6 @@ export function createClient(host: HostClient) {
             expectedRoot: scope.root,
             expectedPlanning: scope.planning,
             name,
-            goal,
           }),
         );
       } catch (caught) {
