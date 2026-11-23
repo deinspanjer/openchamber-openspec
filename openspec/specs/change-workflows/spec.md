@@ -33,68 +33,6 @@ and Tasks; custom artefact identifiers SHALL remain supported.
 - **THEN** card and detail expose secondary `verify` calling `openspec-verify-change` independently
   of `archive`
 
-### Requirement: Propose completes the existing scaffold
-
-The `propose` prompt SHALL identify the existing change by name, include its recorded goal when
-present and explicitly call `openspec-propose` to finish planning that already-scaffolded change. It
-SHALL instruct the agent to inspect status, preserve existing decisions and complete missing
-planning artefacts using OpenSpec's artefact instructions. It SHALL ask the agent to inspect current
-metadata, preserve any existing goal and establish and record a concise goal only when none exists.
-The goal SHALL come from existing change context, with user clarification if that context is
-insufficient. The prompt SHALL prohibit creating another change or implementing code and ask the
-agent to explain a conflict if the skill requires new-change creation.
-
-#### Scenario: Propose an empty or partially planned change
-
-- **WHEN** the user chooses `propose` for an empty scaffold or one with an existing proposal
-- **THEN** the prepared prompt contains explicit existing-change guidance, preserves existing
-  decisions and asks for missing artefacts rather than a new change
-- **AND** the extension itself neither writes planning artefacts nor starts implementation
-
-#### Scenario: Propose a change without a recorded goal
-
-- **WHEN** the user chooses `propose` for a change without a recorded goal
-- **THEN** the prompt asks the agent to establish a concise goal from existing context and record it
-  if current metadata still has no goal
-- **AND** the prompt asks for user clarification if the goal is unclear, without supplying a
-  fabricated goal or a literal null value
-- **AND** composing the prompt does not write metadata
-
-#### Scenario: Preserve an existing or newly recorded goal
-
-- **WHEN** a change already has a goal, or an agent finds one recorded after the viewer last
-  refreshed
-- **THEN** the prompt directs the agent to preserve that goal
-- **AND** a goal included by the viewer retains its text, including line breaks
-
-### Requirement: Explore the goal from a Planning change card
-
-Every available Planning change card SHALL offer a compact secondary `explore` action alongside its
-Planning primary action. Other stages SHALL NOT offer `explore`. The prompt SHALL name the change,
-include the recorded goal when present and explicitly call `openspec-explore` to investigate the
-goal, relevant code, options and trade-offs. It SHALL request discussion without file changes or
-implementation. Missing goals SHALL NOT be invented: the prompt SHALL direct the agent to inspect
-existing context and clarify the goal if necessary.
-
-#### Scenario: Explore a stated goal
-
-- **WHEN** the user chooses `explore` on a Planning card
-- **THEN** an exploration prompt for that change and its stated goal is prepared
-- **AND** the stage, task counts and artefact counts remain unchanged
-
-#### Scenario: State changes after rendering
-
-- **WHEN** a Planning card becomes Ready, In Progress or Complete before its old action dispatches
-- **THEN** the stale Explore action SHALL NOT compose a prompt
-
-#### Scenario: Legacy change without a goal
-
-- **WHEN** the user explores or proposes a change with no recorded goal
-- **THEN** the prompt names the change and requests clarification from existing context rather than
-  supplying a fabricated goal or a literal null value
-- **AND** only Propose asks the agent to record a missing goal once established
-- **AND** Explore continues to request discussion without file changes
-
 ### Requirement: Workflow composition stays unsent and context-bound
 
 Current-chat workflow actions SHALL prepare editable, unsent prompts and SHALL replace the open
@@ -214,20 +152,20 @@ overwritten by late navigation or composition.
 ### Requirement: Create a change scaffold from the board
 
 The board SHALL offer `new change` when an OpenSpec context is resolved. It SHALL open a dialogue
-asking for a change name and a goal. Names SHALL be lowercase letters or digits separated by single
-hyphens, and the goal SHALL be required; invalid input SHALL be reported in the dialogue without a
-request. Creation SHALL make only the named scaffold with its recorded goal in the originating
-context. Success SHALL close the dialogue and reload the originating board. A draft or attempt from
-one context SHALL NOT be submitted in a different context.
+asking only for a change name. Names SHALL be lowercase letters or digits separated by single
+hyphens; invalid input SHALL be reported in the dialogue without a request. Creation SHALL make only
+the named scaffold, without goal metadata, in the originating context. Success SHALL close the
+dialogue and reload the originating board. A draft or attempt from one context SHALL NOT be
+submitted in a different context.
 
 #### Scenario: Create a valid change
 
-- **WHEN** the user submits a valid name and goal in the unchanged originating context
-- **THEN** one scaffold with that goal is created, the dialogue closes and the board reloads
+- **WHEN** the user submits a valid name in the unchanged originating context
+- **THEN** one scaffold without a goal is created, the dialogue closes and the board reloads
 
 #### Scenario: Reject invalid input
 
-- **WHEN** the name is not hyphen-separated lowercase letters or digits, or the goal is empty
+- **WHEN** the name is not hyphen-separated lowercase letters or digits
 - **THEN** the dialogue shows the error and no creation request occurs
 
 ### Requirement: Reconcile uncertain creation without blind retries
@@ -532,3 +470,54 @@ section's `ff` and `continue` chips; `propose` SHALL keep its prompt.
 
 - **WHEN** the core set is configured
 - **THEN** the Planning primary action is `propose`
+
+### Requirement: Propose finishes the existing scaffold
+
+The `propose` prompt SHALL name the existing change, include its recorded goal when present and
+explicitly call `openspec-propose` to finish planning it. It SHALL ask the agent to inspect status,
+preserve existing decisions and complete missing artefacts using OpenSpec's artefact instructions,
+and SHALL NOT ask it to establish, record or preserve a goal. It SHALL prohibit creating another
+change or implementing code, and ask the agent to explain any conflict with new-change creation.
+
+#### Scenario: Propose an empty or partially planned change
+
+- **WHEN** the user chooses `propose` for an empty scaffold or one with an existing proposal
+- **THEN** the prepared prompt contains explicit existing-change guidance, preserves existing
+  decisions and asks for missing artefacts rather than a new change
+- **AND** the extension itself neither writes planning artefacts nor starts implementation
+
+#### Scenario: Propose a change without a recorded goal
+
+- **WHEN** the user chooses `propose` for a change whose goal is absent or blank
+- **THEN** the prompt has no `Goal:` line and no instruction about goals
+- **AND** composing the prompt does not write metadata
+
+#### Scenario: Propose a change with a recorded goal
+
+- **WHEN** the user chooses `propose` for a change with a recorded goal
+- **THEN** the prompt includes `Goal:` followed by that goal's text, including line breaks
+
+### Requirement: Explore from a Planning change card
+
+Every available Planning change card SHALL offer a compact secondary `explore` action beside its
+Planning primary action; other stages SHALL NOT. The prompt SHALL name the change, include the
+recorded goal when present and explicitly call `openspec-explore` to investigate the change's
+purpose, relevant code, options and trade-offs. It SHALL request discussion without file changes or
+implementation, and SHALL NOT mention a goal when none is recorded.
+
+#### Scenario: Explore a change with a recorded goal
+
+- **WHEN** the user chooses `explore` on a Planning card whose change records a goal
+- **THEN** an exploration prompt for that change, including its goal, is prepared
+- **AND** the stage, task counts and artefact counts remain unchanged
+
+#### Scenario: State changes after rendering
+
+- **WHEN** a Planning card becomes Ready, In Progress or Complete before its old action dispatches
+- **THEN** the stale Explore action SHALL NOT compose a prompt
+
+#### Scenario: Explore a change without a recorded goal
+
+- **WHEN** the user explores a change whose goal is absent or blank
+- **THEN** the prompt names the change and has no `Goal:` line and no instruction about goals
+- **AND** Explore continues to request discussion without file changes

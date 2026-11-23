@@ -52,7 +52,7 @@ descriptions, and scaffold-only creation SHALL apply through shared planning as 
 #### Scenario: Create in shared planning
 
 - **WHEN** the user creates a valid named change through a stable shared-planning context
-- **THEN** one scaffold with its recorded goal is created in the shared active changes directory
+- **THEN** one scaffold is created in the shared active changes directory
 - **AND** the extension does not replace the link or create a second planning directory in the
   worktree
 
