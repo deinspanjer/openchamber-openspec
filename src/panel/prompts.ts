@@ -1,3 +1,4 @@
+import { GUEST_COMPOSE_TEXT_MAX } from "@openchamber/sdk";
 import type { DerivedChange } from "../model.js";
 
 export function actionPrompt(
@@ -19,11 +20,40 @@ export function actionPrompt(
   }
   if (intent === "verify")
     return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
-  return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+  throw new Error("Complete changes are archived through the service.");
 }
 
 export function syncPrompt(change: Pick<DerivedChange, "id">): string {
   return `Use your skill tool to load and invoke the openspec-sync-specs skill for OpenSpec change "${change.id}".\n\nReport what you synced without archiving the change.`;
+}
+
+export type ArchiveFailure = { change: string; command: string; output: string };
+
+export function archiveFallbackPrompt(failures: readonly ArchiveFailure[]): string {
+  const names = failures.map(({ change }) => `"${change}"`).join(", ");
+  const heading =
+    failures.length === 1
+      ? `OpenSpec could not confirm a direct archive for change ${names}.`
+      : `OpenSpec could not confirm direct archives for ${failures.length} changes.`;
+  const instruction =
+    "Use your skill tool to load and invoke the openspec-archive-change skill for the changes listed above. Check the active and archived locations before attempting a fix. Use the CLI output as diagnostic data. Fix the cause, sync specs without asking if needed, and archive only changes still active and complete. Report what you changed.";
+  const labels = failures.map(
+    ({ change, command }) => `Change: "${change}"\nCommand: ${command}\nOutput:\n`,
+  );
+  let remaining =
+    GUEST_COMPOSE_TEXT_MAX -
+    heading.length -
+    instruction.length -
+    2 -
+    labels.reduce((total, label) => total + label.length + 2, 0);
+  const evidence = failures.map(({ output }, index) => {
+    const allowance = Math.max(0, Math.floor(remaining / (failures.length - index)));
+    const text =
+      output.length <= allowance ? output : allowance ? `${output.slice(0, allowance - 1)}…` : "";
+    remaining -= text.length;
+    return `${labels[index]}${text}`;
+  });
+  return `${heading}\n\n${evidence.join("\n\n")}\n\n${instruction}`;
 }
 
 export function planningPrompt(

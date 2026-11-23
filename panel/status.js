@@ -2439,6 +2439,7 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Invalid planning identity.");
     return value;
   }
+  var archiveCommand = (change, skipSpecs) => `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
   var documentKey = (artifactId, selector) => JSON.stringify([artifactId, selector]);
   var ALL_WORKFLOWS = [
     "propose",
@@ -2471,6 +2472,22 @@ ${GUEST_UI_LOOK_CSS}`;
   function string(value) {
     if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
     return value;
+  }
+  function decodeArchiveResult(value) {
+    const result = record(value);
+    if (result.outcome === "archived" && Array.isArray(result.warnings))
+      return {
+        outcome: result.outcome,
+        archivedAs: string(result.archivedAs),
+        warnings: result.warnings.map(string)
+      };
+    if (result.outcome === "failed")
+      return {
+        outcome: result.outcome,
+        command: string(result.command),
+        output: string(result.output)
+      };
+    throw new Error("Invalid archive result.");
   }
   function count(value) {
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -2908,6 +2925,30 @@ ${GUEST_UI_LOOK_CSS}`;
             "unknown"
           );
       },
+      archive: async (scope, change, { skipSpecs = false } = {}) => {
+        try {
+          return decode2(
+            await request("/archive", {
+              directory: scope.directory,
+              expectedRoot: scope.root,
+              expectedPlanning: scope.planning,
+              change,
+              skipSpecs
+            }),
+            decodeArchiveResult
+          );
+        } catch (caught) {
+          if (caught instanceof ServiceRequestError && (caught.outcome === "unknown" || caught.code === "BAD_SERVICE_DATA") || caught instanceof HostRequestError && ["REQUEST_FAILED", "HOST_TIMEOUT", "RESPONSE_TOO_LARGE", "DISCONNECTED"].includes(
+            caught.code
+          ))
+            return {
+              outcome: "failed",
+              command: archiveCommand(change, skipSpecs),
+              output: caught.message
+            };
+          throw caught;
+        }
+      },
       delete: async (scope, change) => {
         let value;
         try {
@@ -3024,12 +3065,35 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     if (intent === "verify")
       return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
-    return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+    throw new Error("Complete changes are archived through the service.");
   }
   function syncPrompt(change) {
     return `Use your skill tool to load and invoke the openspec-sync-specs skill for OpenSpec change "${change.id}".
 
 Report what you synced without archiving the change.`;
+  }
+  function archiveFallbackPrompt(failures) {
+    const names2 = failures.map(({ change }) => `"${change}"`).join(", ");
+    const heading = failures.length === 1 ? `OpenSpec could not confirm a direct archive for change ${names2}.` : `OpenSpec could not confirm direct archives for ${failures.length} changes.`;
+    const instruction = "Use your skill tool to load and invoke the openspec-archive-change skill for the changes listed above. Check the active and archived locations before attempting a fix. Use the CLI output as diagnostic data. Fix the cause, sync specs without asking if needed, and archive only changes still active and complete. Report what you changed.";
+    const labels = failures.map(
+      ({ change, command }) => `Change: "${change}"
+Command: ${command}
+Output:
+`
+    );
+    let remaining = GUEST_COMPOSE_TEXT_MAX - heading.length - instruction.length - 2 - labels.reduce((total, label) => total + label.length + 2, 0);
+    const evidence = failures.map(({ output }, index) => {
+      const allowance = Math.max(0, Math.floor(remaining / (failures.length - index)));
+      const text = output.length <= allowance ? output : allowance ? `${output.slice(0, allowance - 1)}\u2026` : "";
+      remaining -= text.length;
+      return `${labels[index]}${text}`;
+    });
+    return `${heading}
+
+${evidence.join("\n\n")}
+
+${instruction}`;
   }
   function planningPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
@@ -3565,7 +3629,10 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       return false;
     }
   }
-  async function preparePrompt(change, text, current, session = sessionId, seed = seedTrackedChanges) {
+  async function preparePrompt(change, text, current, session = sessionId, seed = seedTrackedChanges, notice = {
+    kind: "success",
+    message: "Workflow prompt prepared in the open composer."
+  }) {
     if (!current()) return false;
     try {
       await host.compose({ text, mode: "replace" });
@@ -3576,10 +3643,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     if (!current()) return false;
     const saved = session && change && appendTrackedChange(host, session, change, current, seed);
     try {
-      await host.toast({
-        kind: "success",
-        message: "Workflow prompt prepared in the open composer."
-      });
+      await host.toast(notice);
     } catch (caught) {
       await showError(current, caught, "The workflow prompt could not be prepared.");
     }
@@ -3654,11 +3718,55 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     actions.className = "card-actions";
     let scope = null;
     let chips = null;
+    let archivePending = false;
+    async function archiveChange(target, changeId) {
+      if (archivePending) return;
+      const current = captureContext();
+      const capturedSession = sessionId;
+      archivePending = true;
+      primary2.update({ disabled: true });
+      try {
+        const result = await client.archive(target, changeId);
+        if (!current()) return;
+        if (result.outcome === "archived") {
+          read();
+          await host.toast({
+            kind: result.warnings.length ? "info" : "success",
+            message: result.warnings.length ? `Archived ${changeId} with warnings: ${result.warnings.join("; ")}` : `Archived ${changeId}.`
+          });
+        } else {
+          await preparePrompt(
+            changeId,
+            archiveFallbackPrompt([{ change: changeId, ...result }]),
+            current,
+            capturedSession,
+            seedTrackedChanges,
+            {
+              kind: "error",
+              message: `Couldn't confirm archive of ${changeId}. A recovery prompt is in the composer.`
+            }
+          );
+        }
+      } catch (caught) {
+        await showError(
+          current,
+          caught,
+          caught instanceof Error ? caught.message : `Couldn't archive ${changeId}.`
+        );
+      } finally {
+        archivePending = false;
+        if (current()) primary2.update({ disabled: false });
+      }
+    }
     const primary2 = mountButton(actions, {
       label: "",
       size: "xs",
       onClick: () => {
         if (!change || !chips) return;
+        if (chips.primary === "archive") {
+          if (scope) void archiveChange(scope, change.id);
+          return;
+        }
         const text = chips.primary === "ff" || chips.primary === "continue" ? planningPrompt(change, chips.primary) : actionPrompt(change, "primary");
         void preparePrompt(change.id, text, captureContext());
       }
@@ -3789,7 +3897,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         change = card.change;
         nameAnchor.update();
         chips = cardChips(change, workflows);
-        primary2.update({ label: chips.primary });
+        primary2.update({ label: chips.primary, disabled: archivePending });
         secondary2.update({ label: chips.secondary ?? "" });
         secondaryRoot.hidden = chips.secondary === null;
         syncRoot.hidden = !chips.sync;

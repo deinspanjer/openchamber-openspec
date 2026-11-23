@@ -99,6 +99,16 @@ function hostHtml(statusCase, pointer, popovers) {
       { id: "first-change", goal: "Read the proposal", completedTasks: 1, totalTasks: 2 },
       { id: "second-change", goal: "Review the specs", completedTasks: 0, totalTasks: 0 },
     ];
+    const archiveReplies = new Map();
+    const archiveQueue = [];
+    let holdArchive = false;
+    window.__archiveReply = (id, body, status = 200) => archiveReplies.set(id, { body, status });
+    window.__holdArchive = () => { holdArchive = true; };
+    window.__releaseArchive = () => {
+      holdArchive = false;
+      archiveQueue.splice(0).forEach((finish) => finish());
+    };
+    window.__addComplete = (id) => changes.push({ id, goal: null, completedTasks: 1, totalTasks: 1 });
     let pendingArchives = [];
     let holdPendingArchives = false;
     const pendingArchiveReads = [];
@@ -540,6 +550,15 @@ function hostHtml(statusCase, pointer, popovers) {
             else send({ root, change: body.name });
           };
           if (holdCreate) pendingCreates.push(finish); else finish();
+        }
+        else if (path === "/archive") {
+          const finish = () => {
+            const customReply = archiveReplies.get(body.change);
+            if (customReply) { send(customReply.body, customReply.status); return; }
+            window.__archiveForStatus(body.change);
+            send({ outcome: "archived", archivedAs: "2026-11-23-" + body.change, warnings: [] });
+          };
+          if (holdArchive) archiveQueue.push(finish); else finish();
         }
         else if (path === "/delete") {
           const finish = () => {
@@ -1770,7 +1789,6 @@ for (const [width, pointer, scenario] of [
 for (const [stage, chip, skill] of [
   ["progress", "apply", "openspec-apply-change"],
   ["planning", "propose", "openspec-propose"],
-  ["complete", "archive", "openspec-archive-change"],
   ["progress", "sync", "openspec-sync-specs"],
 ]) {
   test(`session section ${chip} prepares the unsent workflow draft and tracks its change`, async () => {
@@ -1838,6 +1856,107 @@ for (const [stage, chip, skill] of [
     });
   });
 }
+
+test("Work Status archive refreshes once without composing and prevents a repeat while pending", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=compact-complete`);
+    const section = page.frameLocator("iframe");
+    const archive = section.getByRole("button", { name: "archive", exact: true });
+    await page.evaluate(() => __holdArchive());
+    await archive.click();
+    await page.waitForFunction(() => __requests.some((r) => r.path === "/archive"), null, {
+      timeout: 2_000,
+    });
+    assert.equal(await archive.isDisabled(), true);
+    await archive.evaluate((node) => node.click());
+    await page.evaluate(() => __releaseArchive());
+    await section.getByText("Archived · not landed", { exact: true }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        archives: __requests.filter((r) => r.path === "/archive").length,
+        listings: __requests.filter((r) => r.path === "/changes").length,
+        archived: __requests.some(
+          (r) => r.path === "toast" && r.body.message === "Archived first-change.",
+        ),
+        draft: __draft(),
+      })),
+      { archives: 1, listings: 2, archived: true, draft: "Earlier draft" },
+    );
+  });
+});
+
+test("Work Status archive composes only for an attempted archive failure", async () => {
+  await withPanel(async (browser, url) => {
+    for (const refusal of [false, true]) {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=compact-complete`);
+      await page.evaluate((refusal) => {
+        if (refusal)
+          __archiveReply(
+            "first-change",
+            { error: { code: "CHANGE_INCOMPLETE", message: "Tasks are incomplete." } },
+            409,
+          );
+        else
+          __archiveReply("first-change", {
+            outcome: "failed",
+            command: "openspec archive first-change",
+            output: "Delta could not be applied",
+          });
+      }, refusal);
+      await page
+        .frameLocator("iframe")
+        .getByRole("button", { name: "archive", exact: true })
+        .click();
+      await page.waitForFunction(
+        () => __requests.some((r) => r.path === "toast" && r.body.kind === "error"),
+        null,
+        { timeout: 2_000 },
+      );
+      const draft = await page.evaluate(() => __draft());
+      if (refusal) assert.equal(draft, "Earlier draft");
+      else {
+        assert.match(draft, /openspec archive first-change/);
+        assert.match(draft, /Delta could not be applied/);
+        assert.match(draft, /openspec-archive-change/);
+      }
+      assert.equal(
+        await page.evaluate(() =>
+          __requests.some((r) => ["start-session", "prompt"].includes(r.path)),
+        ),
+        false,
+      );
+      await page.close();
+    }
+  });
+});
+
+test("Work Status archive discards feedback after switching sessions", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=compact-complete`);
+    await page.evaluate(() => __holdArchive());
+    await page.frameLocator("iframe").getByRole("button", { name: "archive", exact: true }).click();
+    await page.waitForFunction(() => __requests.some((r) => r.path === "/archive"), null, {
+      timeout: 2_000,
+    });
+    await page.evaluate(() => __session("replacement-session"));
+    await page.waitForFunction(() => __completed.filter((p) => p === "/changes").length === 2);
+    const afterSwitch = await page.evaluate(() => __requests.length);
+    await page.evaluate(() => __releaseArchive());
+    await page.waitForFunction(() => __completed.includes("/archive"));
+    await page.waitForTimeout(80);
+    assert.deepEqual(
+      await page.evaluate(
+        (at) =>
+          __requests.slice(at).filter((r) => ["/changes", "toast", "compose"].includes(r.path)),
+        afterSwitch,
+      ),
+      [],
+    );
+  });
+});
 
 for (const [action, stage, workflows, surface, skill, instruction] of [
   [
@@ -4661,7 +4780,10 @@ test("archive all uses secondary controls and requires cancellable confirmation"
         .evaluate((node) => node === document.activeElement),
       true,
     );
-    assert.match(await dialog.textContent(), /new session.*sends a prompt/s);
+    assert.match(
+      await dialog.textContent(),
+      /syncing specs first.*If any archive fails.*new session/s,
+    );
     assert.equal(
       await page.evaluate(
         () => __requests.filter((r) => ["start-session", "prompt"].includes(r.path)).length,
@@ -4702,80 +4824,125 @@ async function confirmArchive(panel) {
     .click();
 }
 
-test("archive all submits one completed-only prompt and preserves rail/page fresh-chat drafts", async () => {
+test("board archive refreshes on success and prepares a draft only for a normal archive failure", async () => {
   await withPanel(async (browser, url) => {
-    for (const surface of ["panel", "page"]) {
+    for (const mode of ["card-success", "card-failure", "detail-skip", "detail-skip-failure"]) {
       const page = await browser.newPage();
       const panel = await readyArchive(page, url);
-      await page.evaluate((surface) => {
-        __surface(surface);
-        __session(null);
-      }, surface);
-      const before = await page.evaluate(() => __requests.length);
-      await confirmArchive(panel);
-      await page.waitForFunction(() => __requests.some((r) => r.path === "start-session"));
-      assert.equal(
-        await page.evaluate(() => __requests.filter((r) => r.path === "start-session").length),
-        1,
+      const card = panel.locator(".change-card").filter({ hasText: "first-change" });
+      const skip = mode.startsWith("detail");
+      const fail = mode.endsWith("failure");
+      if (fail)
+        await page.evaluate(() =>
+          __archiveReply("first-change", {
+            outcome: "failed",
+            command: "openspec archive first-change",
+            output: "Delta mismatch",
+          }),
+        );
+      const listings = await page.evaluate(
+        () => __requests.filter((r) => r.path === "/changes").length,
       );
-      const requests = await page.evaluate((before) => __requests.slice(before), before);
-      assert.deepEqual(
-        requests.filter((r) => r.path !== "toast").map((r) => r.path),
-        ["start-session"],
-      );
-      const launch = requests.find((r) => r.path === "start-session");
-      assert.equal(launch.directory, directory);
-      assert.equal(launch.body.navigation, "preserve");
-      assert.equal(launch.body.worktree, undefined);
-      assert.equal(launch.body.projectId, undefined);
-      assert.equal(launch.body.providerId, "openspec-board");
-      assert.deepEqual(launch.body.data, { kind: "archive-all" });
-      assert.ok(launch.body.text.length < 16000);
-      assert.equal(
-        launch.body.text,
-        `Archive all completed OpenSpec changes in this session's project/worktree.
-
-Run openspec list --json for a fresh active-change listing and resolve its OpenSpec planning context, honouring declared stores and the selected CLI root. Inspect each change with openspec status --change "<name>" --json and current CLI-reported task counts. Only changes with every applicable planning artefact done or explicitly skipped, a positive task total, and all tasks complete qualify. Skip unfinished, zero-task, unavailable or unreadable changes. Never use an incomplete-work warning override or infer successful verification from a Complete card or task counts.
-
-Use your skill tool to load and invoke the openspec-archive-change skill for each qualifying named change sequentially. Recheck completion before each archive and assess spec sync against the current main specs after any preceding archive. Preserve the skill's prerequisites, sync assessment, user choices and blockers; ask its required questions rather than treating this bulk request as permission to bypass them. Do not implement unfinished work or automatically resolve blockers.
-
-Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`,
-      );
-      assert.equal(await page.evaluate(() => __draft()), "Earlier draft");
-      assert.equal(await panel.locator(".board-shell").isVisible(), true);
-      await page.waitForFunction(() => __requests.some((r) => r.path === "toast"));
-      assert.match(
-        await page.evaluate(() => __requests.find((r) => r.path === "toast").body.message),
-        /submitted/,
-      );
+      if (skip) {
+        await card.getByRole("button", { name: "first-change", exact: true }).click();
+        await panel.getByRole("button", { name: "More archive actions" }).click({ timeout: 2_000 });
+        await panel.getByRole("menuitem", { name: "archive without sync" }).click();
+      } else await card.getByRole("button", { name: "archive", exact: true }).click();
+      await page.waitForFunction(() => __requests.some((r) => r.path === "/archive"), null, {
+        timeout: 2_000,
+      });
+      const body = await page.evaluate(() => __requests.find((r) => r.path === "/archive").body);
+      assert.equal(body.skipSpecs, skip);
+      if (!fail) {
+        await card.waitFor({ state: "hidden" });
+        assert.equal(
+          await page.evaluate(() => __requests.filter((r) => r.path === "/changes").length),
+          listings + 1,
+        );
+      } else
+        await page.waitForFunction(() =>
+          __requests.some((r) => r.path === "toast" && r.body.kind === "error"),
+        );
+      const draft = await page.evaluate(() => __draft());
+      if (fail && !skip) assert.match(draft, /Delta mismatch[\s\S]*openspec-archive-change/);
+      else assert.equal(draft, "Earlier draft");
       await page.close();
     }
   });
 });
 
-test("archive all submits the selection-preserving bulk prompt when configured", async () => {
+test("archive all directly archives complete changes and launches only for failed names", async () => {
+  await withPanel(async (browser, url) => {
+    for (const mixed of [false, true]) {
+      const page = await browser.newPage();
+      const panel = await readyArchive(page, url);
+      await page.evaluate((mixed) => {
+        __addComplete("third-change");
+        __addComplete("fourth-change");
+        if (mixed)
+          __archiveReply("third-change", {
+            outcome: "failed",
+            command: "openspec archive third-change",
+            output: "Delta mismatch",
+          });
+      }, mixed);
+      await panel.getByRole("button", { name: "refresh", exact: true }).click();
+      await panel.getByRole("heading", { name: "Complete 3" }).waitFor();
+      const start = await page.evaluate(() => __requests.length);
+      await confirmArchive(panel);
+      await page.waitForFunction(
+        () => __requests.filter((r) => r.path === "/archive").length === 3,
+        null,
+        { timeout: 2_000 },
+      );
+      const summary = mixed ? "Archived 2 of 3 changes." : "Archived 3 of 3 changes.";
+      await page.waitForFunction(
+        (summary) => __requests.some((r) => r.path === "toast" && r.body.message.includes(summary)),
+        summary,
+      );
+      const requests = await page.evaluate((start) => __requests.slice(start), start);
+      assert.equal(requests.filter((r) => r.path === "/changes").length, 1);
+      const launches = requests.filter((r) => r.path === "start-session");
+      assert.equal(launches.length, mixed ? 1 : 0);
+      if (mixed) {
+        assert.match(launches[0].body.text, /third-change[\s\S]*Delta mismatch/);
+        assert.doesNotMatch(launches[0].body.text, /first-change|fourth-change/);
+        assert.equal(launches[0].body.navigation, "preserve");
+        assert.deepEqual(launches[0].body.data, { kind: "archive-all" });
+      }
+      assert.equal(await page.evaluate(() => __draft()), "Earlier draft");
+      await page.close();
+    }
+  });
+});
+
+test("archive all does not continue or launch a fallback after a project switch", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
-    await page.goto(url);
-    const panel = page.frameLocator("iframe");
-    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    const panel = await readyArchive(page, url);
     await page.evaluate(() => {
-      __workflows(["bulk-archive"]);
-      __edit("Completed");
+      __addComplete("third-change");
+      __addComplete("fourth-change");
+      __holdArchive();
     });
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("heading", { name: "Complete 3" }).waitFor();
     await confirmArchive(panel);
-    await page.waitForFunction(() => __requests.some((r) => r.path === "start-session"));
-    const prompt = await page.evaluate(
-      () => __requests.find((r) => r.path === "start-session").body.text,
-    );
-    assert.equal(
-      prompt,
-      `Archive all completed OpenSpec changes in this session's project/worktree.
-
-Use your skill tool to load and invoke the openspec-bulk-archive-change skill. Before its selection step, run openspec list --json and openspec status --change "<name>" --json for each change. A change qualifies only when every applicable planning artefact is done or explicitly skipped and it has a positive task total with all tasks complete. When the skill asks which changes to archive, offer only qualifying changes and recommend all of them. Skip any selected change that does not qualify; never use an incomplete-work override or infer verification from task counts.
-
-Preserve the skill's spec-sync assessment, user choices and blockers. Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`,
+    await page.waitForFunction(() => __requests.some((r) => r.path === "/archive"), null, {
+      timeout: 2_000,
+    });
+    await page.evaluate(() => __directory("/tmp/other-project"));
+    await page.waitForFunction(() => __requests.filter((r) => r.path === "/changes").length >= 4);
+    await page.evaluate(() => __releaseArchive());
+    await page.waitForFunction(() => __completed.includes("/archive"));
+    await page.waitForTimeout(80);
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests
+          .filter((r) => ["/archive", "toast", "start-session"].includes(r.path))
+          .map((r) => r.path),
+      ),
+      ["/archive"],
     );
   });
 });
@@ -4813,14 +4980,22 @@ test("archive all holds one launch and discards late feedback without refresh or
     for (const replacement of ["session", "directory", "root", "dispose"]) {
       const page = await browser.newPage();
       const panel = await readyArchive(page, url);
-      await page.evaluate(() => __holdStart());
+      await page.evaluate(() => {
+        __archiveReply("first-change", {
+          outcome: "failed",
+          command: "openspec archive first-change",
+          output: "Archive failed",
+        });
+        __holdStart();
+      });
       await confirmArchive(panel);
       const archive = panel.getByRole("button", { name: "archive all", exact: true });
       assert.equal(await archive.isDisabled(), true);
+      await page.waitForFunction(() => __requests.some((r) => r.path === "start-session"));
+      await page.waitForFunction(() => __completed.filter((p) => p === "/summaries").length >= 3);
       const reads = await page.evaluate(
         () => __requests.filter((r) => r.path.startsWith("/")).length,
       );
-      await page.waitForFunction(() => __requests.some((r) => r.path === "start-session"));
       await archive.evaluate((node) => node.click());
       assert.equal(
         await page.evaluate(() => __requests.filter((r) => r.path === "start-session").length),
@@ -4898,6 +5073,11 @@ test("archive all reports partial and uncertain launches without automatic retry
       const page = await browser.newPage();
       const panel = await readyArchive(page, url);
       await page.evaluate((entry) => {
+        __archiveReply("first-change", {
+          outcome: "failed",
+          command: "openspec archive first-change",
+          output: "Archive failed",
+        });
         if (entry.error) __startError(entry.error);
         else
           __startResult(
@@ -6320,7 +6500,7 @@ test("canonical-root replacement discards late composer success and failure with
   });
 });
 
-test("core planning, ready and complete actions prepare the appropriate unsent composer text", async () => {
+test("core planning and ready actions prepare the appropriate unsent composer text", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(url);
@@ -6339,20 +6519,6 @@ test("core planning, ready and complete actions prepare the appropriate unsent c
     );
     assert.match(await page.evaluate(() => __draft()), /Complete all remaining tasks/);
     assert.doesNotMatch(await page.evaluate(() => __draft()), /tasks complete\./);
-    assert.doesNotMatch(await page.evaluate(() => __draft()), /\/tmp\/fixture-project/);
-    await page.evaluate(() => __edit("new text"));
-    await panel.getByRole("button", { name: "refresh", exact: true }).click();
-    await panel.getByRole("heading", { name: "Complete 1" }).waitFor();
-    await panel
-      .locator(".change-card")
-      .filter({ hasText: "first-change" })
-      .getByRole("button", { name: "archive", exact: true })
-      .click();
-    await page.waitForFunction(() => __draft().includes("openspec-archive-change"));
-    assert.equal(
-      await page.evaluate(() => __draft()),
-      'Use your skill tool to load and invoke the openspec-archive-change skill for OpenSpec change "first-change".',
-    );
     assert.doesNotMatch(await page.evaluate(() => __draft()), /\/tmp\/fixture-project/);
     await page.evaluate(() => __readiness("pending"));
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
@@ -7198,20 +7364,13 @@ test("completed board and detail offer Verify only when configured", async () =>
     });
     assert.equal(colours.secondary, "rgb(32, 38, 42)");
     assert.notEqual(colours.primary, colours.secondary);
-    await card.getByRole("button", { name: "archive", exact: true }).click();
-    await page.waitForFunction(() => __draft().includes("openspec-archive-change"));
-    assert.equal(
-      await page.evaluate(() => __draft()),
-      'Use your skill tool to load and invoke the openspec-archive-change skill for OpenSpec change "first-change".',
-    );
-    assert.doesNotMatch(await page.evaluate(() => __draft()), /\/tmp\/fixture-project/);
     assert.equal(await card.getByRole("button", { name: "verify" }).isEnabled(), true);
     assert.equal(await panel.getByRole("heading", { name: "Complete 1" }).count(), 1);
     await card.getByRole("button", { name: "first-change" }).click();
     assert.equal(
       await panel
         .locator(".detail-footer")
-        .getByRole("button", { name: "archive" })
+        .getByRole("button", { name: "archive", exact: true })
         .getAttribute("data-variant"),
       "default",
     );
@@ -7246,8 +7405,6 @@ test("completed board and detail offer Verify only when configured", async () =>
       await panel.getByRole("button", { name: "archive", exact: true }).isEnabled(),
       true,
     );
-    await panel.getByRole("button", { name: "archive", exact: true }).click();
-    await page.waitForFunction(() => __requests.filter((r) => r.path === "compose").length === 3);
     assert.deepEqual(
       await page.evaluate(() =>
         __requests.filter((r) => ["prompt", "start-session", "/archive"].includes(r.path)),

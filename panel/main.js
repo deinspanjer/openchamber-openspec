@@ -2627,6 +2627,7 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Invalid planning identity.");
     return value;
   }
+  var archiveCommand = (change, skipSpecs) => `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
   var documentKey = (artifactId, selector) => JSON.stringify([artifactId, selector]);
   var ALL_WORKFLOWS = [
     "propose",
@@ -2659,6 +2660,22 @@ ${GUEST_UI_LOOK_CSS}`;
   function string(value) {
     if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
     return value;
+  }
+  function decodeArchiveResult(value) {
+    const result = record(value);
+    if (result.outcome === "archived" && Array.isArray(result.warnings))
+      return {
+        outcome: result.outcome,
+        archivedAs: string(result.archivedAs),
+        warnings: result.warnings.map(string)
+      };
+    if (result.outcome === "failed")
+      return {
+        outcome: result.outcome,
+        command: string(result.command),
+        output: string(result.output)
+      };
+    throw new Error("Invalid archive result.");
   }
   function count(value) {
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -3072,6 +3089,30 @@ ${GUEST_UI_LOOK_CSS}`;
             "unknown"
           );
       },
+      archive: async (scope, change, { skipSpecs = false } = {}) => {
+        try {
+          return decode(
+            await request("/archive", {
+              directory: scope.directory,
+              expectedRoot: scope.root,
+              expectedPlanning: scope.planning,
+              change,
+              skipSpecs
+            }),
+            decodeArchiveResult
+          );
+        } catch (caught) {
+          if (caught instanceof ServiceRequestError && (caught.outcome === "unknown" || caught.code === "BAD_SERVICE_DATA") || caught instanceof HostRequestError && ["REQUEST_FAILED", "HOST_TIMEOUT", "RESPONSE_TOO_LARGE", "DISCONNECTED"].includes(
+            caught.code
+          ))
+            return {
+              outcome: "failed",
+              command: archiveCommand(change, skipSpecs),
+              output: caught.message
+            };
+          throw caught;
+        }
+      },
       delete: async (scope, change) => {
         let value;
         try {
@@ -3251,9 +3292,11 @@ ${GUEST_UI_LOOK_CSS}`;
   var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
 
   // src/panel/primary-action.ts
-  function mountPrimaryAction(root2) {
+  function mountPrimaryAction(root2, allowSkipSpecs = false) {
     const buttonRoot = document.createElement("span");
     const menuRoot = document.createElement("span");
+    buttonRoot.className = "primary-action-button";
+    menuRoot.className = "primary-action-menu";
     root2.append(buttonRoot, menuRoot);
     let state = null;
     let opened = null;
@@ -3272,9 +3315,9 @@ ${GUEST_UI_LOOK_CSS}`;
       onSelect: (id) => {
         const captured = opened;
         opened = null;
-        if (!captured || captured.disabled || state?.disabled || captured.id !== state?.id || captured.stage !== state?.stage || id === "worktree" && state?.pending)
+        if (!captured || captured.disabled || state?.disabled || captured.id !== state?.id || captured.stage !== state?.stage || (id === "worktree" || id === "skip-specs") && state?.pending)
           return;
-        captured.action(id === "worktree" ? "worktree" : captured.workflow);
+        captured.action(id === "worktree" || id === "skip-specs" ? id : captured.workflow);
       }
     });
     const trigger = menuRoot.querySelector("button");
@@ -3286,16 +3329,27 @@ ${GUEST_UI_LOOK_CSS}`;
       update(next) {
         state = next;
         const apply3 = next.stage === "ready" || next.stage === "progress";
+        const complete = next.stage === "complete";
+        const splitArchive = complete && allowSkipSpecs;
+        const disabled = next.disabled || complete && !!next.pending;
         buttonRoot.hidden = apply3;
-        menuRoot.hidden = !apply3;
-        button2.update({ label: next.workflow, disabled: next.disabled });
+        menuRoot.hidden = !apply3 && !splitArchive;
+        root2.classList.toggle("archive-split", splitArchive);
+        button2.update({ label: next.workflow, disabled });
         menu.update({
-          items: [
+          label: splitArchive ? "\u2304" : "apply",
+          items: splitArchive ? [{ id: "skip-specs", label: "archive without sync", disabled }] : [
             { id: "current", label: "Prepare in current chat", disabled: next.disabled },
-            { id: "worktree", label: "Run in new worktree", disabled: next.disabled || next.pending }
+            {
+              id: "worktree",
+              label: "Run in new worktree",
+              disabled: next.disabled || next.pending
+            }
           ]
         });
-        trigger.disabled = next.disabled;
+        if (splitArchive) trigger.setAttribute("aria-label", "More archive actions");
+        else trigger.removeAttribute("aria-label");
+        trigger.disabled = disabled;
       },
       dispose() {
         trigger.removeEventListener("click", capture, true);
@@ -7558,7 +7612,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const footer = document.createElement("footer");
     footer.className = "detail-footer";
     const actionRoot = document.createElement("span");
-    const action = mountPrimaryAction(actionRoot);
+    const action = mountPrimaryAction(actionRoot, true);
     const verifyRoot = document.createElement("span");
     const verify = mountButton(verifyRoot, {
       label: "verify",
@@ -8237,7 +8291,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     dialog.setAttribute("aria-labelledby", heading.id);
     const description = document.createElement("p");
     description.id = "archive-all-description";
-    description.textContent = "This creates a new session and sends a prompt to archive completed changes in this project. Unfinished changes will be skipped. The board stays open; use refresh to see updates.";
+    description.textContent = "This archives each completed change with the OpenSpec CLI, syncing specs first. Unfinished changes are skipped. If any archive fails, a new session opens with a recovery prompt.";
     dialog.setAttribute("aria-describedby", description.id);
     const actions2 = document.createElement("div");
     actions2.className = "archive-actions";
@@ -8293,23 +8347,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     };
   }
 
-  // src/panel/archive-prompt.ts
-  var sequentialPrompt = `Archive all completed OpenSpec changes in this session's project/worktree.
-
-Run openspec list --json for a fresh active-change listing and resolve its OpenSpec planning context, honouring declared stores and the selected CLI root. Inspect each change with openspec status --change "<name>" --json and current CLI-reported task counts. Only changes with every applicable planning artefact done or explicitly skipped, a positive task total, and all tasks complete qualify. Skip unfinished, zero-task, unavailable or unreadable changes. Never use an incomplete-work warning override or infer successful verification from a Complete card or task counts.
-
-Use your skill tool to load and invoke the openspec-archive-change skill for each qualifying named change sequentially. Recheck completion before each archive and assess spec sync against the current main specs after any preceding archive. Preserve the skill's prerequisites, sync assessment, user choices and blockers; ask its required questions rather than treating this bulk request as permission to bypass them. Do not implement unfinished work or automatically resolve blockers.
-
-Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`;
-  function archiveAllPrompt(workflows) {
-    if (!workflows.has("bulk-archive")) return sequentialPrompt;
-    return `Archive all completed OpenSpec changes in this session's project/worktree.
-
-Use your skill tool to load and invoke the openspec-bulk-archive-change skill. Before its selection step, run openspec list --json and openspec status --change "<name>" --json for each change. A change qualifies only when every applicable planning artefact is done or explicitly skipped and it has a positive task total with all tasks complete. When the skill asks which changes to archive, offer only qualifying changes and recommend all of them. Skip any selected change that does not qualify; never use an incomplete-work override or infer verification from task counts.
-
-Preserve the skill's spec-sync assessment, user choices and blockers. Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`;
-  }
-
   // src/panel/prompts.ts
   function actionPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
@@ -8332,7 +8369,30 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     if (intent === "verify")
       return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
-    return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+    throw new Error("Complete changes are archived through the service.");
+  }
+  function archiveFallbackPrompt(failures) {
+    const names2 = failures.map(({ change }) => `"${change}"`).join(", ");
+    const heading = failures.length === 1 ? `OpenSpec could not confirm a direct archive for change ${names2}.` : `OpenSpec could not confirm direct archives for ${failures.length} changes.`;
+    const instruction = "Use your skill tool to load and invoke the openspec-archive-change skill for the changes listed above. Check the active and archived locations before attempting a fix. Use the CLI output as diagnostic data. Fix the cause, sync specs without asking if needed, and archive only changes still active and complete. Report what you changed.";
+    const labels = failures.map(
+      ({ change, command }) => `Change: "${change}"
+Command: ${command}
+Output:
+`
+    );
+    let remaining = GUEST_COMPOSE_TEXT_MAX - heading.length - instruction.length - 2 - labels.reduce((total, label) => total + label.length + 2, 0);
+    const evidence = failures.map(({ output }, index) => {
+      const allowance = Math.max(0, Math.floor(remaining / (failures.length - index)));
+      const text2 = output.length <= allowance ? output : allowance ? `${output.slice(0, allowance - 1)}\u2026` : "";
+      remaining -= text2.length;
+      return `${labels[index]}${text2}`;
+    });
+    return `${heading}
+
+${evidence.join("\n\n")}
+
+${instruction}`;
   }
   function planningPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
@@ -8553,6 +8613,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     let readGeneration = 0;
     let boardScroll = 0;
     let archivePending = false;
+    const archiving = /* @__PURE__ */ new Set();
     const worktreePending = /* @__PURE__ */ new Set();
     const worktreeKey = (scope2, id) => JSON.stringify([scope2.directory, scope2.root, scope2.planning, id]);
     let disposed = false;
@@ -8825,13 +8886,31 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         return;
       }
       const expectedSession = sessionId;
-      const currentContext = () => scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      const currentContext = () => !disposed && scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      if (intent === "archive" || intent === "skip-specs") {
+        if (current.stage !== "complete") return;
+        await archiveOne(
+          change.id,
+          captured,
+          currentContext,
+          expectedSession,
+          intent === "skip-specs"
+        );
+        return;
+      }
+      const text2 = intent === "ff" || intent === "continue" ? planningPrompt(change, intent) : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+      await composeChange(change.id, text2, captured, expectedSession, currentContext);
+    }
+    async function composeChange(change, text2, captured, expectedSession, currentContext, notice = {
+      kind: "success",
+      message: "Workflow prompt prepared in the open composer."
+    }) {
       try {
-        const text2 = intent === "ff" || intent === "continue" ? planningPrompt(change, intent) : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+        if (!currentContext()) return;
         await host2.compose({ text: text2, mode: "replace" });
         if (!currentContext()) return;
         if (expectedSession !== null)
-          void appendTrackedChange(host2, expectedSession, change.id, currentContext, async () => {
+          void appendTrackedChange(host2, expectedSession, change, currentContext, async () => {
             const project = await findProject(host2, captured.directory);
             if (!project || !currentContext()) return [];
             return resolveSessionChanges(
@@ -8841,10 +8920,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
               listedIds
             );
           });
-        await host2.toast({
-          kind: "success",
-          message: "Workflow prompt prepared in the open composer."
-        });
+        await host2.toast(notice);
       } catch (caught) {
         if (!currentContext()) return;
         await host2.toast({
@@ -8852,6 +8928,63 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           message: caught instanceof HostRequestError ? caught.message : "The workflow prompt could not be prepared."
         });
       }
+    }
+    async function archiveOne(change, captured, current, expectedSession, skipSpecs) {
+      const key = worktreeKey(captured, change);
+      if (!current() || loading || archivePending || archiving.has(key)) return;
+      archiving.add(key);
+      render();
+      try {
+        const result = await client.archive(captured, change, { skipSpecs });
+        if (!current()) return;
+        if (result.outcome === "archived") {
+          if (selectedChange?.id === change) closeDetail();
+          reloadAfterArchive();
+          await host2.toast({
+            kind: result.warnings.length ? "info" : "success",
+            message: result.warnings.length ? `Archived ${change} with warnings: ${result.warnings.join("; ")}` : `Archived ${change}.`
+          });
+        } else if (skipSpecs) {
+          await host2.toast({
+            kind: "error",
+            message: `Couldn't confirm archive of ${change} without sync: ${archiveDiagnostic(result.output)}`
+          });
+        } else {
+          await composeChange(
+            change,
+            archiveFallbackPrompt([{ change, ...result }]),
+            captured,
+            expectedSession,
+            current,
+            {
+              kind: "error",
+              message: `Couldn't confirm archive of ${change}. A recovery prompt is in the composer.`
+            }
+          );
+        }
+      } catch (caught) {
+        if (current())
+          await host2.toast({
+            kind: "error",
+            message: caught instanceof Error ? caught.message : `Couldn't archive ${change}.`
+          });
+      } finally {
+        archiving.delete(key);
+        if (!disposed) render();
+      }
+    }
+    function archiveDiagnostic(output) {
+      try {
+        const issue = JSON.parse(output)?.status?.[0]?.message;
+        if (typeof issue === "string") return issue;
+      } catch {
+      }
+      return output;
+    }
+    function reloadAfterArchive() {
+      resources.refresh();
+      clearBrowse(false);
+      loadBoard({ refresh: true, reconcile: true });
     }
     async function runInWorktree(change, captured, originatingEpoch) {
       const key = worktreeKey(captured, change.id);
@@ -9136,38 +9269,64 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       }
     }
     function canArchive() {
-      return !!scope && !loading && !archivePending && changes.some((change) => change.stage === "complete" && !unavailableIds.has(change.id));
+      return !!scope && !loading && !archivePending && !archiving.size && changes.some((change) => change.stage === "complete" && !unavailableIds.has(change.id));
     }
     async function startArchive() {
-      if (!canArchive()) return;
       const captured = scope;
+      if (!captured || !canArchive()) return;
+      const targets = changes.filter((change) => change.stage === "complete" && !unavailableIds.has(change.id)).map(({ id }) => id);
       const originatingEpoch = epoch;
       const expectedSession = sessionId;
-      const current = () => scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      const current = () => !disposed && scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
       archivePending = true;
       render();
+      const failed = [];
+      const notes = [];
+      let archived = 0;
+      const summary = () => `Archived ${archived} of ${targets.length} changes.${notes.length ? ` ${notes.join(" ")}` : ""}`;
       try {
+        for (const change of targets) {
+          if (!current()) return;
+          try {
+            const result2 = await client.archive(captured, change);
+            if (result2.outcome === "failed") failed.push({ change, ...result2 });
+            else {
+              archived++;
+              if (result2.warnings.length) notes.push(`${change}: ${result2.warnings.join("; ")}`);
+            }
+          } catch (caught) {
+            notes.push(
+              `Skipped ${change}: ${caught instanceof Error ? caught.message : "Archive refused."}`
+            );
+          }
+        }
+        if (!current()) return;
+        reloadAfterArchive();
+        if (!failed.length) {
+          await host2.toast({ kind: notes.length ? "info" : "success", message: summary() });
+          return;
+        }
         const result = await host2.startSession({
           providerId: "openspec-board",
           id: "archive-all",
           data: { kind: "archive-all" },
-          title: "Archive completed OpenSpec changes",
+          title: "Recover OpenSpec archives",
           url: "https://openspec.dev/docs/quickstart",
           navigation: "preserve",
-          text: archiveAllPrompt(workflows)
+          text: archiveFallbackPrompt(failed)
         });
         if (!current()) return;
         if (result.sessionId && result.sent === "sent") {
           await host2.toast({
             kind: result.linked !== false ? "success" : "info",
-            message: result.linked !== false ? `Archive prompt submitted in session ${result.sessionId}. Use refresh to see updates.` : `Archive prompt submitted in session ${result.sessionId}, but its workflow reference could not be saved.`
+            message: result.linked !== false ? `${summary()} Recovery prompt submitted in session ${result.sessionId}.` : `${summary()} Recovery prompt submitted in session ${result.sessionId}, but its workflow reference could not be saved.`
           });
         } else {
           const reason = result.sent === "no-model" ? "No model was available." : `Submission ${result.sent}.`;
           await host2.toast({
             kind: "error",
             persistent: true,
-            message: result.sessionId ? `Session ${result.sessionId} exists, but the archive prompt was not submitted successfully. ${reason} Inspect this session before starting again.${result.linked === false ? " Its workflow reference was not saved." : ""}` : "The archive session could not be created. Inspect sessions before starting again."
+            message: `${summary()} ${result.sessionId ? `Session ${result.sessionId} exists, but the archive prompt was not submitted successfully. ${reason} Inspect this session before starting again.${result.linked === false ? " Its workflow reference was not saved." : ""}` : "The archive session could not be created. Inspect sessions before starting again."}`
           });
         }
       } catch (caught) {
@@ -9178,7 +9337,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         await host2.toast({
           kind: "error",
           persistent: !knownRefusal,
-          message: knownRefusal ? `Archive launch failed: ${caught.message}` : "Archive launch outcome is uncertain. A session or submitted prompt may already exist. Inspect sessions before starting again; this launch will not be retried automatically."
+          message: `${summary()} ${knownRefusal ? `Archive launch failed: ${caught.message}` : "Archive launch outcome is uncertain. A session or submitted prompt may already exist. Inspect sessions before starting again; this launch will not be retried automatically."}`
         });
       } finally {
         archivePending = false;
@@ -9375,7 +9534,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           change,
           stale: staleIds.has(change.id),
           unavailable: unavailableIds.has(change.id),
-          pending: !!captured && worktreePending.has(worktreeKey(captured, change.id)),
+          pending: !!captured && (change.stage === "complete" ? loading || archivePending || archiving.has(worktreeKey(captured, change.id)) : worktreePending.has(worktreeKey(captured, change.id))),
           open: () => openDetail(
             changes.find((item) => item.id === change.id) ?? change,
             captured,
@@ -9401,7 +9560,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           files,
           tasks: taskState,
           unavailable: unavailableIds.has(selectedChange.id),
-          pending: !!captured && worktreePending.has(worktreeKey(captured, selectedChange.id)),
+          pending: !!captured && (selectedChange.stage === "complete" ? loading || archivePending || archiving.has(worktreeKey(captured, selectedChange.id)) : worktreePending.has(worktreeKey(captured, selectedChange.id))),
           loading,
           refreshError: errorMessage ?? failures.find((item) => item.id === selectedChange?.id)?.error ?? null,
           primaryAction: (intent) => {

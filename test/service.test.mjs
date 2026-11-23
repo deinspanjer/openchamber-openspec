@@ -1688,6 +1688,185 @@ test("goal metadata is byte-bounded before YAML parsing while absent and boundar
   }
 });
 
+test("archive moves a complete change and applies a delta only when it is not already synced", async () => {
+  const requirement = `### Requirement: Sign in
+The system SHALL accept a valid sign-in.
+
+#### Scenario: Valid credentials
+- **WHEN** a user submits valid credentials
+- **THEN** the user is signed in
+`;
+  const spec = `# login Specification\n\n## Purpose\n\nDocuments the supported authentication and sign-in behaviour.\n\n## Requirements\n\n${requirement}`;
+  await withProjects(async (...directories) => {
+    for (const [index, directory] of directories.entries()) {
+      const change = "add-login";
+      const active = join(directory, "openspec", "changes", change);
+      const main = join(directory, "openspec", "specs", "login", "spec.md");
+      await mkdir(join(active, "specs", "login"), { recursive: true });
+      await writeFile(join(active, "tasks.md"), "- [x] Implement sign-in\n");
+      await writeFile(
+        join(active, "specs", "login", "spec.md"),
+        `## ADDED Requirements\n\n${requirement}`,
+      );
+      if (index) {
+        await mkdir(join(main, ".."), { recursive: true });
+        await writeFile(main, spec);
+      }
+      await withService(async (url) => {
+        const post = (path, body) =>
+          fetch(`${url}${path}`, {
+            method: "POST",
+            headers: { authorization: "Bearer test-token" },
+            body: JSON.stringify({ directory, ...body }),
+          });
+        const { root, planning } = await (await post("/changes", {})).json();
+        const response = await post("/archive", {
+          expectedRoot: root,
+          expectedPlanning: planning,
+          change,
+        });
+        const body = await response.json();
+        assert.equal(response.status, 200, JSON.stringify(body));
+        assert.equal(body.outcome, "archived");
+        await access(join(active, "..", "archive", body.archivedAs, "tasks.md"));
+        await assert.rejects(access(active), { code: "ENOENT" });
+        const updated = await readFile(main, "utf8");
+        if (index) assert.equal(updated, spec);
+        else assert.ok(updated.includes("### Requirement: Sign in"));
+      });
+    }
+  });
+});
+
+test("archive preserves the change on refusal and preserves main specs when sync is skipped", async () => {
+  const requirement = `### Requirement: Sign in
+The system SHALL accept a valid sign-in.
+
+#### Scenario: Valid credentials
+- **WHEN** a user submits valid credentials
+- **THEN** the user is signed in
+`;
+  const spec = `# login Specification\n\n## Purpose\n\nDocuments the supported authentication and sign-in behaviour.\n\n## Requirements\n\n${requirement.replace("accept a valid sign-in", "allow a valid sign-in")}`;
+  await withProjects(async (directory) => {
+    const main = join(directory, "openspec", "specs", "login", "spec.md");
+    await mkdir(join(main, ".."), { recursive: true });
+    await writeFile(main, spec);
+    await withService(async (url) => {
+      const post = (path, body) =>
+        fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory, ...body }),
+        });
+      for (const [change, done, skipSpecs] of [
+        ["reworded-delta", true, false],
+        ["unfinished-change", false, false],
+        ["skip-sync", true, true],
+      ]) {
+        const active = join(directory, "openspec", "changes", change);
+        await mkdir(join(active, "specs", "login"), { recursive: true });
+        await writeFile(join(active, "tasks.md"), `- [${done ? "x" : " "}] Implement sign-in\n`);
+        await writeFile(
+          join(active, "specs", "login", "spec.md"),
+          `## ADDED Requirements\n\n${requirement}`,
+        );
+        const { root, planning } = await (await post("/changes", {})).json();
+        const response = await post("/archive", {
+          expectedRoot: root,
+          expectedPlanning: planning,
+          change,
+          skipSpecs,
+        });
+        const body = await response.json();
+        if (!done) {
+          assert.equal(response.status, 409, JSON.stringify(body));
+          assert.equal(body.error.code, "CHANGE_INCOMPLETE");
+          await access(active);
+        } else if (skipSpecs) {
+          assert.equal(response.status, 200, JSON.stringify(body));
+          assert.equal(body.outcome, "archived");
+          await assert.rejects(access(active), { code: "ENOENT" });
+        } else {
+          assert.equal(response.status, 200, JSON.stringify(body));
+          assert.equal(body.outcome, "failed");
+          assert.equal(JSON.parse(body.output).status[0].code, "archive_spec_update_failed");
+          await access(active);
+        }
+        assert.equal(await readFile(main, "utf8"), spec);
+      }
+    });
+  });
+});
+
+test("archive returns CLI diagnostics before the request deadline", async () => {
+  const directory = await mockProject("openspec-archive-error-");
+  const change = "complete";
+  await mkdir(join(directory, "openspec", "changes", change));
+  const root = { path: directory, source: "nearest" };
+  try {
+    for (const [code, message] of [
+      ["CLI_TIMEOUT", "OpenSpec request timed out."],
+      ["BAD_CLI_OUTPUT", "Invalid OpenSpec output."],
+    ]) {
+      await withService(
+        async (url) => {
+          const post = (path, body) =>
+            fetch(`${url}${path}`, {
+              method: "POST",
+              headers: { authorization: "Bearer test-token" },
+              body: JSON.stringify({ directory, ...body }),
+            });
+          const { planning } = await (await post("/changes", {})).json();
+          const response = await post("/archive", {
+            expectedRoot: directory,
+            expectedPlanning: planning,
+            change,
+          });
+          assert.equal(response.status, 200, code);
+          assert.deepEqual(await response.json(), {
+            outcome: "failed",
+            command: 'openspec archive "complete" --yes --json',
+            output: message,
+          });
+        },
+        async (_directory, args, remaining) => {
+          if (args[0] === "context") return { ok: true, value: { root } };
+          if (args[0] === "list")
+            return {
+              ok: true,
+              value: { root, changes: [{ name: change, totalTasks: 1, completedTasks: 1 }] },
+            };
+          assert.equal(args[0], "archive");
+          if (code === "CLI_TIMEOUT")
+            await new Promise((resolve) => setTimeout(resolve, remaining + 5));
+          return { ok: false, error: { code, message, status: 504 } };
+        },
+        { timeoutMs: 1_400 },
+      );
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("service CLI children opt out of telemetry without changing the parent setting", async () => {
+  const previous = process.env.OPENSPEC_TELEMETRY;
+  try {
+    process.env.OPENSPEC_TELEMETRY = "1";
+    const result = await runOpenSpec(
+      tempDirectory,
+      ["-e", "console.log(JSON.stringify({ telemetry: process.env.OPENSPEC_TELEMETRY }))", "--"],
+      undefined,
+      { binary: process.execPath },
+    );
+    assert.deepEqual(result, { ok: true, value: { telemetry: "0" } });
+    assert.equal(process.env.OPENSPEC_TELEMETRY, "1");
+  } finally {
+    if (previous === undefined) delete process.env.OPENSPEC_TELEMETRY;
+    else process.env.OPENSPEC_TELEMETRY = previous;
+  }
+});
+
 test("CLI bounds stdout and stderr and force-kills a process ignoring termination", async () => {
   const root = await mkdtemp(join(tempDirectory, "openspec-process-"));
   try {
@@ -1696,27 +1875,27 @@ test("CLI bounds stdout and stderr and force-kills a process ignoring terminatio
       ["stdout", "stdout"],
       ["stderr", "stderr"],
     ]) {
-      await writeFile(
-        script,
-        `#!/usr/bin/env node\nprocess.${output}.write('x'.repeat(300));\nsetInterval(() => {}, 1000);\n`,
+      const result = await runOpenSpec(
+        root,
+        ["-e", `process.${output}.write('x'.repeat(300)); setInterval(() => {}, 1000);`, "--"],
+        500,
+        { binary: process.execPath, stdoutBytes: 100, stderrBytes: 100, graceMs: 30 },
       );
-      await chmod(script, 0o700);
-      const result = await runOpenSpec(root, [], 500, {
-        binary: script,
-        stdoutBytes: 100,
-        stderrBytes: 100,
-        graceMs: 30,
-      });
       assert.equal(result.ok, false, mode);
       assert.equal(result.error.code, "CLI_OUTPUT_TOO_LARGE", mode);
     }
-    await writeFile(
-      script,
-      `#!/usr/bin/env node\nrequire('node:fs').writeFileSync(${JSON.stringify(join(root, "child.pid"))}, String(process.pid));\nprocess.on('SIGTERM', () => {});\nsetInterval(() => {}, 1000);\n`,
-    );
     const timeoutMs = 1_000;
     const started = Date.now();
-    const result = await runOpenSpec(root, [], timeoutMs, { binary: script, graceMs: 30 });
+    const result = await runOpenSpec(
+      root,
+      [
+        "-e",
+        "process.on('SIGTERM', () => {}); require('node:fs').writeFileSync('child.pid', String(process.pid)); setInterval(() => {}, 1000);",
+        "--",
+      ],
+      timeoutMs,
+      { binary: process.execPath, graceMs: 30 },
+    );
     assert.equal(result.ok, false);
     assert.equal(result.error.code, "CLI_TIMEOUT");
     assert.ok(Date.now() - started < 2_000);
@@ -1726,6 +1905,7 @@ test("CLI bounds stdout and stderr and force-kills a process ignoring terminatio
       script,
       "#!/usr/bin/env node\nprocess.stdout.write('x'.repeat(300));\nsetInterval(() => {}, 1000);\n",
     );
+    await chmod(script, 0o700);
     await withService(
       async (url) => {
         const response = await fetch(`${url}/changes`, {

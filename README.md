@@ -39,8 +39,8 @@ installed.
 If an update shows **Needs approval** because the service now lists `git`, open OpenSpec in
 **Settings > Extensions** and choose **Review permissions**, then **Allow and enable**.
 
-The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
-`openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
+The board's help button opens the OpenSpec quickstart. The extension disables telemetry for its
+OpenSpec CLI calls so they don't wait for a telemetry request. Your CLI settings are unchanged.
 
 ## Browse changes and specs
 
@@ -49,8 +49,13 @@ and **Specs** to read the project's main OpenSpec specs. **Archived** requires O
 
 Board actions follow the workflows you select with `openspec config profile`. Planning changes offer
 **ff** if configured, then **continue** if configured, or **propose**. Completed changes offer
-**verify** only if you configure that workflow. **archive all** uses **bulk-archive** if configured.
-Run `openspec update` after changing the profile to install the selected skills.
+**verify** only if you configure that workflow.
+
+Archiving from the extension requires OpenSpec 2.0 or later. **archive** syncs specs and archives
+the change directly from the board or Work Status. The board detail's archive menu also offers
+**archive without sync**. If a normal archive fails, the extension prepares an unsent recovery
+prompt. **archive all** processes completed changes one at a time and opens a recovery session only
+for failures. Run `openspec update` after changing the profile to install the selected skills.
 
 ## Track changes from Work Status
 

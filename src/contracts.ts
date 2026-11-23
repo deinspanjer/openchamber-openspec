@@ -8,6 +8,11 @@ export function decodePlanning(value: unknown): string {
 }
 export type ListingEntry = { id: string; completedTasks: number; totalTasks: number };
 export type ArchivedChange = { name: string; completedTasks: number; totalTasks: number };
+export type ArchiveResult =
+  | { outcome: "archived"; archivedAs: string; warnings: string[] }
+  | { outcome: "failed"; command: string; output: string };
+export const archiveCommand = (change: string, skipSpecs: boolean) =>
+  `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
 export type PendingArchive = ArchivedChange & { id: string };
 export type FocusTarget = { directory: string } & ({ change: string } | { archive: string });
 export type SpecEntry = { id: string; requirementCount: number };
@@ -70,6 +75,23 @@ export function decodeWorkflows(value: unknown): Workflow[] {
 function string(value: unknown): string {
   if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
   return value;
+}
+
+export function decodeArchiveResult(value: unknown): ArchiveResult {
+  const result = record(value);
+  if (result.outcome === "archived" && Array.isArray(result.warnings))
+    return {
+      outcome: result.outcome,
+      archivedAs: string(result.archivedAs),
+      warnings: result.warnings.map(string),
+    };
+  if (result.outcome === "failed")
+    return {
+      outcome: result.outcome,
+      command: string(result.command),
+      output: string(result.output),
+    };
+  throw new Error("Invalid archive result.");
 }
 
 function count(value: unknown): number {

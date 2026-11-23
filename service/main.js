@@ -7534,6 +7534,7 @@ function isChangeName(value) {
 }
 
 // src/contracts.ts
+var archiveCommand = (change, skipSpecs) => `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
 var ALL_WORKFLOWS = [
   "propose",
   "explore",
@@ -7559,6 +7560,22 @@ function record(value) {
 function string(value) {
   if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
   return value;
+}
+function decodeArchiveResult(value) {
+  const result = record(value);
+  if (result.outcome === "archived" && Array.isArray(result.warnings))
+    return {
+      outcome: result.outcome,
+      archivedAs: string(result.archivedAs),
+      warnings: result.warnings.map(string)
+    };
+  if (result.outcome === "failed")
+    return {
+      outcome: result.outcome,
+      command: string(result.command),
+      output: string(result.output)
+    };
+  throw new Error("Invalid archive result.");
 }
 function count(value) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -7692,6 +7709,7 @@ var COMMAND_TIMEOUT_MS = 15e3;
 var STDOUT_BYTES = 1024 * 1024;
 var STDERR_BYTES = 64 * 1024;
 var TERMINATION_GRACE_MS = 500;
+var CLI_SHUTDOWN_MS = 2 * TERMINATION_GRACE_MS;
 var MAX_RESPONSE_BYTES = 24e4;
 var ServiceFault = class extends Error {
   constructor(code, message, status, outcome) {
@@ -7722,6 +7740,7 @@ async function runOpenSpec(directory, args, remainingMs = COMMAND_TIMEOUT_MS, op
   return await new Promise((complete) => {
     const child = (0, import_node_child_process.spawn)(options.binary ?? "openspec", [...args, "--json"], {
       cwd: directory,
+      env: { ...process.env, OPENSPEC_TELEMETRY: "0" },
       stdio: ["ignore", "pipe", "pipe"]
     });
     const stdout = [];
@@ -8546,6 +8565,56 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises2.rm) 
       );
     }
   }
+  async function archiveChange(directory, change, expectedRoot, expectedPlanning, skipSpecs) {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const listing = await list(directory, current);
+    if ("code" in listing) return failure(listing);
+    const entry = listing.changes.find(({ id }) => id === change);
+    if (!entry)
+      return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
+    if (entry.totalTasks === 0 || entry.completedTasks !== entry.totalTasks)
+      return failure(
+        serviceError(
+          "CHANGE_INCOMPLETE",
+          "Tasks are incomplete. Refresh to see the current state.",
+          409
+        )
+      );
+    const pinned = await context((0, import_node_path2.dirname)(current.planningRoot));
+    if ("code" in pinned) return failure(pinned);
+    if (pinned.planning !== current.planning)
+      return failure(serviceError("ROOT_CHANGED", "Canonical planning context changed.", 409));
+    await validatedChange(current, change);
+    const args = ["archive", change, "--yes", ...skipSpecs ? ["--skip-specs"] : []];
+    const result = await checked(pinned.root, args, pinned, true, true);
+    if (result.ok) {
+      const archive = result.value.archive;
+      if (archive?.change === change && typeof archive.archivedAs === "string" && isChangeName(archive.archivedAs) && (archive.archivedAs === change || archivedChangeId(archive.archivedAs) === change)) {
+        try {
+          return {
+            ok: true,
+            value: decodeArchiveResult({
+              outcome: "archived",
+              archivedAs: archive.archivedAs,
+              warnings: archive.warnings === void 0 ? [] : archive.warnings
+            })
+          };
+        } catch {
+        }
+      }
+    }
+    return {
+      ok: true,
+      value: {
+        outcome: "failed",
+        command: archiveCommand(change, skipSpecs),
+        output: (result.ok || result.value ? JSON.stringify(result.value, null, 2) : result.error.message).slice(0, 2e4)
+      }
+    };
+  }
   async function deleteChange(directory, change, expectedRoot, beforeRemove = () => {
   }, expectedPlanning) {
     if (!isChangeName(change))
@@ -8610,6 +8679,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises2.rm) 
     tasks,
     documentFor,
     createChange,
+    archiveChange,
     deleteChange
   };
 }
@@ -8682,9 +8752,10 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
     try {
       const deadline = Date.now() + (options.timeoutMs ?? REQUEST_TIMEOUT_MS);
       const checkedRunner = async (directory2, args) => {
-        const remaining = deadline - Date.now();
+        const archive = args[0] === "archive";
+        const remaining = deadline - Date.now() - (archive ? CLI_SHUTDOWN_MS + 50 : 0);
         if (remaining <= 0) throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
-        if (args[0] === "new" && args[1] === "change") mutationDispatched = true;
+        if (archive || args[0] === "new" && args[1] === "change") mutationDispatched = true;
         const result2 = await runner(directory2, args, remaining);
         if (Date.now() >= deadline)
           throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
@@ -8726,12 +8797,25 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
       const validatePlanning = path === "/validate" ? requiredString(body, "planning") : void 0;
       if (validatePlanning && (validatePlanning.length > 4096 || validatePlanning.includes("\0")))
         throw serviceError("BAD_REQUEST", "Invalid planning identity.");
-      const work = validatePlanning ? adapter.validate(
+      const skipSpecs = body.skipSpecs;
+      if (path === "/archive" && skipSpecs !== void 0 && typeof skipSpecs !== "boolean")
+        throw serviceError("BAD_REQUEST", "skipSpecs must be a boolean.");
+      const work = path === "/archive" ? adapter.archiveChange(
+        directory,
+        requiredString(body, "change"),
+        requiredString(body, "expectedRoot"),
+        requiredString(body, "expectedPlanning"),
+        skipSpecs === true
+      ) : validatePlanning ? adapter.validate(
         directory,
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),
         validatePlanning
-      ) : path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(directory, requiredString(body, "expectedRoot"), expectedPlanning) : path === "/tasks" ? adapter.tasks(
+      ) : path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(
+        directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/tasks" ? adapter.tasks(
         directory,
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),
@@ -8754,7 +8838,11 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         requiredString(body, "expectedRoot"),
         () => {
           if (Date.now() >= deadline)
-            throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
+            throw serviceError(
+              "CLI_TIMEOUT",
+              "OpenSpec request timed out.",
+              504
+            );
           mutationDispatched = true;
         },
         expectedPlanning

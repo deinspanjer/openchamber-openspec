@@ -27,8 +27,9 @@
   `src/panel/client.ts` uses the SDK service bridge, never direct CLI execution or browser HTTP.
   `src/panel/controller.ts` owns the board's context, selection, read scheduling, and workflow
   actions. `src/panel/resources.ts` retains reads by directory, root, planning target, and change.
-- Current-chat workflow actions prepare unsent drafts. **Run in new worktree** and confirmed
-  **archive all** create sessions and submit their prompts through the SDK.
+- Current-chat workflow actions prepare unsent drafts except **archive**, which writes through the
+  service. **Run in new worktree** sends its prompt through the SDK. Confirmed **archive all**
+  writes through the service and starts a recovery session only for failures.
 - Views own mounted DOM and SDK UI handles. Dispose their handles; theme changes and ordinary
   refreshes must not replace the search or detail shells and lose focus, caret, or scroll position.
 - `src/contracts.ts` validates the private protocol; `src/model.ts` derives stages. `src/service.ts`
@@ -51,17 +52,17 @@
 
 ## Behaviour constraints
 
-- Load the board only on initial/context loads, explicit Refresh, after the panel's own create or
-  delete, and once when a claimed focus names an unlisted change. Do not add polling, visibility
-  revalidation, TTL, or board-wide document prefetch.
+- Load the board only on initial/context loads, explicit Refresh, after the panel's own create,
+  delete or archive, and once when a claimed focus names an unlisted change. Do not add polling,
+  visibility revalidation, TTL, or board-wide document prefetch.
 - Read configured workflows on the board's initial/context loads and explicit Refresh. Reuse the
   result for other board reloads.
 - Read Archived, the Specs list, and each spec on first open in a context. Refresh invalidates all
   browse reads and reloads only the visible browse content. A hidden view reads on its next open.
   A claimed archive focus can re-read Archived once if the focused row is missing.
 - Load the Work Status section on mount, session or project changes, explicit Refresh, and after the
-  shown session finishes a turn. Re-read after tracking changes. Read one listing and the summary
-  and tasks for each tracked active change only. Check pending archives only when a tracked name
+  shown session finishes a turn. Re-read after tracking changes or its own archive. Read one listing
+  and the summary and tasks for each tracked active change only. Check pending archives only when a tracked name
   is missing from the active listing or the picker opens without a pending-archive result.
   Keep unchanged card controls mounted across reads. Do not poll, refresh on visibility changes,
   or read board-wide summaries.
