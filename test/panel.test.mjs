@@ -225,6 +225,10 @@ function hostHtml(statusCase, pointer, popovers) {
       if (statusCase === "progress" || statusCase === "compact-progress") { tasks[3].done = true; changes[0].completedTasks = 4; }
       else { tasks[1].done = true; changes[0].completedTasks = 2; }
     };
+    window.__completeNextTask = () => {
+      tasks.find(({ done }) => !done).done = true;
+      changes[0].completedTasks++;
+    };
     window.__unedit = () => { tasks[1].done = false; changes[0].completedTasks = 1; };
     window.__goal = (id, value) => { changes.find((item) => item.id === id).goal = value; };
     window.__areas = (id, value) => { changes.find((item) => item.id === id).affectedAreas = value; };
@@ -324,7 +328,7 @@ function hostHtml(statusCase, pointer, popovers) {
         storage.set("session-change:fixture-session", { changes: ["second-change"], savedAt: 1 });
       if (statusCase.startsWith("unregistered-")) projects = [];
       if (statusCase === "stale") sessions[0].items = [];
-      if (statusCase === "switch") sessions.push({ ...sessions[0], id: "replacement-session",
+       if (statusCase === "switch" || statusCase === "subagent-turns") sessions.push({ ...sessions[0], id: "replacement-session",
         items: [{ id: "second-change", data: { kind: "change", change: "second-change" } }] });
       if (statusCase === "header") ready.features = { ...ready.features, statusControls: true };
       if (statusCase === "picker") {
@@ -340,7 +344,7 @@ function hostHtml(statusCase, pointer, popovers) {
       if (statusCase === "escaped-goal") changes[0].goal = String.fromCharCode(1).repeat(17000);
       if (statusCase.startsWith("compact-"))
         storage.set("session-change:fixture-session", { changes: ["first-change", "second-change"], savedAt: 1 });
-      if (["progress", "complete", "compact-progress", "compact-complete", "compact-read-error", "compact-touch"].includes(statusCase)) {
+       if (["progress", "complete", "compact-progress", "compact-complete", "compact-read-error", "compact-touch", "subagent-turns"].includes(statusCase)) {
         changes[0].completedTasks = statusCase.endsWith("complete") ? 7 : 3;
         changes[0].totalTasks = 7;
         tasks = Array.from({ length: 7 }, (_, index) => ({
@@ -365,7 +369,24 @@ function hostHtml(statusCase, pointer, popovers) {
         readinessCase = "blocked-tasks";
       }
     }
-    addEventListener("message", (event) => {
+     const sessionSubscribers = new Map();
+     const pushSessions = (guest, subscriptionId, projectId) => {
+       const sessionState = statusCase === "unready-tracking" ? "loading" : "ready";
+       const coverage = [{ directory: statusDirectory, state: sessionState }];
+       if (statusCase === "other-directory-error") coverage.push({ directory: "/tmp/other-worktree", state: "error" });
+       post(guest, "workspace", { subscriptionId, snapshot: { kind: "sessions", projectId,
+         state: statusCase === "other-directory-error" ? "error" : sessionState, coverage, sessions } });
+     };
+     window.__updateSessions = (records) => {
+       const byId = new Map(sessions.map((session) => [session.id, session]));
+       for (const record of records) {
+         const previous = byId.get(record.id) ?? { ...sessions[0], parentId: null, items: [] };
+         byId.set(record.id, { ...previous, ...record });
+       }
+       sessions = [...byId.values()];
+       for (const [id, { guest, projectId }] of sessionSubscribers) pushSessions(guest, id, projectId);
+     };
+     addEventListener("message", (event) => {
       const message = event.data;
       if (!message || message.channel !== "openchamber.sdk" || message.v !== 1) return;
        const reply = (payload) => { if (message.type === "service-request") __completed.push(message.payload.path);
@@ -602,18 +623,14 @@ function hostHtml(statusCase, pointer, popovers) {
            {kind:"sessions",projectId:query.projectId,state:sessionState,coverage:[{ directory: statusDirectory, state: sessionState }],sessions});
         return;
       }
-      if (message.type === "workspace-subscribe") {
-        window.__requests.push({path:message.type,body:message.payload});
-        const { subscriptionId, query } = message.payload;
-         const sessionState = statusCase === "unready-tracking" ? "loading" : "ready";
-         const coverage = [{ directory: statusDirectory, state: sessionState }];
-        if (statusCase === "other-directory-error") coverage.push({ directory: "/tmp/other-worktree", state: "error" });
-        event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "workspace",
-          payload: { subscriptionId, snapshot: { kind: "sessions", projectId: query.projectId,
-             state: statusCase === "other-directory-error" ? "error" : sessionState, coverage, sessions } } }, "*");
-        reply();
-        return;
-      }
+       if (message.type === "workspace-subscribe") {
+         window.__requests.push({path:message.type,body:message.payload});
+         const { subscriptionId, query } = message.payload;
+         sessionSubscribers.set(subscriptionId, { guest: event.source, projectId: query.projectId });
+         pushSessions(event.source, subscriptionId, query.projectId);
+         reply();
+         return;
+       }
         if (message.type === "popover-open") {
           window.__requests.push({ path: message.type, body: message.payload });
           if (rejectNextPopover) {
@@ -658,7 +675,8 @@ function hostHtml(statusCase, pointer, popovers) {
          reply();
          return;
        }
-       if (["workspace-unsubscribe", "resize", "open-surface"].includes(message.type)) {
+        if (message.type === "workspace-unsubscribe") sessionSubscribers.delete(message.payload.subscriptionId);
+        if (["workspace-unsubscribe", "resize", "open-surface"].includes(message.type)) {
          window.__requests.push({path:message.type,body:message.payload});
          if (message.type === "open-surface" && location.search.includes("open-board") && !board)
            __mountBoard(readyFor(event.source).directory);
@@ -2641,6 +2659,72 @@ test("session section reads once on an idle session switch, then once for a fini
       await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
       1,
     );
+    await page.close();
+  });
+});
+
+test("session section refreshes after each observed nested subagent turn", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=subagent-turns`);
+    const frame = page.frameLocator("iframe");
+    const requests = () =>
+      page.evaluate(() => __requests.filter(({ path }) => path.startsWith("/")));
+    await frame.getByText("3/7", { exact: true }).waitFor();
+    const initialReads = (await requests()).length;
+
+    await page.evaluate(() => {
+      __lifecycle("fixture-session", "started");
+      __updateSessions([
+        { id: "child", parentId: "fixture-session", activity: "idle" },
+        { id: "nested", parentId: "child", directory: "/tmp/other-worktree", activity: "idle" },
+        { id: "unrelated", activity: "running" },
+        { id: "replacement-child", parentId: "replacement-session", activity: "running" },
+      ]);
+      __updateSessions([{ id: "unrelated", activity: "idle" }]);
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal((await requests()).length, initialReads);
+
+    await page.evaluate(() => {
+      __updateSessions([{ id: "nested", activity: "running" }]);
+      __completeNextTask();
+      __updateSessions([{ id: "nested", activity: "idle", outcome: "completed" }]);
+    });
+    await frame.getByText("4/7", { exact: true }).waitFor({ timeout: 3000 });
+
+    await page.evaluate(() => {
+      for (const activity of ["running", "retrying", "waiting-permission", "waiting-question"]) {
+        __updateSessions([{ id: "nested", activity, outcome: null }]);
+      }
+      __completeNextTask();
+      __theme("dark");
+    });
+    await frame.locator('html[data-oc-theme="dark"]').waitFor();
+    assert.equal((await requests()).length, initialReads + 3);
+    await page.evaluate(() =>
+      __updateSessions([{ id: "nested", activity: "idle", outcome: "failed" }]),
+    );
+    await frame.getByText("5/7", { exact: true }).waitFor({ timeout: 3000 });
+
+    const turnReads = (await requests()).slice(initialReads);
+    assert.deepEqual(
+      turnReads.map(({ path }) => path),
+      ["/changes", "/summary", "/tasks", "/changes", "/summary", "/tasks"],
+    );
+    assert.ok(turnReads.every(({ body }) => body.directory === directory));
+    assert.ok(turnReads.every(({ body }) => !body.change || body.change === "first-change"));
+
+    await page.evaluate(() => __session("replacement-session", true));
+    await frame.getByRole("heading", { name: "second-change", exact: true }).waitFor();
+    const afterSwitch = (await requests()).length;
+    await page.evaluate(() => {
+      __updateSessions([{ id: "replacement-child", activity: "idle" }]);
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal((await requests()).length, afterSwitch);
     await page.close();
   });
 });

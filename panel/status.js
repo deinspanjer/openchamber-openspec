@@ -3240,6 +3240,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   var epoch = 0;
   var projectEpoch = 0;
   var sessions = null;
+  var previousTurnSessions;
   var offSessions;
   var workspace;
   var disposed = false;
@@ -4311,6 +4312,23 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       }
     })();
   }
+  function finishedSubagentTurn(shownSession, previous, snapshot) {
+    if (!shownSession || !previous) return false;
+    const byId = new Map(snapshot.sessions.map((session) => [session.id, session]));
+    return previous.some(({ id, activity }) => {
+      if (id === shownSession || activity === "idle" || activity === "unknown") return false;
+      const session = byId.get(id);
+      if (session?.activity !== "idle") return false;
+      const seen = /* @__PURE__ */ new Set([id]);
+      let parentId = session.parentId;
+      while (parentId && !seen.has(parentId)) {
+        if (parentId === shownSession) return true;
+        seen.add(parentId);
+        parentId = byId.get(parentId)?.parentId ?? null;
+      }
+      return false;
+    });
+  }
   function subscribeToProject(capturedDirectory) {
     const capturedProject = ++projectEpoch;
     const current = () => !disposed && projectEpoch === capturedProject;
@@ -4320,6 +4338,8 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         if (!current() || !project) return;
         const off = await host.onSessions(project.id, (snapshot) => {
           if (!current()) return;
+          const subagentFinished = finishedSubagentTurn(sessionId, previousTurnSessions, snapshot);
+          previousTurnSessions = snapshot.sessions;
           sessions = snapshot;
           if (selection2 && (!sameChanges(
             resolveSessionChanges(sessionId, sessions, selection2.saved, validNames) ?? [],
@@ -4332,7 +4352,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
             selection2 = null;
             showCached();
             read();
-          }
+          } else if (subagentFinished) read();
         });
         if (current()) offSessions = off;
         else off();
@@ -4349,6 +4369,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     const directoryChanged = nextDirectory !== directory;
     if (!directoryChanged && nextSession === sessionId) return;
     turnStarted = false;
+    previousTurnSessions = void 0;
     directory = nextDirectory;
     sessionId = nextSession;
     epoch++;

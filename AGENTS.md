@@ -60,8 +60,9 @@
   browse reads and reloads only the visible browse content. A hidden view reads on its next open.
   A claimed archive focus can re-read Archived once if the focused row is missing.
 - Load the Work Status section on mount, session or project changes, explicit Refresh, and after the
-  shown session finishes a turn. Re-read after tracking changes. Read one listing and the summary
-  and tasks for each tracked active change only. Check pending archives only when a tracked name
+  shown session or any of its direct or nested subagents finishes an observed turn. Re-read after
+  tracking changes. Read one listing and the summary and tasks for each tracked active change
+  only, in the shown session's planning context. Check pending archives only when a tracked name
   is missing from the active listing or the picker opens without a pending-archive result.
   Keep unchanged card controls mounted across reads. Do not poll, refresh on visibility changes,
   or read board-wide summaries.

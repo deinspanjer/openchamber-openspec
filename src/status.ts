@@ -74,6 +74,7 @@ let turnStarted = false;
 let epoch = 0;
 let projectEpoch = 0;
 let sessions: GuestSessionsSnapshot | null = null;
+let previousTurnSessions: GuestSessionsSnapshot["sessions"] | undefined;
 let offSessions: (() => void) | undefined;
 let workspace: Promise<void> | undefined;
 let disposed = false;
@@ -1311,6 +1312,29 @@ function read() {
   })();
 }
 
+function finishedSubagentTurn(
+  shownSession: string | null,
+  previous: GuestSessionsSnapshot["sessions"] | undefined,
+  snapshot: GuestSessionsSnapshot,
+) {
+  if (!shownSession || !previous) return false;
+  const byId = new Map(snapshot.sessions.map((session) => [session.id, session]));
+  return previous.some(({ id, activity }) => {
+    if (id === shownSession || activity === "idle" || activity === "unknown") return false;
+    const session = byId.get(id);
+    if (session?.activity !== "idle") return false;
+
+    const seen = new Set([id]);
+    let parentId = session.parentId;
+    while (parentId && !seen.has(parentId)) {
+      if (parentId === shownSession) return true;
+      seen.add(parentId);
+      parentId = byId.get(parentId)?.parentId ?? null;
+    }
+    return false;
+  });
+}
+
 function subscribeToProject(capturedDirectory: string) {
   const capturedProject = ++projectEpoch;
   const current = () => !disposed && projectEpoch === capturedProject;
@@ -1320,6 +1344,8 @@ function subscribeToProject(capturedDirectory: string) {
       if (!current() || !project) return;
       const off = await host.onSessions(project.id, (snapshot) => {
         if (!current()) return;
+        const subagentFinished = finishedSubagentTurn(sessionId, previousTurnSessions, snapshot);
+        previousTurnSessions = snapshot.sessions;
         sessions = snapshot;
         if (
           selection &&
@@ -1336,7 +1362,7 @@ function subscribeToProject(capturedDirectory: string) {
           selection = null;
           showCached();
           read();
-        }
+        } else if (subagentFinished) read();
       });
       if (current()) offSessions = off;
       else off();
@@ -1355,6 +1381,7 @@ function updateContext(nextDirectory: string | null, nextSession: string | null)
   const directoryChanged = nextDirectory !== directory;
   if (!directoryChanged && nextSession === sessionId) return;
   turnStarted = false;
+  previousTurnSessions = undefined;
   directory = nextDirectory;
   sessionId = nextSession;
   epoch++;
