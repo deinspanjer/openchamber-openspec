@@ -1,10 +1,10 @@
 "use strict";
 (() => {
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
+  // node_modules/@openchamber/sdk/dist/api-version.js
   var OPENCHAMBER_SDK_CHANNEL = "openchamber.sdk";
   var OPENCHAMBER_SDK_API_VERSION = 1;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
+  // node_modules/@openchamber/sdk/dist/scrollbar-style.js
   var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
   var GUEST_SCROLLBAR_CSS = `
 :root {
@@ -64,15 +64,15 @@
   }
   var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
+  // node_modules/@openchamber/sdk/dist/workspace.js
   var GUEST_STORAGE_KEY_MAX = 128;
   var GUEST_STORAGE_VALUE_BYTES = 65536;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
+  // node_modules/@openchamber/sdk/dist/shells.js
   var GUEST_SHELL_ID_MAX = 128;
   var GUEST_SHELL_OUTPUT_TAIL_MAX = 65536;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
+  // node_modules/@openchamber/sdk/dist/microphone.js
   var GUEST_MICROPHONE_SAMPLE_RATE_MIN = 8e3;
   var GUEST_MICROPHONE_SAMPLE_RATE_MAX = 192e3;
   var GUEST_MICROPHONE_OPEN_TIMEOUT_MS = 12e4;
@@ -117,7 +117,7 @@
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
+  // node_modules/@openchamber/sdk/dist/status-controls.js
   var GUEST_STATUS_CONTROLS_MAX = 4;
   var GUEST_STATUS_CONTROL_ID = /^[a-z][a-z0-9-]{0,39}$/;
   var GUEST_STATUS_CONTROL_LABEL_MAX = 60;
@@ -160,12 +160,12 @@
     return true;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
+  // node_modules/@openchamber/sdk/dist/manifest.js
   var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
   var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
   var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
+  // node_modules/@openchamber/sdk/dist/session-events.js
   var GUEST_SESSION_EVENT_TYPES = [
     "turn-finished",
     "turn-failed",
@@ -179,11 +179,11 @@
   var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
   var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
+  // node_modules/@openchamber/sdk/dist/service-host.js
   var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
   var MENTIONS_IDLE_MS = 10 * 6e4;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
+  // node_modules/@openchamber/sdk/dist/file-editor.js
   var GUEST_FILE_EDITOR_CONTENT_MAX = 2e7;
   var GUEST_FILE_EDITOR_VERSION_MAX = 256;
   var fileEditorPayloadSize = (value) => "bytes" in value ? value.bytes.byteLength : value.content.length;
@@ -202,7 +202,7 @@
     return true;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
+  // node_modules/@openchamber/sdk/dist/popover.js
   var GUEST_POPOVER_ID = /^[A-Za-z0-9_-]{1,80}$/;
   var GUEST_POPOVER_COORDINATE_MAX = 1e5;
   var GUEST_POPOVER_WIDTH_MIN = 160;
@@ -245,7 +245,7 @@
     }
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
+  // node_modules/@openchamber/sdk/dist/contract.js
   var GUEST_BLOCK_ANSWER_MAX = 2e3;
   var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
   var isStartSessionResult = (value) => Boolean(value && "sessionId" in value);
@@ -464,7 +464,7 @@
     return wire;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
+  // node_modules/@openchamber/sdk/dist/host.js
   var isKeyEvent = (event) => "key" in event && "metaKey" in event && "ctrlKey" in event;
   var isSaveShortcut = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "s";
   var HostRequestError = class extends Error {
@@ -1546,7 +1546,7 @@
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
+  // node_modules/@openchamber/sdk/dist/service-providers.js
   var BROWSER_CONTROL_ACTIONS = [
     "browser.open",
     "browser.snapshot",
@@ -1568,11 +1568,11 @@
   var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
   var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
+  // node_modules/@openchamber/sdk/dist/service-surface.js
   var SURFACE_CONTROLLERS = ["none", "agent", "user"];
   var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
+  // node_modules/@openchamber/sdk/dist/ui/theme.js
   var TOKEN_VARS = [
     ["--oc-bg", "background"],
     ["--oc-elevated", "elevated"],
@@ -1662,7 +1662,7 @@
     }
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
+  // node_modules/@openchamber/sdk/dist/ui/style.js
   var OC_ALIAS = {
     "surface-background": "bg",
     "surface-elevated": "elevated",
@@ -1973,7 +1973,7 @@ ${GUEST_SCROLLBAR_CSS}
 ${UI_SIZE_CSS}
 ${GUEST_UI_LOOK_CSS}`;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
+  // node_modules/@openchamber/sdk/dist/ui/dom.js
   var STYLE_ID = "oc-sdk-ui-style";
   var clearNode = (node) => {
     while (node.firstChild) {
@@ -2032,7 +2032,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
+  // node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
     const spinner = document.createElement("span");
     spinner.className = "oc-sdk-spinner-ring";
@@ -2080,7 +2080,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/field.js
+  // node_modules/@openchamber/sdk/dist/ui/field.js
   var mountTextField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2128,7 +2128,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
+  // node_modules/@openchamber/sdk/dist/ui/icons.js
   var SVG_NS = "http://www.w3.org/2000/svg";
   var ICON_PATH = {
     search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
@@ -2154,7 +2154,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return node;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
+  // node_modules/@openchamber/sdk/dist/ui/search.js
   var mountSearchField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2215,7 +2215,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/navigation.js
+  // node_modules/@openchamber/sdk/dist/ui/navigation.js
   var navigationKey = (event, axis = "vertical") => {
     const [next, previous] = axis === "vertical" ? ["ArrowDown", "ArrowUp"] : ["ArrowRight", "ArrowLeft"];
     if (event.key === next || event.ctrlKey && event.key.toLowerCase() === "n")
@@ -2249,7 +2249,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return target?.id ?? null;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/option.js
+  // node_modules/@openchamber/sdk/dist/ui/option.js
   var optionId = (uid, id) => `${uid}-${id ?? ""}`;
   var createOption = (uid, role, spec, on) => {
     const node = button("oc-sdk-option");
@@ -2290,7 +2290,7 @@ ${GUEST_UI_LOOK_CSS}`;
     container.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popup.js
+  // node_modules/@openchamber/sdk/dist/ui/popup.js
   var placePopup = (popup, trigger) => {
     const rect = trigger.getBoundingClientRect();
     popup.style.minWidth = `${Math.round(rect.width)}px`;
@@ -2329,7 +2329,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/tabs.js
+  // node_modules/@openchamber/sdk/dist/ui/tabs.js
   var mountTabs = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2389,7 +2389,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/badge.js
+  // node_modules/@openchamber/sdk/dist/ui/badge.js
   var applyTone = (node, tone2) => {
     setAttr(node, "data-tone", tone2 && tone2 !== "neutral" ? tone2 : null);
   };
@@ -2414,7 +2414,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/progress.js
+  // node_modules/@openchamber/sdk/dist/ui/progress.js
   var clampProgress = (value) => Number.isFinite(value) ? Math.min(100, Math.max(0, Math.floor(value))) : 0;
   var mountProgress = (root2, initial) => {
     ensureStyle(UI_CSS);
@@ -2463,7 +2463,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/menu.js
+  // node_modules/@openchamber/sdk/dist/ui/menu.js
   var actions = (items) => items.filter((item) => !("separator" in item));
   var menuCount = 0;
   var mountMenu = (root2, initial) => {
@@ -2627,6 +2627,7 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Invalid planning identity.");
     return value;
   }
+  var archiveCommand = (change, skipSpecs) => `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
   var documentKey = (artifactId, selector) => JSON.stringify([artifactId, selector]);
   var ALL_WORKFLOWS = [
     "propose",
@@ -2659,6 +2660,22 @@ ${GUEST_UI_LOOK_CSS}`;
   function string(value) {
     if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
     return value;
+  }
+  function decodeArchiveResult(value) {
+    const result = record(value);
+    if (result.outcome === "archived" && Array.isArray(result.warnings))
+      return {
+        outcome: result.outcome,
+        archivedAs: string(result.archivedAs),
+        warnings: result.warnings.map(string)
+      };
+    if (result.outcome === "failed")
+      return {
+        outcome: result.outcome,
+        command: string(result.command),
+        output: string(result.output)
+      };
+    throw new Error("Invalid archive result.");
   }
   function count(value) {
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -3072,6 +3089,30 @@ ${GUEST_UI_LOOK_CSS}`;
             "unknown"
           );
       },
+      archive: async (scope, change, { skipSpecs = false } = {}) => {
+        try {
+          return decode(
+            await request("/archive", {
+              directory: scope.directory,
+              expectedRoot: scope.root,
+              expectedPlanning: scope.planning,
+              change,
+              skipSpecs
+            }),
+            decodeArchiveResult
+          );
+        } catch (caught) {
+          if (caught instanceof ServiceRequestError && (caught.outcome === "unknown" || caught.code === "BAD_SERVICE_DATA") || caught instanceof HostRequestError && ["REQUEST_FAILED", "HOST_TIMEOUT", "RESPONSE_TOO_LARGE", "DISCONNECTED"].includes(
+            caught.code
+          ))
+            return {
+              outcome: "failed",
+              command: archiveCommand(change, skipSpecs),
+              output: caught.message
+            };
+          throw caught;
+        }
+      },
       delete: async (scope, change) => {
         let value;
         try {
@@ -3251,9 +3292,11 @@ ${GUEST_UI_LOOK_CSS}`;
   var stageLabel = (stage) => stages.find((item) => item.id === stage).label;
 
   // src/panel/primary-action.ts
-  function mountPrimaryAction(root2) {
+  function mountPrimaryAction(root2, allowSkipSpecs = false) {
     const buttonRoot = document.createElement("span");
     const menuRoot = document.createElement("span");
+    buttonRoot.className = "primary-action-button";
+    menuRoot.className = "primary-action-menu";
     root2.append(buttonRoot, menuRoot);
     let state = null;
     let opened = null;
@@ -3272,9 +3315,9 @@ ${GUEST_UI_LOOK_CSS}`;
       onSelect: (id) => {
         const captured = opened;
         opened = null;
-        if (!captured || captured.disabled || state?.disabled || captured.id !== state?.id || captured.stage !== state?.stage || id === "worktree" && state?.pending)
+        if (!captured || captured.disabled || state?.disabled || captured.id !== state?.id || captured.stage !== state?.stage || (id === "worktree" || id === "skip-specs") && state?.pending)
           return;
-        captured.action(id === "worktree" ? "worktree" : captured.workflow);
+        captured.action(id === "worktree" || id === "skip-specs" ? id : captured.workflow);
       }
     });
     const trigger = menuRoot.querySelector("button");
@@ -3286,16 +3329,27 @@ ${GUEST_UI_LOOK_CSS}`;
       update(next) {
         state = next;
         const apply3 = next.stage === "ready" || next.stage === "progress";
+        const complete = next.stage === "complete";
+        const splitArchive = complete && allowSkipSpecs;
+        const disabled = next.disabled || complete && !!next.pending;
         buttonRoot.hidden = apply3;
-        menuRoot.hidden = !apply3;
-        button2.update({ label: next.workflow, disabled: next.disabled });
+        menuRoot.hidden = !apply3 && !splitArchive;
+        root2.classList.toggle("archive-split", splitArchive);
+        button2.update({ label: next.workflow, disabled });
         menu.update({
-          items: [
+          label: splitArchive ? "\u2304" : "apply",
+          items: splitArchive ? [{ id: "skip-specs", label: "archive without sync", disabled }] : [
             { id: "current", label: "Prepare in current chat", disabled: next.disabled },
-            { id: "worktree", label: "Run in new worktree", disabled: next.disabled || next.pending }
+            {
+              id: "worktree",
+              label: "Run in new worktree",
+              disabled: next.disabled || next.pending
+            }
           ]
         });
-        trigger.disabled = next.disabled;
+        if (splitArchive) trigger.setAttribute("aria-label", "More archive actions");
+        else trigger.removeAttribute("aria-label");
+        trigger.disabled = disabled;
       },
       dispose() {
         trigger.removeEventListener("click", capture, true);
@@ -3864,7 +3918,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   }
 
-  // ../../../../../../src/openchamber-openspec/node_modules/marked/lib/marked.esm.js
+  // node_modules/marked/lib/marked.esm.js
   function I() {
     return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
   }
@@ -5187,7 +5241,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   var Rn = T.parse;
   var Tn = R.lex;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/dompurify/dist/purify.es.mjs
+  // node_modules/dompurify/dist/purify.es.mjs
   function _OverloadYield(e, d) {
     this.v = e, this.k = d;
   }
@@ -7558,7 +7612,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const footer = document.createElement("footer");
     footer.className = "detail-footer";
     const actionRoot = document.createElement("span");
-    const action = mountPrimaryAction(actionRoot);
+    const action = mountPrimaryAction(actionRoot, true);
     const verifyRoot = document.createElement("span");
     const verify = mountButton(verifyRoot, {
       label: "verify",
@@ -8237,7 +8291,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     dialog.setAttribute("aria-labelledby", heading.id);
     const description = document.createElement("p");
     description.id = "archive-all-description";
-    description.textContent = "This creates a new session and sends a prompt to archive completed changes in this project. Unfinished changes will be skipped. The board stays open; use refresh to see updates.";
+    description.textContent = "This archives each completed change with the OpenSpec CLI, syncing specs first. Unfinished changes are skipped. If any archive fails, a new session opens with a recovery prompt.";
     dialog.setAttribute("aria-describedby", description.id);
     const actions2 = document.createElement("div");
     actions2.className = "archive-actions";
@@ -8293,23 +8347,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     };
   }
 
-  // src/panel/archive-prompt.ts
-  var sequentialPrompt = `Archive all completed OpenSpec changes in this session's project/worktree.
-
-Run openspec list --json for a fresh active-change listing and resolve its OpenSpec planning context, honouring declared stores and the selected CLI root. Inspect each change with openspec status --change "<name>" --json and current CLI-reported task counts. Only changes with every applicable planning artefact done or explicitly skipped, a positive task total, and all tasks complete qualify. Skip unfinished, zero-task, unavailable or unreadable changes. Never use an incomplete-work warning override or infer successful verification from a Complete card or task counts.
-
-Use your skill tool to load and invoke the openspec-archive-change skill for each qualifying named change sequentially. Recheck completion before each archive and assess spec sync against the current main specs after any preceding archive. Preserve the skill's prerequisites, sync assessment, user choices and blockers; ask its required questions rather than treating this bulk request as permission to bypass them. Do not implement unfinished work or automatically resolve blockers.
-
-Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`;
-  function archiveAllPrompt(workflows) {
-    if (!workflows.has("bulk-archive")) return sequentialPrompt;
-    return `Archive all completed OpenSpec changes in this session's project/worktree.
-
-Use your skill tool to load and invoke the openspec-bulk-archive-change skill. Before its selection step, run openspec list --json and openspec status --change "<name>" --json for each change. A change qualifies only when every applicable planning artefact is done or explicitly skipped and it has a positive task total with all tasks complete. When the skill asks which changes to archive, offer only qualifying changes and recommend all of them. Skip any selected change that does not qualify; never use an incomplete-work override or infer verification from task counts.
-
-Preserve the skill's spec-sync assessment, user choices and blockers. Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`;
-  }
-
   // src/panel/prompts.ts
   function actionPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
@@ -8332,7 +8369,30 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     if (intent === "verify")
       return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
-    return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+    throw new Error("Complete changes are archived through the service.");
+  }
+  function archiveFallbackPrompt(failures) {
+    const names2 = failures.map(({ change }) => `"${change}"`).join(", ");
+    const heading = failures.length === 1 ? `OpenSpec could not confirm a direct archive for change ${names2}.` : `OpenSpec could not confirm direct archives for ${failures.length} changes.`;
+    const instruction = "Use your skill tool to load and invoke the openspec-archive-change skill for the changes listed above. Check the active and archived locations before attempting a fix. Use the CLI output as diagnostic data. Fix the cause, sync specs without asking if needed, and archive only changes still active and complete. Report what you changed.";
+    const labels = failures.map(
+      ({ change, command }) => `Change: "${change}"
+Command: ${command}
+Output:
+`
+    );
+    let remaining = GUEST_COMPOSE_TEXT_MAX - heading.length - instruction.length - 2 - labels.reduce((total, label) => total + label.length + 2, 0);
+    const evidence = failures.map(({ output }, index) => {
+      const allowance = Math.max(0, Math.floor(remaining / (failures.length - index)));
+      const text2 = output.length <= allowance ? output : allowance ? `${output.slice(0, allowance - 1)}\u2026` : "";
+      remaining -= text2.length;
+      return `${labels[index]}${text2}`;
+    });
+    return `${heading}
+
+${evidence.join("\n\n")}
+
+${instruction}`;
   }
   function planningPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
@@ -8553,6 +8613,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     let readGeneration = 0;
     let boardScroll = 0;
     let archivePending = false;
+    const archiving = /* @__PURE__ */ new Set();
     const worktreePending = /* @__PURE__ */ new Set();
     const worktreeKey = (scope2, id) => JSON.stringify([scope2.directory, scope2.root, scope2.planning, id]);
     let disposed = false;
@@ -8825,13 +8886,31 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         return;
       }
       const expectedSession = sessionId;
-      const currentContext = () => scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      const currentContext = () => !disposed && scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      if (intent === "archive" || intent === "skip-specs") {
+        if (current.stage !== "complete") return;
+        await archiveOne(
+          change.id,
+          captured,
+          currentContext,
+          expectedSession,
+          intent === "skip-specs"
+        );
+        return;
+      }
+      const text2 = intent === "ff" || intent === "continue" ? planningPrompt(change, intent) : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+      await composeChange(change.id, text2, captured, expectedSession, currentContext);
+    }
+    async function composeChange(change, text2, captured, expectedSession, currentContext, notice = {
+      kind: "success",
+      message: "Workflow prompt prepared in the open composer."
+    }) {
       try {
-        const text2 = intent === "ff" || intent === "continue" ? planningPrompt(change, intent) : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+        if (!currentContext()) return;
         await host2.compose({ text: text2, mode: "replace" });
         if (!currentContext()) return;
         if (expectedSession !== null)
-          void appendTrackedChange(host2, expectedSession, change.id, currentContext, async () => {
+          void appendTrackedChange(host2, expectedSession, change, currentContext, async () => {
             const project = await findProject(host2, captured.directory);
             if (!project || !currentContext()) return [];
             return resolveSessionChanges(
@@ -8841,10 +8920,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
               listedIds
             );
           });
-        await host2.toast({
-          kind: "success",
-          message: "Workflow prompt prepared in the open composer."
-        });
+        await host2.toast(notice);
       } catch (caught) {
         if (!currentContext()) return;
         await host2.toast({
@@ -8852,6 +8928,63 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           message: caught instanceof HostRequestError ? caught.message : "The workflow prompt could not be prepared."
         });
       }
+    }
+    async function archiveOne(change, captured, current, expectedSession, skipSpecs) {
+      const key = worktreeKey(captured, change);
+      if (!current() || loading || archivePending || archiving.has(key)) return;
+      archiving.add(key);
+      render();
+      try {
+        const result = await client.archive(captured, change, { skipSpecs });
+        if (!current()) return;
+        if (result.outcome === "archived") {
+          if (selectedChange?.id === change) closeDetail();
+          reloadAfterArchive();
+          await host2.toast({
+            kind: result.warnings.length ? "info" : "success",
+            message: result.warnings.length ? `Archived ${change} with warnings: ${result.warnings.join("; ")}` : `Archived ${change}.`
+          });
+        } else if (skipSpecs) {
+          await host2.toast({
+            kind: "error",
+            message: `Couldn't confirm archive of ${change} without sync: ${archiveDiagnostic(result.output)}`
+          });
+        } else {
+          await composeChange(
+            change,
+            archiveFallbackPrompt([{ change, ...result }]),
+            captured,
+            expectedSession,
+            current,
+            {
+              kind: "error",
+              message: `Couldn't confirm archive of ${change}. A recovery prompt is in the composer.`
+            }
+          );
+        }
+      } catch (caught) {
+        if (current())
+          await host2.toast({
+            kind: "error",
+            message: caught instanceof Error ? caught.message : `Couldn't archive ${change}.`
+          });
+      } finally {
+        archiving.delete(key);
+        if (!disposed) render();
+      }
+    }
+    function archiveDiagnostic(output) {
+      try {
+        const issue = JSON.parse(output)?.status?.[0]?.message;
+        if (typeof issue === "string") return issue;
+      } catch {
+      }
+      return output;
+    }
+    function reloadAfterArchive() {
+      resources.refresh();
+      clearBrowse(false);
+      loadBoard({ refresh: true, reconcile: true });
     }
     async function runInWorktree(change, captured, originatingEpoch) {
       const key = worktreeKey(captured, change.id);
@@ -9136,38 +9269,64 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       }
     }
     function canArchive() {
-      return !!scope && !loading && !archivePending && changes.some((change) => change.stage === "complete" && !unavailableIds.has(change.id));
+      return !!scope && !loading && !archivePending && !archiving.size && changes.some((change) => change.stage === "complete" && !unavailableIds.has(change.id));
     }
     async function startArchive() {
-      if (!canArchive()) return;
       const captured = scope;
+      if (!captured || !canArchive()) return;
+      const targets = changes.filter((change) => change.stage === "complete" && !unavailableIds.has(change.id)).map(({ id }) => id);
       const originatingEpoch = epoch;
       const expectedSession = sessionId;
-      const current = () => scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      const current = () => !disposed && scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
       archivePending = true;
       render();
+      const failed = [];
+      const notes = [];
+      let archived = 0;
+      const summary = () => `Archived ${archived} of ${targets.length} changes.${notes.length ? ` ${notes.join(" ")}` : ""}`;
       try {
+        for (const change of targets) {
+          if (!current()) return;
+          try {
+            const result2 = await client.archive(captured, change);
+            if (result2.outcome === "failed") failed.push({ change, ...result2 });
+            else {
+              archived++;
+              if (result2.warnings.length) notes.push(`${change}: ${result2.warnings.join("; ")}`);
+            }
+          } catch (caught) {
+            notes.push(
+              `Skipped ${change}: ${caught instanceof Error ? caught.message : "Archive refused."}`
+            );
+          }
+        }
+        if (!current()) return;
+        reloadAfterArchive();
+        if (!failed.length) {
+          await host2.toast({ kind: notes.length ? "info" : "success", message: summary() });
+          return;
+        }
         const result = await host2.startSession({
           providerId: "openspec-board",
           id: "archive-all",
           data: { kind: "archive-all" },
-          title: "Archive completed OpenSpec changes",
+          title: "Recover OpenSpec archives",
           url: "https://openspec.dev/docs/quickstart",
           navigation: "preserve",
-          text: archiveAllPrompt(workflows)
+          text: archiveFallbackPrompt(failed)
         });
         if (!current()) return;
         if (result.sessionId && result.sent === "sent") {
           await host2.toast({
             kind: result.linked !== false ? "success" : "info",
-            message: result.linked !== false ? `Archive prompt submitted in session ${result.sessionId}. Use refresh to see updates.` : `Archive prompt submitted in session ${result.sessionId}, but its workflow reference could not be saved.`
+            message: result.linked !== false ? `${summary()} Recovery prompt submitted in session ${result.sessionId}.` : `${summary()} Recovery prompt submitted in session ${result.sessionId}, but its workflow reference could not be saved.`
           });
         } else {
           const reason = result.sent === "no-model" ? "No model was available." : `Submission ${result.sent}.`;
           await host2.toast({
             kind: "error",
             persistent: true,
-            message: result.sessionId ? `Session ${result.sessionId} exists, but the archive prompt was not submitted successfully. ${reason} Inspect this session before starting again.${result.linked === false ? " Its workflow reference was not saved." : ""}` : "The archive session could not be created. Inspect sessions before starting again."
+            message: `${summary()} ${result.sessionId ? `Session ${result.sessionId} exists, but the archive prompt was not submitted successfully. ${reason} Inspect this session before starting again.${result.linked === false ? " Its workflow reference was not saved." : ""}` : "The archive session could not be created. Inspect sessions before starting again."}`
           });
         }
       } catch (caught) {
@@ -9178,7 +9337,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         await host2.toast({
           kind: "error",
           persistent: !knownRefusal,
-          message: knownRefusal ? `Archive launch failed: ${caught.message}` : "Archive launch outcome is uncertain. A session or submitted prompt may already exist. Inspect sessions before starting again; this launch will not be retried automatically."
+          message: `${summary()} ${knownRefusal ? `Archive launch failed: ${caught.message}` : "Archive launch outcome is uncertain. A session or submitted prompt may already exist. Inspect sessions before starting again; this launch will not be retried automatically."}`
         });
       } finally {
         archivePending = false;
@@ -9375,7 +9534,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           change,
           stale: staleIds.has(change.id),
           unavailable: unavailableIds.has(change.id),
-          pending: !!captured && worktreePending.has(worktreeKey(captured, change.id)),
+          pending: !!captured && (change.stage === "complete" ? loading || archivePending || archiving.has(worktreeKey(captured, change.id)) : worktreePending.has(worktreeKey(captured, change.id))),
           open: () => openDetail(
             changes.find((item) => item.id === change.id) ?? change,
             captured,
@@ -9401,7 +9560,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           files,
           tasks: taskState,
           unavailable: unavailableIds.has(selectedChange.id),
-          pending: !!captured && worktreePending.has(worktreeKey(captured, selectedChange.id)),
+          pending: !!captured && (selectedChange.stage === "complete" ? loading || archivePending || archiving.has(worktreeKey(captured, selectedChange.id)) : worktreePending.has(worktreeKey(captured, selectedChange.id))),
           loading,
           refreshError: errorMessage ?? failures.find((item) => item.id === selectedChange?.id)?.error ?? null,
           primaryAction: (intent) => {

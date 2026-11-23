@@ -496,6 +496,18 @@
         background: var(--oc-border, #30363c);
         pointer-events: none;
       }
+      .archive-split {
+        display: inline-flex;
+      }
+      .archive-split .primary-action-button > button {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .archive-split .primary-action-menu .oc-sdk-menu > button {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left: 1px solid var(--oc-border, currentColor);
+      }
       .stage-label {
         flex: none;
       }

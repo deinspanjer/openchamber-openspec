@@ -3,7 +3,9 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   CORE_WORKFLOWS,
+  archiveCommand,
   archivedChangeId,
+  decodeArchiveResult,
   decodeArchived,
   decodeArtifacts,
   decodeListingEntry,
@@ -803,6 +805,72 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     }
   }
 
+  async function archiveChange(
+    directory: string,
+    change: string,
+    expectedRoot: string,
+    expectedPlanning: string,
+    skipSpecs: boolean,
+  ): Promise<CliResult> {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const listing = await list(directory, current);
+    if ("code" in listing) return failure(listing);
+    const entry = listing.changes.find(({ id }) => id === change);
+    if (!entry)
+      return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
+    if (entry.totalTasks === 0 || entry.completedTasks !== entry.totalTasks)
+      return failure(
+        serviceError(
+          "CHANGE_INCOMPLETE",
+          "Tasks are incomplete. Refresh to see the current state.",
+          409,
+        ),
+      );
+    const pinned = await context(dirname(current.planningRoot));
+    if ("code" in pinned) return failure(pinned);
+    if (pinned.planning !== current.planning)
+      return failure(serviceError("ROOT_CHANGED", "Canonical planning context changed.", 409));
+    await validatedChange(current, change);
+    const args = ["archive", change, "--yes", ...(skipSpecs ? ["--skip-specs"] : [])];
+    const result = await checked(pinned.root, args, pinned, true, true);
+    if (result.ok) {
+      const archive = result.value.archive as Json | null | undefined;
+      if (
+        archive?.change === change &&
+        typeof archive.archivedAs === "string" &&
+        isChangeName(archive.archivedAs) &&
+        (archive.archivedAs === change || archivedChangeId(archive.archivedAs) === change)
+      ) {
+        try {
+          return {
+            ok: true,
+            value: decodeArchiveResult({
+              outcome: "archived",
+              archivedAs: archive.archivedAs,
+              warnings: archive.warnings === undefined ? [] : archive.warnings,
+            }),
+          };
+        } catch {
+          // Malformed success output is evidence for the fallback, not a confirmed archive.
+        }
+      }
+    }
+    return {
+      ok: true,
+      value: {
+        outcome: "failed",
+        command: archiveCommand(change, skipSpecs),
+        output: (result.ok || result.value
+          ? JSON.stringify(result.value, null, 2)
+          : result.error.message
+        ).slice(0, 20_000),
+      },
+    };
+  }
+
   async function deleteChange(
     directory: string,
     change: string,
@@ -879,6 +947,7 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     tasks,
     documentFor,
     createChange,
+    archiveChange,
     deleteChange,
   };
 }

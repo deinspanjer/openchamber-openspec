@@ -19,7 +19,13 @@ import { addButtonIcon } from "./panel/button-icon.js";
 import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
 import { findProject } from "./panel/project.js";
-import { actionPrompt, newChangePrompt, planningPrompt, syncPrompt } from "./panel/prompts.js";
+import {
+  actionPrompt,
+  archiveFallbackPrompt,
+  newChangePrompt,
+  planningPrompt,
+  syncPrompt,
+} from "./panel/prompts.js";
 import { createStatusCache, type DisplayCard } from "./panel/status-cache.js";
 import {
   appendTrackedChange,
@@ -451,6 +457,10 @@ async function preparePrompt(
   current: () => boolean,
   session = sessionId,
   seed = seedTrackedChanges,
+  notice: Parameters<typeof host.toast>[0] = {
+    kind: "success",
+    message: "Workflow prompt prepared in the open composer.",
+  },
 ) {
   if (!current()) return false;
   try {
@@ -462,10 +472,7 @@ async function preparePrompt(
   if (!current()) return false;
   const saved = session && change && appendTrackedChange(host, session, change, current, seed);
   try {
-    await host.toast({
-      kind: "success",
-      message: "Workflow prompt prepared in the open composer.",
-    });
+    await host.toast(notice);
   } catch (caught) {
     await showError(current, caught, "The workflow prompt could not be prepared.");
   }
@@ -551,11 +558,57 @@ function mountTrackedCard(id: string) {
   actions.className = "card-actions";
   let scope: Scope | null = null;
   let chips: ReturnType<typeof cardChips> | null = null;
+  let archivePending = false;
+  async function archiveChange(target: Scope, changeId: string) {
+    if (archivePending) return;
+    const current = captureContext();
+    const capturedSession = sessionId;
+    archivePending = true;
+    primary.update({ disabled: true });
+    try {
+      const result = await client.archive(target, changeId);
+      if (!current()) return;
+      if (result.outcome === "archived") {
+        read();
+        await host.toast({
+          kind: result.warnings.length ? "info" : "success",
+          message: result.warnings.length
+            ? `Archived ${changeId} with warnings: ${result.warnings.join("; ")}`
+            : `Archived ${changeId}.`,
+        });
+      } else {
+        await preparePrompt(
+          changeId,
+          archiveFallbackPrompt([{ change: changeId, ...result }]),
+          current,
+          capturedSession,
+          seedTrackedChanges,
+          {
+            kind: "error",
+            message: `Couldn't confirm archive of ${changeId}. A recovery prompt is in the composer.`,
+          },
+        );
+      }
+    } catch (caught) {
+      await showError(
+        current,
+        caught,
+        caught instanceof Error ? caught.message : `Couldn't archive ${changeId}.`,
+      );
+    } finally {
+      archivePending = false;
+      if (current()) primary.update({ disabled: false });
+    }
+  }
   const primary = mountButton(actions, {
     label: "",
     size: "xs",
     onClick: () => {
       if (!change || !chips) return;
+      if (chips.primary === "archive") {
+        if (scope) void archiveChange(scope, change.id);
+        return;
+      }
       const text =
         chips.primary === "ff" || chips.primary === "continue"
           ? planningPrompt(change, chips.primary)
@@ -694,7 +747,7 @@ function mountTrackedCard(id: string) {
       change = card.change;
       nameAnchor.update();
       chips = cardChips(change, workflows!);
-      primary.update({ label: chips.primary });
+      primary.update({ label: chips.primary, disabled: archivePending });
       secondary.update({ label: chips.secondary ?? "" });
       secondaryRoot.hidden = chips.secondary === null;
       syncRoot.hidden = !chips.sync;

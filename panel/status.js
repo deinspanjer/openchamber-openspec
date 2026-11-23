@@ -1,10 +1,10 @@
 "use strict";
 (() => {
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
+  // node_modules/@openchamber/sdk/dist/api-version.js
   var OPENCHAMBER_SDK_CHANNEL = "openchamber.sdk";
   var OPENCHAMBER_SDK_API_VERSION = 1;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
+  // node_modules/@openchamber/sdk/dist/scrollbar-style.js
   var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
   var GUEST_SCROLLBAR_CSS = `
 :root {
@@ -64,15 +64,15 @@
   }
   var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
+  // node_modules/@openchamber/sdk/dist/workspace.js
   var GUEST_STORAGE_KEY_MAX = 128;
   var GUEST_STORAGE_VALUE_BYTES = 65536;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
+  // node_modules/@openchamber/sdk/dist/shells.js
   var GUEST_SHELL_ID_MAX = 128;
   var GUEST_SHELL_OUTPUT_TAIL_MAX = 65536;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
+  // node_modules/@openchamber/sdk/dist/microphone.js
   var GUEST_MICROPHONE_SAMPLE_RATE_MIN = 8e3;
   var GUEST_MICROPHONE_SAMPLE_RATE_MAX = 192e3;
   var GUEST_MICROPHONE_OPEN_TIMEOUT_MS = 12e4;
@@ -117,7 +117,7 @@
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
+  // node_modules/@openchamber/sdk/dist/status-controls.js
   var GUEST_STATUS_CONTROLS_MAX = 4;
   var GUEST_STATUS_CONTROL_ID = /^[a-z][a-z0-9-]{0,39}$/;
   var GUEST_STATUS_CONTROL_LABEL_MAX = 60;
@@ -160,12 +160,12 @@
     return true;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
+  // node_modules/@openchamber/sdk/dist/manifest.js
   var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
   var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
   var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
+  // node_modules/@openchamber/sdk/dist/session-events.js
   var GUEST_SESSION_EVENT_TYPES = [
     "turn-finished",
     "turn-failed",
@@ -179,11 +179,11 @@
   var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
   var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
+  // node_modules/@openchamber/sdk/dist/service-host.js
   var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
   var MENTIONS_IDLE_MS = 10 * 6e4;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
+  // node_modules/@openchamber/sdk/dist/file-editor.js
   var GUEST_FILE_EDITOR_CONTENT_MAX = 2e7;
   var GUEST_FILE_EDITOR_VERSION_MAX = 256;
   var fileEditorPayloadSize = (value) => "bytes" in value ? value.bytes.byteLength : value.content.length;
@@ -202,7 +202,7 @@
     return true;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
+  // node_modules/@openchamber/sdk/dist/popover.js
   var GUEST_POPOVER_ID = /^[A-Za-z0-9_-]{1,80}$/;
   var GUEST_POPOVER_COORDINATE_MAX = 1e5;
   var GUEST_POPOVER_WIDTH_MIN = 160;
@@ -245,7 +245,7 @@
     }
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
+  // node_modules/@openchamber/sdk/dist/contract.js
   var GUEST_BLOCK_ANSWER_MAX = 2e3;
   var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
   var isStartSessionResult = (value) => Boolean(value && "sessionId" in value);
@@ -464,7 +464,7 @@
     return wire;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
+  // node_modules/@openchamber/sdk/dist/host.js
   var isKeyEvent = (event) => "key" in event && "metaKey" in event && "ctrlKey" in event;
   var isSaveShortcut = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "s";
   var HostRequestError = class extends Error {
@@ -1546,7 +1546,7 @@
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
+  // node_modules/@openchamber/sdk/dist/service-providers.js
   var BROWSER_CONTROL_ACTIONS = [
     "browser.open",
     "browser.snapshot",
@@ -1568,11 +1568,11 @@
   var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
   var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
+  // node_modules/@openchamber/sdk/dist/service-surface.js
   var SURFACE_CONTROLLERS = ["none", "agent", "user"];
   var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
+  // node_modules/@openchamber/sdk/dist/ui/theme.js
   var TOKEN_VARS = [
     ["--oc-bg", "background"],
     ["--oc-elevated", "elevated"],
@@ -1662,7 +1662,7 @@
     }
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
+  // node_modules/@openchamber/sdk/dist/ui/style.js
   var OC_ALIAS = {
     "surface-background": "bg",
     "surface-elevated": "elevated",
@@ -1973,7 +1973,7 @@ ${GUEST_SCROLLBAR_CSS}
 ${UI_SIZE_CSS}
 ${GUEST_UI_LOOK_CSS}`;
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
+  // node_modules/@openchamber/sdk/dist/ui/dom.js
   var STYLE_ID = "oc-sdk-ui-style";
   var ensureStyle = (css) => {
     const existing = document.getElementById(STYLE_ID);
@@ -2015,7 +2015,7 @@ ${GUEST_UI_LOOK_CSS}`;
     }
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
+  // node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
     const spinner = document.createElement("span");
     spinner.className = "oc-sdk-spinner-ring";
@@ -2063,7 +2063,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
+  // node_modules/@openchamber/sdk/dist/ui/icons.js
   var SVG_NS = "http://www.w3.org/2000/svg";
   var ICON_PATH = {
     search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
@@ -2089,7 +2089,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return node;
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
+  // node_modules/@openchamber/sdk/dist/ui/search.js
   var mountSearchField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2150,7 +2150,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
+  // node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
   var nextPopoverAnchorId = 0;
   var isKeyboardEvent = (event) => "key" in event;
   var mountPopoverAnchor = (element, options2) => {
@@ -2439,6 +2439,7 @@ ${GUEST_UI_LOOK_CSS}`;
       throw new Error("Invalid planning identity.");
     return value;
   }
+  var archiveCommand = (change, skipSpecs) => `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
   var documentKey = (artifactId, selector) => JSON.stringify([artifactId, selector]);
   var ALL_WORKFLOWS = [
     "propose",
@@ -2471,6 +2472,22 @@ ${GUEST_UI_LOOK_CSS}`;
   function string(value) {
     if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
     return value;
+  }
+  function decodeArchiveResult(value) {
+    const result = record(value);
+    if (result.outcome === "archived" && Array.isArray(result.warnings))
+      return {
+        outcome: result.outcome,
+        archivedAs: string(result.archivedAs),
+        warnings: result.warnings.map(string)
+      };
+    if (result.outcome === "failed")
+      return {
+        outcome: result.outcome,
+        command: string(result.command),
+        output: string(result.output)
+      };
+    throw new Error("Invalid archive result.");
   }
   function count(value) {
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -2908,6 +2925,30 @@ ${GUEST_UI_LOOK_CSS}`;
             "unknown"
           );
       },
+      archive: async (scope, change, { skipSpecs = false } = {}) => {
+        try {
+          return decode2(
+            await request("/archive", {
+              directory: scope.directory,
+              expectedRoot: scope.root,
+              expectedPlanning: scope.planning,
+              change,
+              skipSpecs
+            }),
+            decodeArchiveResult
+          );
+        } catch (caught) {
+          if (caught instanceof ServiceRequestError && (caught.outcome === "unknown" || caught.code === "BAD_SERVICE_DATA") || caught instanceof HostRequestError && ["REQUEST_FAILED", "HOST_TIMEOUT", "RESPONSE_TOO_LARGE", "DISCONNECTED"].includes(
+            caught.code
+          ))
+            return {
+              outcome: "failed",
+              command: archiveCommand(change, skipSpecs),
+              output: caught.message
+            };
+          throw caught;
+        }
+      },
       delete: async (scope, change) => {
         let value;
         try {
@@ -3024,12 +3065,35 @@ Complete all remaining tasks in ${target}, then verify the implementation agains
     }
     if (intent === "verify")
       return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
-    return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+    throw new Error("Complete changes are archived through the service.");
   }
   function syncPrompt(change) {
     return `Use your skill tool to load and invoke the openspec-sync-specs skill for OpenSpec change "${change.id}".
 
 Report what you synced without archiving the change.`;
+  }
+  function archiveFallbackPrompt(failures) {
+    const names2 = failures.map(({ change }) => `"${change}"`).join(", ");
+    const heading = failures.length === 1 ? `OpenSpec could not confirm a direct archive for change ${names2}.` : `OpenSpec could not confirm direct archives for ${failures.length} changes.`;
+    const instruction = "Use your skill tool to load and invoke the openspec-archive-change skill for the changes listed above. Check the active and archived locations before attempting a fix. Use the CLI output as diagnostic data. Fix the cause, sync specs without asking if needed, and archive only changes still active and complete. Report what you changed.";
+    const labels = failures.map(
+      ({ change, command }) => `Change: "${change}"
+Command: ${command}
+Output:
+`
+    );
+    let remaining = GUEST_COMPOSE_TEXT_MAX - heading.length - instruction.length - 2 - labels.reduce((total, label) => total + label.length + 2, 0);
+    const evidence = failures.map(({ output }, index) => {
+      const allowance = Math.max(0, Math.floor(remaining / (failures.length - index)));
+      const text = output.length <= allowance ? output : allowance ? `${output.slice(0, allowance - 1)}\u2026` : "";
+      remaining -= text.length;
+      return `${labels[index]}${text}`;
+    });
+    return `${heading}
+
+${evidence.join("\n\n")}
+
+${instruction}`;
   }
   function planningPrompt(change, intent) {
     const target = `OpenSpec change "${change.id}"`;
@@ -3566,7 +3630,10 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       return false;
     }
   }
-  async function preparePrompt(change, text, current, session = sessionId, seed = seedTrackedChanges) {
+  async function preparePrompt(change, text, current, session = sessionId, seed = seedTrackedChanges, notice = {
+    kind: "success",
+    message: "Workflow prompt prepared in the open composer."
+  }) {
     if (!current()) return false;
     try {
       await host.compose({ text, mode: "replace" });
@@ -3577,10 +3644,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     if (!current()) return false;
     const saved = session && change && appendTrackedChange(host, session, change, current, seed);
     try {
-      await host.toast({
-        kind: "success",
-        message: "Workflow prompt prepared in the open composer."
-      });
+      await host.toast(notice);
     } catch (caught) {
       await showError(current, caught, "The workflow prompt could not be prepared.");
     }
@@ -3655,11 +3719,55 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     actions.className = "card-actions";
     let scope = null;
     let chips = null;
+    let archivePending = false;
+    async function archiveChange(target, changeId) {
+      if (archivePending) return;
+      const current = captureContext();
+      const capturedSession = sessionId;
+      archivePending = true;
+      primary2.update({ disabled: true });
+      try {
+        const result = await client.archive(target, changeId);
+        if (!current()) return;
+        if (result.outcome === "archived") {
+          read();
+          await host.toast({
+            kind: result.warnings.length ? "info" : "success",
+            message: result.warnings.length ? `Archived ${changeId} with warnings: ${result.warnings.join("; ")}` : `Archived ${changeId}.`
+          });
+        } else {
+          await preparePrompt(
+            changeId,
+            archiveFallbackPrompt([{ change: changeId, ...result }]),
+            current,
+            capturedSession,
+            seedTrackedChanges,
+            {
+              kind: "error",
+              message: `Couldn't confirm archive of ${changeId}. A recovery prompt is in the composer.`
+            }
+          );
+        }
+      } catch (caught) {
+        await showError(
+          current,
+          caught,
+          caught instanceof Error ? caught.message : `Couldn't archive ${changeId}.`
+        );
+      } finally {
+        archivePending = false;
+        if (current()) primary2.update({ disabled: false });
+      }
+    }
     const primary2 = mountButton(actions, {
       label: "",
       size: "xs",
       onClick: () => {
         if (!change || !chips) return;
+        if (chips.primary === "archive") {
+          if (scope) void archiveChange(scope, change.id);
+          return;
+        }
         const text = chips.primary === "ff" || chips.primary === "continue" ? planningPrompt(change, chips.primary) : actionPrompt(change, "primary");
         void preparePrompt(change.id, text, captureContext());
       }
@@ -3790,7 +3898,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         change = card.change;
         nameAnchor.update();
         chips = cardChips(change, workflows);
-        primary2.update({ label: chips.primary });
+        primary2.update({ label: chips.primary, disabled: archivePending });
         secondary2.update({ label: chips.secondary ?? "" });
         secondaryRoot.hidden = chips.secondary === null;
         syncRoot.hidden = !chips.sync;

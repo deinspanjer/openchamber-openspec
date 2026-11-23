@@ -5,6 +5,7 @@ import { createServiceHost } from "@openchamber/sdk";
 import { decodeFocusTarget, type FocusTarget } from "../contracts.js";
 import { createOpenSpecAdapter } from "./openspec.js";
 import {
+  CLI_SHUTDOWN_MS,
   MAX_RESPONSE_BYTES,
   runOpenSpec,
   ServiceFault,
@@ -95,9 +96,10 @@ export function createOpenSpecService(
     try {
       const deadline = Date.now() + (options.timeoutMs ?? REQUEST_TIMEOUT_MS);
       const checkedRunner: CommandRunner = async (directory, args) => {
-        const remaining = deadline - Date.now();
+        const archive = args[0] === "archive";
+        const remaining = deadline - Date.now() - (archive ? CLI_SHUTDOWN_MS + 50 : 0);
         if (remaining <= 0) throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
-        if (args[0] === "new" && args[1] === "change") mutationDispatched = true;
+        if (archive || (args[0] === "new" && args[1] === "change")) mutationDispatched = true;
         const result = await runner(directory, args, remaining);
         if (Date.now() >= deadline)
           throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
@@ -141,98 +143,118 @@ export function createOpenSpecService(
       const validatePlanning = path === "/validate" ? requiredString(body, "planning") : undefined;
       if (validatePlanning && (validatePlanning.length > 4096 || validatePlanning.includes("\0")))
         throw serviceError("BAD_REQUEST", "Invalid planning identity.");
-      const work = validatePlanning
-        ? adapter.validate(
-            directory,
-            requiredString(body, "change"),
-            requiredString(body, "expectedRoot"),
-            validatePlanning,
-          )
-        : path === "/changes"
-          ? adapter.changes(directory, expectedRoot, expectedPlanning)
-          : path === "/summaries"
-            ? adapter.summaries(directory, requiredString(body, "expectedRoot"), expectedPlanning)
-            : path === "/tasks"
-              ? adapter.tasks(
-                  directory,
-                  requiredString(body, "change"),
-                  requiredString(body, "expectedRoot"),
-                  expectedPlanning,
-                )
-              : path === "/document"
-                ? adapter.documentFor(
+      const skipSpecs = body.skipSpecs;
+      if (path === "/archive" && skipSpecs !== undefined && typeof skipSpecs !== "boolean")
+        throw serviceError("BAD_REQUEST", "skipSpecs must be a boolean.");
+      const work =
+        path === "/archive"
+          ? adapter.archiveChange(
+              directory,
+              requiredString(body, "change"),
+              requiredString(body, "expectedRoot"),
+              requiredString(body, "expectedPlanning"),
+              skipSpecs === true,
+            )
+          : validatePlanning
+            ? adapter.validate(
+                directory,
+                requiredString(body, "change"),
+                requiredString(body, "expectedRoot"),
+                validatePlanning,
+              )
+            : path === "/changes"
+              ? adapter.changes(directory, expectedRoot, expectedPlanning)
+              : path === "/summaries"
+                ? adapter.summaries(
                     directory,
-                    requiredString(body, "change"),
-                    requiredString(body, "artifactId"),
-                    body.selector === undefined ? undefined : requiredString(body, "selector"),
                     requiredString(body, "expectedRoot"),
                     expectedPlanning,
                   )
-                : path === "/create"
-                  ? adapter.createChange(
+                : path === "/tasks"
+                  ? adapter.tasks(
                       directory,
-                      requiredString(body, "name"),
+                      requiredString(body, "change"),
                       requiredString(body, "expectedRoot"),
                       expectedPlanning,
                     )
-                  : path === "/delete"
-                    ? adapter.deleteChange(
+                  : path === "/document"
+                    ? adapter.documentFor(
                         directory,
                         requiredString(body, "change"),
+                        requiredString(body, "artifactId"),
+                        body.selector === undefined ? undefined : requiredString(body, "selector"),
                         requiredString(body, "expectedRoot"),
-                        () => {
-                          if (Date.now() >= deadline)
-                            throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
-                          mutationDispatched = true;
-                        },
                         expectedPlanning,
                       )
-                    : path === "/summary"
-                      ? adapter.summary(
+                    : path === "/create"
+                      ? adapter.createChange(
                           directory,
-                          requiredString(body, "change"),
+                          requiredString(body, "name"),
                           requiredString(body, "expectedRoot"),
                           expectedPlanning,
                         )
-                      : path === "/workflows"
-                        ? adapter.workflows(directory)
-                        : path === "/archived"
-                          ? adapter.archived(
+                      : path === "/delete"
+                        ? adapter.deleteChange(
+                            directory,
+                            requiredString(body, "change"),
+                            requiredString(body, "expectedRoot"),
+                            () => {
+                              if (Date.now() >= deadline)
+                                throw serviceError(
+                                  "CLI_TIMEOUT",
+                                  "OpenSpec request timed out.",
+                                  504,
+                                );
+                              mutationDispatched = true;
+                            },
+                            expectedPlanning,
+                          )
+                        : path === "/summary"
+                          ? adapter.summary(
                               directory,
+                              requiredString(body, "change"),
                               requiredString(body, "expectedRoot"),
                               expectedPlanning,
                             )
-                          : path === "/specs"
-                            ? adapter.specs(
-                                directory,
-                                requiredString(body, "expectedRoot"),
-                                expectedPlanning,
-                              )
-                            : path === "/spec"
-                              ? adapter.spec(
+                          : path === "/workflows"
+                            ? adapter.workflows(directory)
+                            : path === "/archived"
+                              ? adapter.archived(
                                   directory,
-                                  body.spec,
                                   requiredString(body, "expectedRoot"),
                                   expectedPlanning,
                                 )
-                              : path === "/modified-changes"
-                                ? adapter.modifiedChanges(
+                              : path === "/specs"
+                                ? adapter.specs(
                                     directory,
                                     requiredString(body, "expectedRoot"),
-                                    requiredString(body, "expectedPlanning"),
-                                    deadline,
+                                    expectedPlanning,
                                   )
-                                : path === "/pending-archives"
-                                  ? adapter.pendingArchives(
+                                : path === "/spec"
+                                  ? adapter.spec(
                                       directory,
+                                      body.spec,
                                       requiredString(body, "expectedRoot"),
-                                      requiredString(body, "expectedPlanning"),
-                                      deadline,
+                                      expectedPlanning,
                                     )
-                                  : Promise.resolve({
-                                      ok: false as const,
-                                      error: serviceError("NOT_FOUND", "Route not found.", 404),
-                                    });
+                                  : path === "/modified-changes"
+                                    ? adapter.modifiedChanges(
+                                        directory,
+                                        requiredString(body, "expectedRoot"),
+                                        requiredString(body, "expectedPlanning"),
+                                        deadline,
+                                      )
+                                    : path === "/pending-archives"
+                                      ? adapter.pendingArchives(
+                                          directory,
+                                          requiredString(body, "expectedRoot"),
+                                          requiredString(body, "expectedPlanning"),
+                                          deadline,
+                                        )
+                                      : Promise.resolve({
+                                          ok: false as const,
+                                          error: serviceError("NOT_FOUND", "Route not found.", 404),
+                                        });
       let timer: NodeJS.Timeout | undefined;
       const result = await Promise.race([
         work,

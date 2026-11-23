@@ -16,8 +16,12 @@ import { mountSpecView } from "./spec-view.js";
 import { mountCreateDialog } from "./create-dialog.js";
 import { mountDeleteDialog } from "./delete-dialog.js";
 import { mountArchiveDialog } from "./archive-dialog.js";
-import { archiveAllPrompt } from "./archive-prompt.js";
-import { actionPrompt, planningPrompt } from "./prompts.js";
+import {
+  actionPrompt,
+  archiveFallbackPrompt,
+  planningPrompt,
+  type ArchiveFailure,
+} from "./prompts.js";
 import type { PrimaryIntent } from "./primary-action.js";
 import { appendTrackedChange, resolveSessionChanges } from "./tracked-change.js";
 import { findProject } from "./project.js";
@@ -76,6 +80,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let readGeneration = 0;
   let boardScroll = 0;
   let archivePending = false;
+  const archiving = new Set<string>();
   const worktreePending = new Set<string>();
   const worktreeKey = (scope: Scope, id: string) =>
     JSON.stringify([scope.directory, scope.root, scope.planning, id]);
@@ -403,16 +408,45 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     }
     const expectedSession = sessionId;
     const currentContext = () =>
-      scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      !disposed &&
+      scope === captured &&
+      epoch === originatingEpoch &&
+      sessionId === expectedSession;
+    if (intent === "archive" || intent === "skip-specs") {
+      if (current.stage !== "complete") return;
+      await archiveOne(
+        change.id,
+        captured,
+        currentContext,
+        expectedSession,
+        intent === "skip-specs",
+      );
+      return;
+    }
+    const text =
+      intent === "ff" || intent === "continue"
+        ? planningPrompt(change, intent)
+        : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+    await composeChange(change.id, text, captured, expectedSession, currentContext);
+  }
+
+  async function composeChange(
+    change: string,
+    text: string,
+    captured: Scope,
+    expectedSession: string | null,
+    currentContext: () => boolean,
+    notice: Parameters<typeof host.toast>[0] = {
+      kind: "success",
+      message: "Workflow prompt prepared in the open composer.",
+    },
+  ) {
     try {
-      const text =
-        intent === "ff" || intent === "continue"
-          ? planningPrompt(change, intent)
-          : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+      if (!currentContext()) return;
       await host.compose({ text, mode: "replace" });
       if (!currentContext()) return;
       if (expectedSession !== null)
-        void appendTrackedChange(host, expectedSession, change.id, currentContext, async () => {
+        void appendTrackedChange(host, expectedSession, change, currentContext, async () => {
           const project = await findProject(host, captured.directory);
           if (!project || !currentContext()) return [];
           return resolveSessionChanges(
@@ -422,10 +456,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             listedIds,
           );
         });
-      await host.toast({
-        kind: "success",
-        message: "Workflow prompt prepared in the open composer.",
-      });
+      await host.toast(notice);
     } catch (caught) {
       if (!currentContext()) return;
       await host.toast({
@@ -436,6 +467,75 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             : "The workflow prompt could not be prepared.",
       });
     }
+  }
+
+  async function archiveOne(
+    change: string,
+    captured: Scope,
+    current: () => boolean,
+    expectedSession: string | null,
+    skipSpecs: boolean,
+  ) {
+    const key = worktreeKey(captured, change);
+    if (!current() || loading || archivePending || archiving.has(key)) return;
+    archiving.add(key);
+    render();
+    try {
+      const result = await client.archive(captured, change, { skipSpecs });
+      if (!current()) return;
+      if (result.outcome === "archived") {
+        if (selectedChange?.id === change) closeDetail();
+        reloadAfterArchive();
+        await host.toast({
+          kind: result.warnings.length ? "info" : "success",
+          message: result.warnings.length
+            ? `Archived ${change} with warnings: ${result.warnings.join("; ")}`
+            : `Archived ${change}.`,
+        });
+      } else if (skipSpecs) {
+        await host.toast({
+          kind: "error",
+          message: `Couldn't confirm archive of ${change} without sync: ${archiveDiagnostic(result.output)}`,
+        });
+      } else {
+        await composeChange(
+          change,
+          archiveFallbackPrompt([{ change, ...result }]),
+          captured,
+          expectedSession,
+          current,
+          {
+            kind: "error",
+            message: `Couldn't confirm archive of ${change}. A recovery prompt is in the composer.`,
+          },
+        );
+      }
+    } catch (caught) {
+      if (current())
+        await host.toast({
+          kind: "error",
+          message: caught instanceof Error ? caught.message : `Couldn't archive ${change}.`,
+        });
+    } finally {
+      archiving.delete(key);
+      if (!disposed) render();
+    }
+  }
+
+  function archiveDiagnostic(output: string): string {
+    try {
+      const issue = JSON.parse(output)?.status?.[0]?.message;
+      if (typeof issue === "string") return issue;
+    } catch {
+      // Not all CLI failures have JSON diagnostics.
+    }
+    return output;
+  }
+
+  function reloadAfterArchive() {
+    resources.refresh();
+    clearBrowse(false);
+    loadBoard({ refresh: true, reconcile: true });
   }
 
   async function runInWorktree(change: DerivedChange, captured: Scope, originatingEpoch: number) {
@@ -803,27 +903,60 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       !!scope &&
       !loading &&
       !archivePending &&
+      !archiving.size &&
       changes.some((change) => change.stage === "complete" && !unavailableIds.has(change.id))
     );
   }
   async function startArchive() {
-    if (!canArchive()) return;
     const captured = scope;
+    if (!captured || !canArchive()) return;
+    const targets = changes
+      .filter((change) => change.stage === "complete" && !unavailableIds.has(change.id))
+      .map(({ id }) => id);
     const originatingEpoch = epoch;
     const expectedSession = sessionId;
     const current = () =>
-      scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
+      !disposed &&
+      scope === captured &&
+      epoch === originatingEpoch &&
+      sessionId === expectedSession;
     archivePending = true;
     render();
+    const failed: ArchiveFailure[] = [];
+    const notes: string[] = [];
+    let archived = 0;
+    const summary = () =>
+      `Archived ${archived} of ${targets.length} changes.${notes.length ? ` ${notes.join(" ")}` : ""}`;
     try {
+      for (const change of targets) {
+        if (!current()) return;
+        try {
+          const result = await client.archive(captured, change);
+          if (result.outcome === "failed") failed.push({ change, ...result });
+          else {
+            archived++;
+            if (result.warnings.length) notes.push(`${change}: ${result.warnings.join("; ")}`);
+          }
+        } catch (caught) {
+          notes.push(
+            `Skipped ${change}: ${caught instanceof Error ? caught.message : "Archive refused."}`,
+          );
+        }
+      }
+      if (!current()) return;
+      reloadAfterArchive();
+      if (!failed.length) {
+        await host.toast({ kind: notes.length ? "info" : "success", message: summary() });
+        return;
+      }
       const result = await host.startSession({
         providerId: __OPENSPEC_PANEL_ID__,
         id: "archive-all",
         data: { kind: "archive-all" },
-        title: "Archive completed OpenSpec changes",
+        title: "Recover OpenSpec archives",
         url: "https://openspec.dev/docs/quickstart",
         navigation: "preserve",
-        text: archiveAllPrompt(workflows),
+        text: archiveFallbackPrompt(failed),
       });
       if (!current()) return;
       if (result.sessionId && result.sent === "sent") {
@@ -831,8 +964,8 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           kind: result.linked !== false ? "success" : "info",
           message:
             result.linked !== false
-              ? `Archive prompt submitted in session ${result.sessionId}. Use refresh to see updates.`
-              : `Archive prompt submitted in session ${result.sessionId}, but its workflow reference could not be saved.`,
+              ? `${summary()} Recovery prompt submitted in session ${result.sessionId}.`
+              : `${summary()} Recovery prompt submitted in session ${result.sessionId}, but its workflow reference could not be saved.`,
         });
       } else {
         const reason =
@@ -840,9 +973,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         await host.toast({
           kind: "error",
           persistent: true,
-          message: result.sessionId
-            ? `Session ${result.sessionId} exists, but the archive prompt was not submitted successfully. ${reason} Inspect this session before starting again.${result.linked === false ? " Its workflow reference was not saved." : ""}`
-            : "The archive session could not be created. Inspect sessions before starting again.",
+          message: `${summary()} ${
+            result.sessionId
+              ? `Session ${result.sessionId} exists, but the archive prompt was not submitted successfully. ${reason} Inspect this session before starting again.${result.linked === false ? " Its workflow reference was not saved." : ""}`
+              : "The archive session could not be created. Inspect sessions before starting again."
+          }`,
         });
       }
     } catch (caught) {
@@ -855,9 +990,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       await host.toast({
         kind: "error",
         persistent: !knownRefusal,
-        message: knownRefusal
-          ? `Archive launch failed: ${caught.message}`
-          : "Archive launch outcome is uncertain. A session or submitted prompt may already exist. Inspect sessions before starting again; this launch will not be retried automatically.",
+        message: `${summary()} ${
+          knownRefusal
+            ? `Archive launch failed: ${caught.message}`
+            : "Archive launch outcome is uncertain. A session or submitted prompt may already exist. Inspect sessions before starting again; this launch will not be retried automatically."
+        }`,
       });
     } finally {
       archivePending = false;
@@ -1067,7 +1204,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         change,
         stale: staleIds.has(change.id),
         unavailable: unavailableIds.has(change.id),
-        pending: !!captured && worktreePending.has(worktreeKey(captured, change.id)),
+        pending:
+          !!captured &&
+          (change.stage === "complete"
+            ? loading || archivePending || archiving.has(worktreeKey(captured, change.id))
+            : worktreePending.has(worktreeKey(captured, change.id))),
         open: () =>
           openDetail(
             changes.find((item) => item.id === change.id) ?? change,
@@ -1096,7 +1237,13 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             files,
             tasks: taskState,
             unavailable: unavailableIds.has(selectedChange.id),
-            pending: !!captured && worktreePending.has(worktreeKey(captured, selectedChange.id)),
+            pending:
+              !!captured &&
+              (selectedChange.stage === "complete"
+                ? loading ||
+                  archivePending ||
+                  archiving.has(worktreeKey(captured, selectedChange.id))
+                : worktreePending.has(worktreeKey(captured, selectedChange.id))),
             loading,
             refreshError:
               errorMessage ??

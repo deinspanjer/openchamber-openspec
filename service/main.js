@@ -34,9 +34,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/identity.js
+// node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/identity.js"(exports2) {
+  "node_modules/yaml/dist/nodes/identity.js"(exports2) {
     "use strict";
     var ALIAS = /* @__PURE__ */ Symbol.for("yaml.alias");
     var DOC = /* @__PURE__ */ Symbol.for("yaml.document");
@@ -91,9 +91,9 @@ var require_identity = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/visit.js
+// node_modules/yaml/dist/visit.js
 var require_visit = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/visit.js"(exports2) {
+  "node_modules/yaml/dist/visit.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var BREAK = /* @__PURE__ */ Symbol("break visit");
@@ -249,9 +249,9 @@ var require_visit = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/directives.js
+// node_modules/yaml/dist/doc/directives.js
 var require_directives = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/directives.js"(exports2) {
+  "node_modules/yaml/dist/doc/directives.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var visit = require_visit();
@@ -420,9 +420,9 @@ var require_directives = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/anchors.js
+// node_modules/yaml/dist/doc/anchors.js
 var require_anchors = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/anchors.js"(exports2) {
+  "node_modules/yaml/dist/doc/anchors.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var visit = require_visit();
@@ -490,9 +490,9 @@ var require_anchors = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/applyReviver.js
+// node_modules/yaml/dist/doc/applyReviver.js
 var require_applyReviver = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/applyReviver.js"(exports2) {
+  "node_modules/yaml/dist/doc/applyReviver.js"(exports2) {
     "use strict";
     function applyReviver(reviver, obj, key, val) {
       if (val && typeof val === "object") {
@@ -540,9 +540,9 @@ var require_applyReviver = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/toJS.js
+// node_modules/yaml/dist/nodes/toJS.js
 var require_toJS = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/toJS.js"(exports2) {
+  "node_modules/yaml/dist/nodes/toJS.js"(exports2) {
     "use strict";
     var identity = require_identity();
     function toJS(value, arg, ctx) {
@@ -570,9 +570,9 @@ var require_toJS = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Node.js
+// node_modules/yaml/dist/nodes/Node.js
 var require_Node = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Node.js"(exports2) {
+  "node_modules/yaml/dist/nodes/Node.js"(exports2) {
     "use strict";
     var applyReviver = require_applyReviver();
     var identity = require_identity();
@@ -611,9 +611,9 @@ var require_Node = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Alias.js
+// node_modules/yaml/dist/nodes/Alias.js
 var require_Alias = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Alias.js"(exports2) {
+  "node_modules/yaml/dist/nodes/Alias.js"(exports2) {
     "use strict";
     var anchors = require_anchors();
     var visit = require_visit();
@@ -725,9 +725,9 @@ var require_Alias = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Scalar.js
+// node_modules/yaml/dist/nodes/Scalar.js
 var require_Scalar = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Scalar.js"(exports2) {
+  "node_modules/yaml/dist/nodes/Scalar.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Node = require_Node();
@@ -755,9 +755,9 @@ var require_Scalar = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/createNode.js
+// node_modules/yaml/dist/doc/createNode.js
 var require_createNode = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/createNode.js"(exports2) {
+  "node_modules/yaml/dist/doc/createNode.js"(exports2) {
     "use strict";
     var Alias = require_Alias();
     var identity = require_identity();
@@ -830,9 +830,9 @@ var require_createNode = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Collection.js
+// node_modules/yaml/dist/nodes/Collection.js
 var require_Collection = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Collection.js"(exports2) {
+  "node_modules/yaml/dist/nodes/Collection.js"(exports2) {
     "use strict";
     var createNode = require_createNode();
     var identity = require_identity();
@@ -973,9 +973,9 @@ var require_Collection = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyComment.js
+// node_modules/yaml/dist/stringify/stringifyComment.js
 var require_stringifyComment = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyComment.js"(exports2) {
+  "node_modules/yaml/dist/stringify/stringifyComment.js"(exports2) {
     "use strict";
     var stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, "#");
     function indentComment(comment, indent) {
@@ -990,9 +990,9 @@ var require_stringifyComment = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/foldFlowLines.js
+// node_modules/yaml/dist/stringify/foldFlowLines.js
 var require_foldFlowLines = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/foldFlowLines.js"(exports2) {
+  "node_modules/yaml/dist/stringify/foldFlowLines.js"(exports2) {
     "use strict";
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
@@ -1126,9 +1126,9 @@ ${indent}${text.slice(fold + 1, end2)}`;
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyString.js
+// node_modules/yaml/dist/stringify/stringifyString.js
 var require_stringifyString = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyString.js"(exports2) {
+  "node_modules/yaml/dist/stringify/stringifyString.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     var foldFlowLines = require_foldFlowLines();
@@ -1409,9 +1409,9 @@ ${indent}`);
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringify.js
+// node_modules/yaml/dist/stringify/stringify.js
 var require_stringify = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringify.js"(exports2) {
+  "node_modules/yaml/dist/stringify/stringify.js"(exports2) {
     "use strict";
     var anchors = require_anchors();
     var identity = require_identity();
@@ -1532,9 +1532,9 @@ ${ctx.indent}${str}`;
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyPair.js
+// node_modules/yaml/dist/stringify/stringifyPair.js
 var require_stringifyPair = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyPair.js"(exports2) {
+  "node_modules/yaml/dist/stringify/stringifyPair.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -1665,9 +1665,9 @@ ${ctx.indent}`;
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/log.js
+// node_modules/yaml/dist/log.js
 var require_log = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/log.js"(exports2) {
+  "node_modules/yaml/dist/log.js"(exports2) {
     "use strict";
     var node_process = require("process");
     function debug(logLevel, ...messages) {
@@ -1687,9 +1687,9 @@ var require_log = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/merge.js
+// node_modules/yaml/dist/schema/yaml-1.1/merge.js
 var require_merge = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/merge.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/merge.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -1744,9 +1744,9 @@ var require_merge = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/addPairToJSMap.js
+// node_modules/yaml/dist/nodes/addPairToJSMap.js
 var require_addPairToJSMap = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports2) {
+  "node_modules/yaml/dist/nodes/addPairToJSMap.js"(exports2) {
     "use strict";
     var log = require_log();
     var merge = require_merge();
@@ -1808,9 +1808,9 @@ var require_addPairToJSMap = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Pair.js
+// node_modules/yaml/dist/nodes/Pair.js
 var require_Pair = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/Pair.js"(exports2) {
+  "node_modules/yaml/dist/nodes/Pair.js"(exports2) {
     "use strict";
     var createNode = require_createNode();
     var stringifyPair = require_stringifyPair();
@@ -1848,9 +1848,9 @@ var require_Pair = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyCollection.js
+// node_modules/yaml/dist/stringify/stringifyCollection.js
 var require_stringifyCollection = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyCollection.js"(exports2) {
+  "node_modules/yaml/dist/stringify/stringifyCollection.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var stringify = require_stringify();
@@ -1992,9 +1992,9 @@ ${indent}${end}`;
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/YAMLMap.js
+// node_modules/yaml/dist/nodes/YAMLMap.js
 var require_YAMLMap = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/YAMLMap.js"(exports2) {
+  "node_modules/yaml/dist/nodes/YAMLMap.js"(exports2) {
     "use strict";
     var stringifyCollection = require_stringifyCollection();
     var addPairToJSMap = require_addPairToJSMap();
@@ -2136,9 +2136,9 @@ var require_YAMLMap = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/map.js
+// node_modules/yaml/dist/schema/common/map.js
 var require_map = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/map.js"(exports2) {
+  "node_modules/yaml/dist/schema/common/map.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var YAMLMap = require_YAMLMap();
@@ -2158,9 +2158,9 @@ var require_map = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/YAMLSeq.js
+// node_modules/yaml/dist/nodes/YAMLSeq.js
 var require_YAMLSeq = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/nodes/YAMLSeq.js"(exports2) {
+  "node_modules/yaml/dist/nodes/YAMLSeq.js"(exports2) {
     "use strict";
     var createNode = require_createNode();
     var stringifyCollection = require_stringifyCollection();
@@ -2274,9 +2274,9 @@ var require_YAMLSeq = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/seq.js
+// node_modules/yaml/dist/schema/common/seq.js
 var require_seq = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/seq.js"(exports2) {
+  "node_modules/yaml/dist/schema/common/seq.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var YAMLSeq = require_YAMLSeq();
@@ -2296,9 +2296,9 @@ var require_seq = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/string.js
+// node_modules/yaml/dist/schema/common/string.js
 var require_string = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/string.js"(exports2) {
+  "node_modules/yaml/dist/schema/common/string.js"(exports2) {
     "use strict";
     var stringifyString = require_stringifyString();
     var string2 = {
@@ -2315,9 +2315,9 @@ var require_string = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/null.js
+// node_modules/yaml/dist/schema/common/null.js
 var require_null = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/common/null.js"(exports2) {
+  "node_modules/yaml/dist/schema/common/null.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     var nullTag = {
@@ -2333,9 +2333,9 @@ var require_null = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/bool.js
+// node_modules/yaml/dist/schema/core/bool.js
 var require_bool = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/bool.js"(exports2) {
+  "node_modules/yaml/dist/schema/core/bool.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     var boolTag = {
@@ -2357,9 +2357,9 @@ var require_bool = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyNumber.js
+// node_modules/yaml/dist/stringify/stringifyNumber.js
 var require_stringifyNumber = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyNumber.js"(exports2) {
+  "node_modules/yaml/dist/stringify/stringifyNumber.js"(exports2) {
     "use strict";
     function stringifyNumber({ format, minFractionDigits, tag, value }) {
       if (typeof value === "bigint")
@@ -2384,9 +2384,9 @@ var require_stringifyNumber = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/float.js
+// node_modules/yaml/dist/schema/core/float.js
 var require_float = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/float.js"(exports2) {
+  "node_modules/yaml/dist/schema/core/float.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     var stringifyNumber = require_stringifyNumber();
@@ -2430,9 +2430,9 @@ var require_float = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/int.js
+// node_modules/yaml/dist/schema/core/int.js
 var require_int = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/int.js"(exports2) {
+  "node_modules/yaml/dist/schema/core/int.js"(exports2) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -2475,9 +2475,9 @@ var require_int = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/schema.js
+// node_modules/yaml/dist/schema/core/schema.js
 var require_schema = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/core/schema.js"(exports2) {
+  "node_modules/yaml/dist/schema/core/schema.js"(exports2) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -2503,9 +2503,9 @@ var require_schema = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/json/schema.js
+// node_modules/yaml/dist/schema/json/schema.js
 var require_schema2 = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/json/schema.js"(exports2) {
+  "node_modules/yaml/dist/schema/json/schema.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     var map = require_map();
@@ -2570,9 +2570,9 @@ var require_schema2 = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/binary.js
+// node_modules/yaml/dist/schema/yaml-1.1/binary.js
 var require_binary = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/binary.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/binary.js"(exports2) {
     "use strict";
     var node_buffer = require("buffer");
     var Scalar = require_Scalar();
@@ -2636,9 +2636,9 @@ var require_binary = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/pairs.js
+// node_modules/yaml/dist/schema/yaml-1.1/pairs.js
 var require_pairs = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/pairs.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/pairs.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -2714,9 +2714,9 @@ ${cn.comment}` : item.comment;
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/omap.js
+// node_modules/yaml/dist/schema/yaml-1.1/omap.js
 var require_omap = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/omap.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/omap.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var toJS = require_toJS();
@@ -2792,9 +2792,9 @@ var require_omap = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/bool.js
+// node_modules/yaml/dist/schema/yaml-1.1/bool.js
 var require_bool2 = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/bool.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/bool.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     function boolStringify({ value, source }, ctx) {
@@ -2824,9 +2824,9 @@ var require_bool2 = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/float.js
+// node_modules/yaml/dist/schema/yaml-1.1/float.js
 var require_float2 = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/float.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/float.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     var stringifyNumber = require_stringifyNumber();
@@ -2873,9 +2873,9 @@ var require_float2 = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/int.js
+// node_modules/yaml/dist/schema/yaml-1.1/int.js
 var require_int2 = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/int.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/int.js"(exports2) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
@@ -2952,9 +2952,9 @@ var require_int2 = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/set.js
+// node_modules/yaml/dist/schema/yaml-1.1/set.js
 var require_set = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/set.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/set.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -3041,9 +3041,9 @@ var require_set = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
+// node_modules/yaml/dist/schema/yaml-1.1/timestamp.js
 var require_timestamp = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/timestamp.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/timestamp.js"(exports2) {
     "use strict";
     var stringifyNumber = require_stringifyNumber();
     function parseSexagesimal(str, asBigInt) {
@@ -3129,9 +3129,9 @@ var require_timestamp = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/schema.js
+// node_modules/yaml/dist/schema/yaml-1.1/schema.js
 var require_schema3 = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/yaml-1.1/schema.js"(exports2) {
+  "node_modules/yaml/dist/schema/yaml-1.1/schema.js"(exports2) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -3173,9 +3173,9 @@ var require_schema3 = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/tags.js
+// node_modules/yaml/dist/schema/tags.js
 var require_tags = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/tags.js"(exports2) {
+  "node_modules/yaml/dist/schema/tags.js"(exports2) {
     "use strict";
     var map = require_map();
     var _null = require_null();
@@ -3267,9 +3267,9 @@ var require_tags = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/Schema.js
+// node_modules/yaml/dist/schema/Schema.js
 var require_Schema = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/schema/Schema.js"(exports2) {
+  "node_modules/yaml/dist/schema/Schema.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var map = require_map();
@@ -3299,9 +3299,9 @@ var require_Schema = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyDocument.js
+// node_modules/yaml/dist/stringify/stringifyDocument.js
 var require_stringifyDocument = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/stringify/stringifyDocument.js"(exports2) {
+  "node_modules/yaml/dist/stringify/stringifyDocument.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var stringify = require_stringify();
@@ -3379,9 +3379,9 @@ var require_stringifyDocument = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/Document.js
+// node_modules/yaml/dist/doc/Document.js
 var require_Document = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/doc/Document.js"(exports2) {
+  "node_modules/yaml/dist/doc/Document.js"(exports2) {
     "use strict";
     var Alias = require_Alias();
     var Collection = require_Collection();
@@ -3688,9 +3688,9 @@ var require_Document = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/errors.js
+// node_modules/yaml/dist/errors.js
 var require_errors = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/errors.js"(exports2) {
+  "node_modules/yaml/dist/errors.js"(exports2) {
     "use strict";
     var YAMLError = class extends Error {
       constructor(name, pos, code, message) {
@@ -3753,9 +3753,9 @@ ${pointer}
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-props.js
+// node_modules/yaml/dist/compose/resolve-props.js
 var require_resolve_props = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-props.js"(exports2) {
+  "node_modules/yaml/dist/compose/resolve-props.js"(exports2) {
     "use strict";
     function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
       let spaceBefore = false;
@@ -3887,9 +3887,9 @@ var require_resolve_props = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-contains-newline.js
+// node_modules/yaml/dist/compose/util-contains-newline.js
 var require_util_contains_newline = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-contains-newline.js"(exports2) {
+  "node_modules/yaml/dist/compose/util-contains-newline.js"(exports2) {
     "use strict";
     function containsNewline(key) {
       if (!key)
@@ -3929,9 +3929,9 @@ var require_util_contains_newline = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-flow-indent-check.js
+// node_modules/yaml/dist/compose/util-flow-indent-check.js
 var require_util_flow_indent_check = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-flow-indent-check.js"(exports2) {
+  "node_modules/yaml/dist/compose/util-flow-indent-check.js"(exports2) {
     "use strict";
     var utilContainsNewline = require_util_contains_newline();
     function flowIndentCheck(indent, fc, onError) {
@@ -3947,9 +3947,9 @@ var require_util_flow_indent_check = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-map-includes.js
+// node_modules/yaml/dist/compose/util-map-includes.js
 var require_util_map_includes = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-map-includes.js"(exports2) {
+  "node_modules/yaml/dist/compose/util-map-includes.js"(exports2) {
     "use strict";
     var identity = require_identity();
     function mapIncludes(ctx, items, search) {
@@ -3963,9 +3963,9 @@ var require_util_map_includes = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-block-map.js
+// node_modules/yaml/dist/compose/resolve-block-map.js
 var require_resolve_block_map = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-block-map.js"(exports2) {
+  "node_modules/yaml/dist/compose/resolve-block-map.js"(exports2) {
     "use strict";
     var Pair = require_Pair();
     var YAMLMap = require_YAMLMap();
@@ -4071,9 +4071,9 @@ var require_resolve_block_map = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-block-seq.js
+// node_modules/yaml/dist/compose/resolve-block-seq.js
 var require_resolve_block_seq = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-block-seq.js"(exports2) {
+  "node_modules/yaml/dist/compose/resolve-block-seq.js"(exports2) {
     "use strict";
     var YAMLSeq = require_YAMLSeq();
     var resolveProps = require_resolve_props();
@@ -4122,9 +4122,9 @@ var require_resolve_block_seq = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-end.js
+// node_modules/yaml/dist/compose/resolve-end.js
 var require_resolve_end = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-end.js"(exports2) {
+  "node_modules/yaml/dist/compose/resolve-end.js"(exports2) {
     "use strict";
     function resolveEnd(end, offset, reqSpace, onError) {
       let comment = "";
@@ -4165,9 +4165,9 @@ var require_resolve_end = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-flow-collection.js
+// node_modules/yaml/dist/compose/resolve-flow-collection.js
 var require_resolve_flow_collection = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-flow-collection.js"(exports2) {
+  "node_modules/yaml/dist/compose/resolve-flow-collection.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Pair = require_Pair();
@@ -4359,9 +4359,9 @@ var require_resolve_flow_collection = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-collection.js
+// node_modules/yaml/dist/compose/compose-collection.js
 var require_compose_collection = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-collection.js"(exports2) {
+  "node_modules/yaml/dist/compose/compose-collection.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -4424,9 +4424,9 @@ var require_compose_collection = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-block-scalar.js
+// node_modules/yaml/dist/compose/resolve-block-scalar.js
 var require_resolve_block_scalar = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-block-scalar.js"(exports2) {
+  "node_modules/yaml/dist/compose/resolve-block-scalar.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     function resolveBlockScalar(ctx, scalar, onError) {
@@ -4607,9 +4607,9 @@ var require_resolve_block_scalar = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-flow-scalar.js
+// node_modules/yaml/dist/compose/resolve-flow-scalar.js
 var require_resolve_flow_scalar = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/resolve-flow-scalar.js"(exports2) {
+  "node_modules/yaml/dist/compose/resolve-flow-scalar.js"(exports2) {
     "use strict";
     var Scalar = require_Scalar();
     var resolveEnd = require_resolve_end();
@@ -4826,9 +4826,9 @@ var require_resolve_flow_scalar = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-scalar.js
+// node_modules/yaml/dist/compose/compose-scalar.js
 var require_compose_scalar = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-scalar.js"(exports2) {
+  "node_modules/yaml/dist/compose/compose-scalar.js"(exports2) {
     "use strict";
     var identity = require_identity();
     var Scalar = require_Scalar();
@@ -4907,9 +4907,9 @@ var require_compose_scalar = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-empty-scalar-position.js
+// node_modules/yaml/dist/compose/util-empty-scalar-position.js
 var require_util_empty_scalar_position = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/util-empty-scalar-position.js"(exports2) {
+  "node_modules/yaml/dist/compose/util-empty-scalar-position.js"(exports2) {
     "use strict";
     function emptyScalarPosition(offset, before, pos) {
       if (before) {
@@ -4937,9 +4937,9 @@ var require_util_empty_scalar_position = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-node.js
+// node_modules/yaml/dist/compose/compose-node.js
 var require_compose_node = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-node.js"(exports2) {
+  "node_modules/yaml/dist/compose/compose-node.js"(exports2) {
     "use strict";
     var Alias = require_Alias();
     var identity = require_identity();
@@ -5038,9 +5038,9 @@ var require_compose_node = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-doc.js
+// node_modules/yaml/dist/compose/compose-doc.js
 var require_compose_doc = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/compose-doc.js"(exports2) {
+  "node_modules/yaml/dist/compose/compose-doc.js"(exports2) {
     "use strict";
     var Document = require_Document();
     var composeNode = require_compose_node();
@@ -5081,9 +5081,9 @@ var require_compose_doc = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/composer.js
+// node_modules/yaml/dist/compose/composer.js
 var require_composer = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/compose/composer.js"(exports2) {
+  "node_modules/yaml/dist/compose/composer.js"(exports2) {
     "use strict";
     var node_process = require("process");
     var directives = require_directives();
@@ -5287,9 +5287,9 @@ ${end.comment}` : end.comment;
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst-scalar.js
+// node_modules/yaml/dist/parse/cst-scalar.js
 var require_cst_scalar = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst-scalar.js"(exports2) {
+  "node_modules/yaml/dist/parse/cst-scalar.js"(exports2) {
     "use strict";
     var resolveBlockScalar = require_resolve_block_scalar();
     var resolveFlowScalar = require_resolve_flow_scalar();
@@ -5472,9 +5472,9 @@ var require_cst_scalar = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst-stringify.js
+// node_modules/yaml/dist/parse/cst-stringify.js
 var require_cst_stringify = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst-stringify.js"(exports2) {
+  "node_modules/yaml/dist/parse/cst-stringify.js"(exports2) {
     "use strict";
     var stringify = (cst) => "type" in cst ? stringifyToken(cst) : stringifyItem(cst);
     function stringifyToken(token2) {
@@ -5533,9 +5533,9 @@ var require_cst_stringify = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst-visit.js
+// node_modules/yaml/dist/parse/cst-visit.js
 var require_cst_visit = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst-visit.js"(exports2) {
+  "node_modules/yaml/dist/parse/cst-visit.js"(exports2) {
     "use strict";
     var BREAK = /* @__PURE__ */ Symbol("break visit");
     var SKIP = /* @__PURE__ */ Symbol("skip children");
@@ -5595,9 +5595,9 @@ var require_cst_visit = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst.js
+// node_modules/yaml/dist/parse/cst.js
 var require_cst = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/cst.js"(exports2) {
+  "node_modules/yaml/dist/parse/cst.js"(exports2) {
     "use strict";
     var cstScalar = require_cst_scalar();
     var cstStringify = require_cst_stringify();
@@ -5697,9 +5697,9 @@ var require_cst = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/lexer.js
+// node_modules/yaml/dist/parse/lexer.js
 var require_lexer = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/lexer.js"(exports2) {
+  "node_modules/yaml/dist/parse/lexer.js"(exports2) {
     "use strict";
     var cst = require_cst();
     function isEmpty(ch) {
@@ -6276,9 +6276,9 @@ var require_lexer = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/line-counter.js
+// node_modules/yaml/dist/parse/line-counter.js
 var require_line_counter = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/line-counter.js"(exports2) {
+  "node_modules/yaml/dist/parse/line-counter.js"(exports2) {
     "use strict";
     var LineCounter = class {
       constructor() {
@@ -6307,9 +6307,9 @@ var require_line_counter = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/parser.js
+// node_modules/yaml/dist/parse/parser.js
 var require_parser = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/parse/parser.js"(exports2) {
+  "node_modules/yaml/dist/parse/parser.js"(exports2) {
     "use strict";
     var node_process = require("process");
     var cst = require_cst();
@@ -7174,9 +7174,9 @@ var require_parser = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/public-api.js
+// node_modules/yaml/dist/public-api.js
 var require_public_api = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/public-api.js"(exports2) {
+  "node_modules/yaml/dist/public-api.js"(exports2) {
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
@@ -7271,9 +7271,9 @@ var require_public_api = __commonJS({
   }
 });
 
-// ../../../../../../src/openchamber-openspec/node_modules/yaml/dist/index.js
+// node_modules/yaml/dist/index.js
 var require_dist = __commonJS({
-  "../../../../../../src/openchamber-openspec/node_modules/yaml/dist/index.js"(exports2) {
+  "node_modules/yaml/dist/index.js"(exports2) {
     "use strict";
     var composer = require_composer();
     var Document = require_Document();
@@ -7335,7 +7335,7 @@ module.exports = __toCommonJS(service_exports);
 var import_node_http = require("node:http");
 var import_node_path3 = require("node:path");
 
-// ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
+// node_modules/@openchamber/sdk/dist/scrollbar-style.js
 var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
 var GUEST_SCROLLBAR_CSS = `
 :root {
@@ -7395,12 +7395,12 @@ function installGuestScrollbarActivity(doc) {
 }
 var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
 
-// ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
+// node_modules/@openchamber/sdk/dist/manifest.js
 var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
 var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
 var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
 
-// ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
+// node_modules/@openchamber/sdk/dist/session-events.js
 var GUEST_SESSION_EVENT_TYPES = [
   "turn-finished",
   "turn-failed",
@@ -7414,7 +7414,7 @@ var GUEST_SESSION_EVENT_TYPES = [
 var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
 var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
 
-// ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
+// node_modules/@openchamber/sdk/dist/service-host.js
 var SERVICE_HOST_PATH = "/service/call";
 var OPENCHAMBER_HOST_CALLBACK_URL_ENV = "OPENCHAMBER_HOST_CALLBACK_URL";
 var SERVICE_HOST_TIMEOUT_MS = 3e4;
@@ -7471,7 +7471,7 @@ var createServiceHost = ({ env }) => {
   };
 };
 
-// ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
+// node_modules/@openchamber/sdk/dist/contract.js
 var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
 var GUEST_GENERATE_LATE_KEEP_MS = 60 * 6e4;
 var HOST_REQUEST_ERROR_CODES = [
@@ -7502,7 +7502,7 @@ var hostRequestErrorCodeSet = new Set(HOST_REQUEST_ERROR_CODES);
 var serviceStatusSet = new Set(SERVICE_STATUS_VALUES);
 var fileStatKindSet = new Set(GUEST_FILE_STAT_KINDS);
 
-// ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
+// node_modules/@openchamber/sdk/dist/service-providers.js
 var BROWSER_CONTROL_ACTIONS = [
   "browser.open",
   "browser.snapshot",
@@ -7524,7 +7524,7 @@ var NOTIFICATIONS_PROVIDER_IDLE_MS = 10 * 6e4;
 var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
 var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
 
-// ../../../../../../src/openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
+// node_modules/@openchamber/sdk/dist/service-surface.js
 var SURFACE_CONTROLLERS = ["none", "agent", "user"];
 var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
@@ -7534,6 +7534,7 @@ function isChangeName(value) {
 }
 
 // src/contracts.ts
+var archiveCommand = (change, skipSpecs) => `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
 var ALL_WORKFLOWS = [
   "propose",
   "explore",
@@ -7559,6 +7560,22 @@ function record(value) {
 function string(value) {
   if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
   return value;
+}
+function decodeArchiveResult(value) {
+  const result = record(value);
+  if (result.outcome === "archived" && Array.isArray(result.warnings))
+    return {
+      outcome: result.outcome,
+      archivedAs: string(result.archivedAs),
+      warnings: result.warnings.map(string)
+    };
+  if (result.outcome === "failed")
+    return {
+      outcome: result.outcome,
+      command: string(result.command),
+      output: string(result.output)
+    };
+  throw new Error("Invalid archive result.");
 }
 function count(value) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -7692,6 +7709,7 @@ var COMMAND_TIMEOUT_MS = 15e3;
 var STDOUT_BYTES = 1024 * 1024;
 var STDERR_BYTES = 64 * 1024;
 var TERMINATION_GRACE_MS = 500;
+var CLI_SHUTDOWN_MS = 2 * TERMINATION_GRACE_MS;
 var MAX_RESPONSE_BYTES = 24e4;
 var ServiceFault = class extends Error {
   constructor(code, message, status, outcome) {
@@ -7722,6 +7740,7 @@ async function runOpenSpec(directory, args, remainingMs = COMMAND_TIMEOUT_MS, op
   return await new Promise((complete) => {
     const child = (0, import_node_child_process.spawn)(options.binary ?? "openspec", [...args, "--json"], {
       cwd: directory,
+      env: { ...process.env, OPENSPEC_TELEMETRY: "0" },
       stdio: ["ignore", "pipe", "pipe"]
     });
     const stdout = [];
@@ -8546,6 +8565,56 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises2.rm) 
       );
     }
   }
+  async function archiveChange(directory, change, expectedRoot, expectedPlanning, skipSpecs) {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const listing = await list(directory, current);
+    if ("code" in listing) return failure(listing);
+    const entry = listing.changes.find(({ id }) => id === change);
+    if (!entry)
+      return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
+    if (entry.totalTasks === 0 || entry.completedTasks !== entry.totalTasks)
+      return failure(
+        serviceError(
+          "CHANGE_INCOMPLETE",
+          "Tasks are incomplete. Refresh to see the current state.",
+          409
+        )
+      );
+    const pinned = await context((0, import_node_path2.dirname)(current.planningRoot));
+    if ("code" in pinned) return failure(pinned);
+    if (pinned.planning !== current.planning)
+      return failure(serviceError("ROOT_CHANGED", "Canonical planning context changed.", 409));
+    await validatedChange(current, change);
+    const args = ["archive", change, "--yes", ...skipSpecs ? ["--skip-specs"] : []];
+    const result = await checked(pinned.root, args, pinned, true, true);
+    if (result.ok) {
+      const archive = result.value.archive;
+      if (archive?.change === change && typeof archive.archivedAs === "string" && isChangeName(archive.archivedAs) && (archive.archivedAs === change || archivedChangeId(archive.archivedAs) === change)) {
+        try {
+          return {
+            ok: true,
+            value: decodeArchiveResult({
+              outcome: "archived",
+              archivedAs: archive.archivedAs,
+              warnings: archive.warnings === void 0 ? [] : archive.warnings
+            })
+          };
+        } catch {
+        }
+      }
+    }
+    return {
+      ok: true,
+      value: {
+        outcome: "failed",
+        command: archiveCommand(change, skipSpecs),
+        output: (result.ok || result.value ? JSON.stringify(result.value, null, 2) : result.error.message).slice(0, 2e4)
+      }
+    };
+  }
   async function deleteChange(directory, change, expectedRoot, beforeRemove = () => {
   }, expectedPlanning) {
     if (!isChangeName(change))
@@ -8610,6 +8679,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises2.rm) 
     tasks,
     documentFor,
     createChange,
+    archiveChange,
     deleteChange
   };
 }
@@ -8682,9 +8752,10 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
     try {
       const deadline = Date.now() + (options.timeoutMs ?? REQUEST_TIMEOUT_MS);
       const checkedRunner = async (directory2, args) => {
-        const remaining = deadline - Date.now();
+        const archive = args[0] === "archive";
+        const remaining = deadline - Date.now() - (archive ? CLI_SHUTDOWN_MS + 50 : 0);
         if (remaining <= 0) throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
-        if (args[0] === "new" && args[1] === "change") mutationDispatched = true;
+        if (archive || args[0] === "new" && args[1] === "change") mutationDispatched = true;
         const result2 = await runner(directory2, args, remaining);
         if (Date.now() >= deadline)
           throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
@@ -8726,12 +8797,25 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
       const validatePlanning = path === "/validate" ? requiredString(body, "planning") : void 0;
       if (validatePlanning && (validatePlanning.length > 4096 || validatePlanning.includes("\0")))
         throw serviceError("BAD_REQUEST", "Invalid planning identity.");
-      const work = validatePlanning ? adapter.validate(
+      const skipSpecs = body.skipSpecs;
+      if (path === "/archive" && skipSpecs !== void 0 && typeof skipSpecs !== "boolean")
+        throw serviceError("BAD_REQUEST", "skipSpecs must be a boolean.");
+      const work = path === "/archive" ? adapter.archiveChange(
+        directory,
+        requiredString(body, "change"),
+        requiredString(body, "expectedRoot"),
+        requiredString(body, "expectedPlanning"),
+        skipSpecs === true
+      ) : validatePlanning ? adapter.validate(
         directory,
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),
         validatePlanning
-      ) : path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(directory, requiredString(body, "expectedRoot"), expectedPlanning) : path === "/tasks" ? adapter.tasks(
+      ) : path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(
+        directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/tasks" ? adapter.tasks(
         directory,
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),
@@ -8754,7 +8838,11 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         requiredString(body, "expectedRoot"),
         () => {
           if (Date.now() >= deadline)
-            throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
+            throw serviceError(
+              "CLI_TIMEOUT",
+              "OpenSpec request timed out.",
+              504
+            );
           mutationDispatched = true;
         },
         expectedPlanning

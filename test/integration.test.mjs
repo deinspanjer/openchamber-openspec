@@ -99,7 +99,7 @@ for (const shared of [false, true])
           } catch (error) { event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id, ok: false, error: { code: "NETWORK", message: String(error) } }, "*"); }
           return;
         }
-       if (message.type === "compose") { (window.__compositions ||= []).push(message.payload); window.__compose = message.payload; reply(); return; }
+       if (message.type === "compose") { window.__compose = message.payload; reply(); return; }
         if (message.type === "toast") reply(undefined);
       });
     </script><style>iframe{width:100%;height:100vh;border:0}</style><iframe src="/panel/index.html" title="OpenSpec integration panel"></iframe>`;
@@ -279,20 +279,7 @@ for (const shared of [false, true])
         await panelFrame.getByRole("heading", { name: "Complete 1" }).waitFor({ timeout: 30000 });
         const completedCard = panelFrame.locator(".change-card").filter({ hasText: change });
         assert.equal(await completedCard.locator(".affected-areas").isVisible(), false);
-        await completedCard.getByRole("button", { name: "archive" }).click();
-        await page.waitForFunction(() =>
-          window.__compose?.text?.startsWith(
-            "Use your skill tool to load and invoke the openspec-archive-change skill for ",
-          ),
-        );
         assert.equal(await completedCard.getByRole("button", { name: "verify" }).count(), 0);
-        assert.deepEqual(await page.evaluate(() => window.__compositions.map(({ mode }) => mode)), [
-          "replace",
-        ]);
-        assert.equal(
-          await page.evaluate(() => window.__requests.some((item) => item.path === "/archive")),
-          false,
-        );
         await panelFrame.getByRole("button", { name: "new change" }).click();
         await panelFrame.getByLabel("Change name", { exact: true }).fill("created-in-fixture");
         await panelFrame.getByRole("button", { name: "create", exact: true }).click();

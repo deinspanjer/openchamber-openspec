@@ -4,6 +4,7 @@ const COMMAND_TIMEOUT_MS = 15_000;
 const STDOUT_BYTES = 1024 * 1024;
 const STDERR_BYTES = 64 * 1024;
 const TERMINATION_GRACE_MS = 500;
+export const CLI_SHUTDOWN_MS = 2 * TERMINATION_GRACE_MS;
 export const MAX_RESPONSE_BYTES = 240_000;
 
 export type Json = Record<string, unknown>;
@@ -63,6 +64,7 @@ export async function runOpenSpec(
   return await new Promise((complete) => {
     const child = spawn(options.binary ?? "openspec", [...args, "--json"], {
       cwd: directory,
+      env: { ...process.env, OPENSPEC_TELEMETRY: "0" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];

@@ -23,8 +23,9 @@ and Tasks; custom artefact identifiers SHALL remain supported.
 
 - **WHEN** the core set is configured and a user views a change in each of the four stages and opens
   its detail
-- **THEN** the primary labels match on both surfaces and call `openspec-propose`,
-  `openspec-apply-change`, `openspec-apply-change` and `openspec-archive-change` respectively
+- **THEN** the primary labels match on both surfaces; Planning, Ready and In Progress call
+  `openspec-propose`, `openspec-apply-change` and `openspec-apply-change` respectively, and
+  Complete archives through the OpenSpec CLI
 - **AND** Complete offers no `verify`
 
 #### Scenario: Verify configured
@@ -39,18 +40,19 @@ Current-chat workflow actions SHALL prepare editable, unsent prompts and SHALL r
 composer's text, including a fresh-chat draft with no session ID. Prompts SHALL name the change and
 relevant skill without directory or root paths. Apply SHALL direct completion of pending tasks and
 reporting of verification and blockers; Verify SHALL compare implementation with planning artefacts
-and report gaps without archiving; Archive SHALL check archival prerequisites without assuming prior
-verification. The panel SHALL NOT mutate OpenSpec files through workflow actions. Among per-change
+and report gaps without archiving. `archive` and `archive without sync` follow the change-archiving
+requirements and are the only per-change actions that change OpenSpec files. Among per-change
 actions, only explicit new-worktree Apply SHALL create a worktree and session and send the Apply
-prompt as its first message through the SDK; the board-level `archive all` launch follows its own
-requirements. Unavailable changes SHALL have disabled workflow actions. Obsolete actions SHALL be
-rejected before dispatch. Unrelated project, planning-target, or session replacement SHALL discard
-late feedback without replaying composition. New-worktree prompt submission SHALL target only the
-created session, even if the originating panel is closed. Keeping the panel open is optional.
+prompt as its first message through the SDK. Unavailable changes SHALL have disabled workflow
+actions. Obsolete actions SHALL be rejected before dispatch. Unrelated project, planning-target, or
+session replacement SHALL discard late feedback without replaying composition. New-worktree prompt
+submission SHALL target only the created session, even if the originating panel is closed.
+Keeping the panel open is optional.
 
 #### Scenario: Compose without changing workflow state
 
-- **WHEN** a current-chat workflow action replaces an existing composer draft or a fresh-chat draft
+- **WHEN** a current-chat workflow action other than archive replaces an existing composer draft
+  or a fresh-chat draft
 - **THEN** its named skill and relevant guidance are present, filesystem paths are absent, and no
   send or session-creation request occurs
 - **AND** no card moves or tasks are marked complete merely from composition
@@ -189,17 +191,17 @@ return the dialogue to editing. A failed listing SHALL leave the outcome unresol
 The board SHALL offer `archive all` beside `new change`, using a native secondary button, an archive
 icon and the same small control size. It SHALL target completed changes across the board,
 independently of search filtering. The action SHALL be disabled without a resolved OpenSpec context,
-while the board is loading, when no available Complete change is known, or while a launch is
-pending. Activation SHALL open an accessible confirmation dialogue explaining that it creates a new
-session and submits a prompt, skips unfinished changes and leaves the board open. Controls SHALL be
-labelled `cancel` and `start archiving`. Cancellation, including Escape, SHALL create no session and
-submit no prompt.
+while the board is loading, when no available Complete change is known, or while a run is
+pending. Activation SHALL open an accessible confirmation dialogue explaining that it archives each
+completed change with the OpenSpec CLI, syncing specs first, skips unfinished changes, and opens a
+session only to fix archives that fail. Controls SHALL be labelled `cancel` and `start archiving`.
+Cancellation, including Escape, SHALL archive nothing and create no session.
 
 #### Scenario: Confirm or cancel
 
 - **WHEN** the user activates `archive all`
-- **THEN** the dialogue opens without creating a session or submitting a prompt
-- **AND** only `start archiving` authorises the launch; `cancel` or Escape dismisses it without
+- **THEN** the dialogue opens without archiving anything or creating a session
+- **AND** only `start archiving` authorises the run; `cancel` or Escape dismisses it without
   effects
 
 #### Scenario: Filtered or empty board
@@ -207,62 +209,6 @@ submit no prompt.
 - **WHEN** search hides a completed change
 - **THEN** search does not narrow the bulk operation
 - **AND** a board without any available Complete change has a disabled `archive all` action
-
-### Requirement: Launch one context-bound archive session
-
-Confirmation SHALL create one new session in the originating selected project/worktree without
-creating a worktree, submit the bulk prompt as its first message and preserve the current
-board/page, session selection and composer draft. The extension SHALL reject an obsolete
-confirmation if its directory or OpenSpec context changed before dispatch. Repeated activation
-during a pending launch SHALL NOT create another session. Late responses SHALL NOT cause navigation,
-redispatch or feedback in a replacement context. Successful launch feedback SHALL describe a
-submitted request, not claim that any changes have already been archived. Board content SHALL
-continue to update only through existing initial/context loads and explicit Refresh, not polling or
-agent completion events.
-
-#### Scenario: Submit while preserving the board
-
-- **WHEN** the user confirms in the unchanged originating context
-- **THEN** one session is created there with the submitted bulk archive prompt
-- **AND** the board stays open and the current draft and selected session remain unchanged
-
-#### Scenario: Context changes or repeated clicks
-
-- **WHEN** the context changes before confirmation, or the user repeats a pending launch
-- **THEN** no additional session is created from that confirmation or repeated activation
-- **AND** a response after unrelated navigation does not navigate back or replay the launch
-
-### Requirement: Bulk archive prompts exclude unfinished changes
-
-The submitted prompt SHALL request a fresh active-change listing in the session's OpenSpec context,
-inspection of current status and CLI-reported task completion, and archiving of completed changes
-only. When bulk-archive is configured it SHALL ask for `openspec-bulk-archive-change` and ask the
-agent to offer only qualifying changes for the skill's selection; otherwise it SHALL ask for
-sequential use of `openspec-archive-change`. Completion SHALL require every applicable planning
-artefact to be done or explicitly skipped and a positive task total with all tasks complete. The
-prompt SHALL NOT treat a Complete card as proof of verification. It SHALL exclude unfinished,
-unavailable or unreadable changes rather than permit archiving them with an incomplete-work
-override. It SHALL preserve the archive workflow's spec-sync assessment, user choices and blockers.
-It SHALL request a final report of archived, skipped and blocked changes, and no mutation when none
-qualify.
-
-#### Scenario: Completion changed since board load
-
-- **WHEN** a previously Complete change now has incomplete tasks or artefacts
-- **THEN** the prompt requires it to be skipped rather than archived with a warning override
-
-#### Scenario: Several completed changes affect the same capability
-
-- **WHEN** multiple changes qualify for archival
-- **THEN** the prompt requests fresh sync assessment for each change, sequentially when it uses
-  `openspec-archive-change`
-- **AND** it does not bypass required user choices or unresolved sync blockers
-
-#### Scenario: Bulk-archive configured
-
-- **WHEN** bulk-archive is configured and the user confirms archive all
-- **THEN** the submitted prompt asks for `openspec-bulk-archive-change`, offering only qualifying
-  changes for selection and skipping any selected change that does not qualify
 
 ### Requirement: Report partial or uncertain session launch outcomes
 
@@ -298,11 +244,11 @@ unchanged. The extension SHALL request skill invocation, not claim that a skill 
 
 #### Scenario: Prepare a per-change workflow
 
-- **WHEN** a user prepares Explore, Propose, Fast-forward, Continue, Apply, Verify or Archive in the
+- **WHEN** a user prepares Explore, Propose, Fast-forward, Continue, Apply or Verify in the
   current chat
 - **THEN** the editable, unsent prompt explicitly requests loading and invoking `openspec-explore`,
-  `openspec-propose`, `openspec-ff-change`, `openspec-continue-change`, `openspec-apply-change`,
-  `openspec-verify-change` or `openspec-archive-change` respectively through the agent's skill tool
+  `openspec-propose`, `openspec-ff-change`, `openspec-continue-change`, `openspec-apply-change` or
+  `openspec-verify-change` respectively through the agent's skill tool
 - **AND** the generated workflow instruction uses neither a slash command nor a dollar mention
 - **AND** the existing change-specific guidance and recorded goal or progress remain present
 
@@ -315,12 +261,9 @@ unchanged. The extension SHALL request skill invocation, not claim that a skill 
 
 #### Scenario: Archive completed changes in bulk
 
-- **WHEN** a user confirms archive all
-- **THEN** the submitted prompt explicitly requests loading and invoking
-  `openspec-bulk-archive-change` when bulk-archive is configured, or otherwise
-  `openspec-archive-change` for qualifying changes sequentially, through the agent's skill tool
-- **AND** fresh completion checks, skips, spec-sync assessment, user choices and reporting remain
-  required
+- **WHEN** an archive-all run leaves failures
+- **THEN** the fallback prompt explicitly requests loading and invoking `openspec-archive-change`
+  through the agent's skill tool
 
 ### Requirement: Current-chat composition tracks the change in the session
 
@@ -348,8 +291,8 @@ OpenSpec files, and a save failure SHALL NOT undo or fail the composition.
 ### Requirement: New-worktree Apply records its change on the created session
 
 New-worktree Apply SHALL record the change it applies on the session it creates, so that the
-session shows that change as tracked without a saved list. Bulk archive sessions SHALL be recorded
-so that they never resolve as a change.
+session shows that change as tracked without a saved list. Sessions created for archive-all
+failures SHALL be recorded so that they never resolve as a change.
 
 #### Scenario: Apply in a new worktree
 
@@ -358,7 +301,7 @@ so that they never resolve as a change.
 
 #### Scenario: Archive all
 
-- **WHEN** archive all creates session S
+- **WHEN** archive all creates session S for its failures
 - **THEN** S does not resolve any change from its recorded item
 
 ### Requirement: Sync prepares a spec-sync prompt

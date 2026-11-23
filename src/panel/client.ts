@@ -1,5 +1,7 @@
-import type { GuestRequest, HostClient } from "@openchamber/sdk";
+import { HostRequestError, type GuestRequest, type HostClient } from "@openchamber/sdk";
 import {
+  archiveCommand,
+  decodeArchiveResult,
   decodeArchived,
   decodeFocusTarget,
   decodeTaskResponse,
@@ -281,6 +283,35 @@ export function createClient(host: HostClient) {
           "Creation outcome is unknown.",
           "unknown",
         );
+    },
+    archive: async (scope: Scope, change: string, { skipSpecs = false } = {}) => {
+      try {
+        return decode(
+          await request("/archive", {
+            directory: scope.directory,
+            expectedRoot: scope.root,
+            expectedPlanning: scope.planning,
+            change,
+            skipSpecs,
+          }),
+          decodeArchiveResult,
+        );
+      } catch (caught) {
+        if (
+          (caught instanceof ServiceRequestError &&
+            (caught.outcome === "unknown" || caught.code === "BAD_SERVICE_DATA")) ||
+          (caught instanceof HostRequestError &&
+            ["REQUEST_FAILED", "HOST_TIMEOUT", "RESPONSE_TOO_LARGE", "DISCONNECTED"].includes(
+              caught.code,
+            ))
+        )
+          return {
+            outcome: "failed" as const,
+            command: archiveCommand(change, skipSpecs),
+            output: caught.message,
+          };
+        throw caught;
+      }
     },
     delete: async (scope: Scope, change: string): Promise<void> => {
       let value: Record<string, unknown>;

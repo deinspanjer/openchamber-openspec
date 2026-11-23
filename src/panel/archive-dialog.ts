@@ -12,7 +12,7 @@ export function mountArchiveDialog(
   const description = document.createElement("p");
   description.id = "archive-all-description";
   description.textContent =
-    "This creates a new session and sends a prompt to archive completed changes in this project. Unfinished changes will be skipped. The board stays open; use refresh to see updates.";
+    "This archives each completed change with the OpenSpec CLI, syncing specs first. Unfinished changes are skipped. If any archive fails, a new session opens with a recovery prompt.";
   dialog.setAttribute("aria-describedby", description.id);
   const actions = document.createElement("div");
   actions.className = "archive-actions";
