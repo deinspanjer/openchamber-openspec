@@ -73,14 +73,15 @@ export function resolveTrackedChanges({
   saved,
   items,
   worktreeName,
-  active,
+  eligible,
 }: {
   saved: string[] | null;
   items: { id: string; data?: unknown }[];
   worktreeName: string | null;
-  active: ReadonlySet<string>;
+  eligible: Pick<ReadonlySet<string>, "has">;
 }): { changes: string[]; source: TrackedSource } {
-  if (saved !== null) return { changes: saved.filter((name) => active.has(name)), source: "saved" };
+  if (saved !== null)
+    return { changes: saved.filter((name) => eligible.has(name)), source: "saved" };
   for (const { data } of items) {
     if (
       data &&
@@ -89,13 +90,13 @@ export function resolveTrackedChanges({
       data.kind === "change" &&
       "change" in data &&
       typeof data.change === "string" &&
-      active.has(data.change)
+      eligible.has(data.change)
     )
       return { changes: [data.change], source: "item" };
   }
-  const legacy = items.find(({ id, data }) => data === undefined && active.has(id));
+  const legacy = items.find(({ id, data }) => data === undefined && eligible.has(id));
   if (legacy) return { changes: [legacy.id], source: "item" };
-  if (worktreeName !== null && active.has(worktreeName))
+  if (worktreeName !== null && eligible.has(worktreeName))
     return { changes: [worktreeName], source: "worktree" };
   return { changes: [], source: "none" };
 }

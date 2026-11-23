@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   CORE_WORKFLOWS,
+  archivedChangeId,
   decodeArchived,
   decodeArtifacts,
   decodeListingEntry,
@@ -12,11 +13,12 @@ import {
   isWorkflow,
   isSpecId,
   type ListingEntry,
+  type PendingArchive,
   type SpecEntry,
   type ChangeMetadata,
 } from "../contracts.js";
 import { isChangeName } from "../model.js";
-import { modifiedChangeIds } from "./git.js";
+import { modifiedChangeIds, pendingArchives as findPendingArchives } from "./git.js";
 import {
   MAX_RESPONSE_BYTES,
   runOpenSpec,
@@ -392,6 +394,54 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     const archive = configured.findIndex((name) => name === "archive" || name === "bulk-archive");
     if (archive !== -1 && !configured.includes("sync")) configured.splice(archive, 0, "sync");
     return { ok: true, value: { workflows: configured } };
+  }
+
+  async function pendingArchives(
+    directory: string,
+    expectedRoot: string,
+    expectedPlanning: string,
+    deadline: number,
+  ): Promise<CliResult> {
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const unavailable = { ok: true, value: { changes: [] } } as const;
+    if (current.planningRoot !== join(current.root, "openspec")) return unavailable;
+    const result = await checked(directory, ["list", "--archived"], current, true, true);
+    await planningScope(current.root, current.planning);
+    if (!result.ok) return result.error.code === "OPENSPEC_ERROR" ? unavailable : result;
+    let entries;
+    try {
+      entries = decodeArchived(result.value);
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec archived listing.", 502));
+    }
+    const candidates = entries
+      .map((entry) => ({ ...entry, id: archivedChangeId(entry.name) }))
+      .filter(({ id }) => isChangeName(id));
+    const names = new Set(
+      await findPendingArchives(
+        directory,
+        current.root,
+        current.planningRoot,
+        candidates.map(({ name }) => name),
+        deadline,
+      ).catch((caught: unknown) => {
+        if (caught instanceof ServiceFault && caught.code === "GIT_UNAVAILABLE") return [];
+        throw caught;
+      }),
+    );
+    await planningScope(current.root, current.planning);
+    const newest = new Map<string, PendingArchive>();
+    for (const entry of candidates) {
+      if (!names.has(entry.name)) continue;
+      const previous = newest.get(entry.id);
+      if (
+        !previous ||
+        (entry.name !== entry.id && (previous.name === previous.id || previous.name < entry.name))
+      )
+        newest.set(entry.id, entry);
+    }
+    return { ok: true, value: { changes: [...newest.values()] } };
   }
 
   async function archived(
@@ -823,6 +873,7 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
 
   return {
     archived,
+    pendingArchives,
     specs,
     spec,
     changes,

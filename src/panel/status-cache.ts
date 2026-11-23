@@ -3,7 +3,8 @@ import { decodeListingEntry, type ListingEntry } from "../contracts.js";
 import type { Stage } from "../model.js";
 import { stages } from "./workflow.js";
 
-export type DisplayCard = ListingEntry & { stage: Stage; currentTaskTitle: string | null };
+export type DisplayCard = ListingEntry &
+  ({ stage: Stage; currentTaskTitle: string | null } | { archived: true; currentTaskTitle: null });
 type Snapshot = { directory: string; cards: DisplayCard[] };
 type SessionEntry = Snapshot & { sessionId: string };
 
@@ -25,6 +26,8 @@ function decode(value: unknown): SessionEntry[] {
     try {
       const cards = entry.cards.map((card: unknown): DisplayCard => {
         const listing = decodeListingEntry(card);
+        if (card && typeof card === "object" && "archived" in card && card.archived === true)
+          return { ...listing, archived: true, currentTaskTitle: null };
         if (!card || typeof card !== "object" || !("stage" in card))
           throw new Error("Missing stage.");
         const stage = stages.find(({ id }) => id === card.stage)?.id;

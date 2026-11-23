@@ -40,6 +40,8 @@
   event signals that a target is pending; only a matching directory can claim it with `GET /focus`.
 - `/workflows` reads the global profile via `openspec config list --json`, without planning scope.
   The section falls back to core workflows if the read fails.
+- `/pending-archives` compares local archives with the checkout's base ref. Unavailable Git,
+  unsupported archived listings and shared planning fall back to active changes only.
 - The extension manifest is `package.json`'s `openchamber` field, not `service/package.json`. The
   latter keeps generated `service/main.js` CommonJS inside this ESM repository.
 - `panel/main.js` and `panel/status.js` are generated ES2022 browser IIFEs. `service/main.js` is the
@@ -56,10 +58,13 @@
   result for other board reloads.
 - Read Archived, the Specs list, and each spec on first open in a context. Refresh invalidates all
   browse reads and reloads only the visible browse content. A hidden view reads on its next open.
+  A claimed archive focus can re-read Archived once if the focused row is missing.
 - Load the Work Status section on mount, session or project changes, explicit Refresh, and after the
   shown session finishes a turn. Re-read after tracking changes. Read one listing and the summary
-  and tasks for each tracked change only. Keep unchanged card controls mounted across reads. Do not
-  poll, refresh on visibility changes, or read board-wide summaries.
+  and tasks for each tracked active change only. Check pending archives only when a tracked name
+  is missing from the active listing or the picker opens without a pending-archive result.
+  Keep unchanged card controls mounted across reads. Do not poll, refresh on visibility changes,
+  or read board-wide summaries.
 - Read configured workflows on mount, project change, and footer Refresh. Reuse the result for
   session switches in the same directory and finished turns.
 - Retained reads do not authorise writes or recovery. Reconcile uncertain writes with a fresh

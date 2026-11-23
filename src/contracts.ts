@@ -8,6 +8,8 @@ export function decodePlanning(value: unknown): string {
 }
 export type ListingEntry = { id: string; completedTasks: number; totalTasks: number };
 export type ArchivedChange = { name: string; completedTasks: number; totalTasks: number };
+export type PendingArchive = ArchivedChange & { id: string };
+export type FocusTarget = { directory: string } & ({ change: string } | { archive: string });
 export type SpecEntry = { id: string; requirementCount: number };
 export type Task = {
   id: string;
@@ -118,6 +120,37 @@ export function decodeArchived(value: unknown): ArchivedChange[] {
   if (new Set(archived.map(({ name }) => name)).size !== archived.length)
     throw new Error("Duplicate archived change.");
   return archived;
+}
+
+export const archivedChangeId = (name: string): string => name.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+
+export function decodeFocusTarget(value: unknown): FocusTarget {
+  const { directory, change, archive } = record(value);
+  if (typeof directory === "string") {
+    if (archive === undefined && typeof change === "string" && isChangeName(change))
+      return { directory, change };
+    if (
+      change === undefined &&
+      typeof archive === "string" &&
+      isChangeName(archivedChangeId(archive))
+    )
+      return { directory, archive };
+  }
+  throw new Error("Invalid board focus target.");
+}
+
+export function decodePendingArchives(value: unknown): PendingArchive[] {
+  const { changes } = record(value);
+  if (!Array.isArray(changes)) throw new Error("Invalid pending archives.");
+  const pending = changes.map((value) => {
+    const listing = decodeListingEntry(value);
+    const name = string(record(value).name);
+    if (archivedChangeId(name) !== listing.id) throw new Error("Invalid archived name.");
+    return { ...listing, name };
+  });
+  if (new Set(pending.map(({ id }) => id)).size !== pending.length)
+    throw new Error("Duplicate pending archive.");
+  return pending;
 }
 
 export function isSpecId(value: unknown): value is string {

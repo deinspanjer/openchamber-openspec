@@ -8,11 +8,13 @@ import {
 import {
   decodeValidation,
   type ListingEntry,
+  type PendingArchive,
+  type FocusTarget,
   type Task,
   type ValidationResult,
   type Workflow,
 } from "./contracts.js";
-import { deriveChange, taskWindow, type DerivedChange, type Stage } from "./model.js";
+import { deriveChange, isChangeName, taskWindow, type DerivedChange, type Stage } from "./model.js";
 import { addButtonIcon } from "./panel/button-icon.js";
 import { createClient, type Listing, type Scope } from "./panel/client.js";
 import { applyDevice } from "./panel/device.js";
@@ -35,6 +37,7 @@ type View =
   | { kind: "ready"; listing: Listing; cards: Card[] };
 type Card =
   | { id: string; change: DerivedChange; tasks: Task[] }
+  | { id: string; archive: PendingArchive }
   | { id: string; message: string }
   | { id: string; display: DisplayCard; message?: string };
 type ChangeFlyout = {
@@ -45,13 +48,15 @@ type ChangeFlyout = {
   directory: string;
   offerContinue: boolean;
 };
+type ArchivedFlyout = { kind: "archived"; name: string; archive: string; directory: string };
 type TaskFlyout = { kind: "task"; id: string; description: string };
 type ValidationFlyout = {
   kind: "validation";
   change: string;
   result: ValidationResult & { totalIssues: number };
 };
-type Flyout = ChangeFlyout | TaskFlyout | ValidationFlyout;
+type Flyout = ChangeFlyout | ArchivedFlyout | TaskFlyout | ValidationFlyout;
+const archiveLabel = "Archived · not landed";
 const isValidationIssue = ({ level }: ValidationResult["issues"][number]) => level !== "INFO";
 
 const root = document.querySelector<HTMLElement>("#root");
@@ -75,7 +80,13 @@ let queued = false;
 let workflows: ReadonlySet<Workflow> | undefined;
 let refreshWorkflows = false;
 let contextRead: ReturnType<typeof setTimeout> | undefined;
-let selection: { active: Set<string>; saved: string[] | null; changes: string[] } | null = null;
+const validNames = { has: isChangeName };
+let selection: {
+  eligible: Set<string>;
+  saved: string[] | null;
+  candidates: string[];
+  changes: string[];
+} | null = null;
 let hasDeviceStorage = false;
 let hasPopovers = false;
 let popoverFrame = false;
@@ -167,16 +178,19 @@ const cancelPicker = mountButton(cancelRoot, {
   onClick: () => setPickerOpen(false),
 });
 let pickerItems: string[] = [];
-let pickerScope: Scope | null = null;
+let pickerListing: Listing | null = null;
+let pickerTracked: string[] = [];
+let pickerArchives: PendingArchive[] | null = null;
 let latestPickerScope: Scope | null = null;
-let hintOpening: { hints: ReadonlySet<string> } | null = null;
+type PickerOpening = { hints: ReadonlySet<string>; archives: PendingArchive[] | null };
+let pickerOpening: PickerOpening | null = null;
 let viewKey = "";
 let showingLive = false;
 let readError: string | undefined;
 const mountedCards = new Map<string, ReturnType<typeof mountTrackedCard>>();
 
 function setPickerOpen(open: boolean, restoreFocus = true) {
-  hintOpening = null;
+  pickerOpening = null;
   picker.hidden = !open;
   pickerTrigger.setAttribute("aria-expanded", String(open));
   if (open) {
@@ -185,22 +199,35 @@ function setPickerOpen(open: boolean, restoreFocus = true) {
     renderPickerRows();
     if (!searchRoot.hidden) searchInput.focus();
     else choices.querySelector<HTMLElement>("button:enabled")?.focus();
-    const scope = pickerScope;
-    if (scope && pickerItems.length && samePickerScope(scope, latestPickerScope)) {
-      const opening = { hints: new Set<string>() };
-      hintOpening = opening;
+    const scope = pickerListing;
+    if (scope && samePickerScope(scope, latestPickerScope)) {
+      const opening: PickerOpening = { hints: new Set(), archives: null };
+      pickerOpening = opening;
       const current = captureContext();
-      void client.modifiedChanges(scope).then(
-        (ids) => {
-          if (hintOpening !== opening || !current() || !samePickerScope(scope, latestPickerScope))
-            return;
-          opening.hints = new Set(ids);
-          renderPickerRows();
-        },
-        () => {
-          // Git is optional; leave the picker sorted by task progress.
-        },
-      );
+      const stillOpen = () =>
+        pickerOpening === opening && current() && samePickerScope(scope, latestPickerScope);
+      if (pickerItems.length)
+        void client.modifiedChanges(scope).then(
+          (ids) => {
+            if (!stillOpen()) return;
+            opening.hints = new Set(ids);
+            renderPickerRows();
+          },
+          () => {
+            // Git is optional; leave the picker sorted by task progress.
+          },
+        );
+      if (pickerArchives === null)
+        void client.pendingArchives(scope).then(
+          (archives) => {
+            if (!stillOpen()) return;
+            opening.archives = archives;
+            renderPickerRows();
+          },
+          () => {
+            // Active choices remain usable when the archive check fails.
+          },
+        );
     }
   } else if (restoreFocus) pickerTrigger.focus();
 }
@@ -284,13 +311,15 @@ function samePickerScope(left: Scope, right: Scope | null) {
 function updateLatestPickerScope(scope: Scope) {
   if (samePickerScope(scope, latestPickerScope)) return;
   latestPickerScope = scope;
-  if (!hintOpening) return;
-  hintOpening = null;
+  pickerOpening = null;
+  pickerArchives = null;
   renderPickerRows();
 }
 
-function updatePicker(listing: Listing, tracked: string[]) {
-  pickerScope = listing;
+function updatePicker(listing: Listing, tracked: string[], archives: PendingArchive[] | null) {
+  pickerListing = listing;
+  pickerTracked = tracked;
+  pickerArchives = archives;
   pickerItems = listing.changes
     .filter(({ id }) => !tracked.includes(id))
     .sort((left, right) => pickerPriority(left) - pickerPriority(right))
@@ -300,6 +329,9 @@ function updatePicker(listing: Listing, tracked: string[]) {
 
 function mountPickerRow(id: string) {
   const row = document.createElement("li");
+  const archiveNote = document.createElement("span");
+  archiveNote.className = "note";
+  archiveNote.id = `picker-archive-${id}`;
   const button = mountButton(row, {
     label: id,
     size: "sm",
@@ -318,18 +350,30 @@ function mountPickerRow(id: string) {
     },
   });
   const control = row.querySelector("button")!;
-  return { row, button, control };
+  row.append(archiveNote);
+  return { row, button, control, archiveNote };
 }
 
 function renderPickerRows() {
   const query = pickerQuery.trim().toLocaleLowerCase();
-  const hints = hintOpening?.hints;
-  const items = pickerItems
+  const hints = pickerOpening?.hints;
+  const activeIds = new Set(pickerListing?.changes.map(({ id }) => id));
+  const archives = (pickerArchives ?? pickerOpening?.archives ?? [])
+    .map(({ id }) => id)
+    .filter((id) => !activeIds.has(id) && !pickerTracked.includes(id))
+    .sort((a, b) => a.localeCompare(b));
+  const archivedIds = new Set(archives);
+  const activeItems = pickerItems
     .filter((id) => id.toLocaleLowerCase().includes(query))
     .sort((left, right) => Number(hints?.has(right) ?? false) - Number(hints?.has(left) ?? false));
-  searchRoot.hidden = pickerItems.length <= 1 && pickerQuery === "";
+  const items = [
+    ...activeItems,
+    ...archives.filter((id) => id.toLocaleLowerCase().includes(query)),
+  ];
+  const total = pickerItems.length + archives.length;
+  searchRoot.hidden = total <= 1 && pickerQuery === "";
   emptyChoices.hidden = items.length !== 0;
-  emptyChoices.textContent = pickerItems.length ? "No matching changes." : "No untracked changes.";
+  emptyChoices.textContent = total ? "No matching changes." : "No untracked changes.";
   const focused = document.activeElement;
   const hadChoiceFocus = choices.contains(focused);
   const visible = new Set(items);
@@ -345,8 +389,14 @@ function renderPickerRows() {
       mounted = mountPickerRow(id);
       pickerRows.set(id, mounted);
     }
-    const { row, control } = mounted;
-    if (hints?.has(id)) {
+    const { row, control, archiveNote } = mounted;
+    const archived = archivedIds.has(id);
+    row.classList.toggle("archive-choice", archived);
+    archiveNote.hidden = !archived;
+    archiveNote.textContent = archived ? archiveLabel : "";
+    if (archived) {
+      control.setAttribute("aria-describedby", archiveNote.id);
+    } else if (hints?.has(id)) {
       control.setAttribute("aria-describedby", modifiedDescription.id);
     } else control.removeAttribute("aria-describedby");
     let previous = choices.children.item(index);
@@ -366,7 +416,7 @@ function renderPickerRows() {
 }
 
 function seedTrackedChanges() {
-  return selection ? resolveSessionChanges(sessionId, sessions, null, selection.active) : [];
+  return selection ? resolveSessionChanges(sessionId, sessions, null, selection.eligible) : [];
 }
 
 async function showError(current: () => boolean, caught: unknown, fallback: string) {
@@ -379,10 +429,10 @@ async function showError(current: () => boolean, caught: unknown, fallback: stri
     .catch((error: unknown) => console.warn("Could not show the OpenSpec error.", error));
 }
 
-async function openBoard(current: () => boolean, target?: { directory: string; change: string }) {
+async function openBoard(current: () => boolean, target?: FocusTarget) {
   try {
     if (!current()) return false;
-    if (target) await client.setFocus(target.directory, target.change);
+    if (target) await client.setFocus(target);
     if (!current()) return false;
     await host.openSurface("plugin:openspec-board");
     return current();
@@ -468,8 +518,13 @@ function mountTrackedCard(id: string) {
   const inline = document.createElement("div");
   inline.hidden = true;
   let change: DerivedChange | null = null;
+  let archive: PendingArchive | null = null;
   const nameAnchor = mountFlyout(nameButton, inline, () =>
-    change && scope && workflows ? changeFlyout(change, scope.directory, workflows) : null,
+    archive && scope
+      ? { kind: "archived", name: id, archive: archive.name, directory: scope.directory }
+      : change && scope && workflows
+        ? changeFlyout(change, scope.directory, workflows)
+        : null,
   );
   const count = document.createElement("span");
   heading.append(count);
@@ -601,25 +656,33 @@ function mountTrackedCard(id: string) {
       for (const { title } of taskRows.values()) title.refreshAnchor();
     },
     update(card: Card, listing: Scope | null) {
+      const nextArchive = "archive" in card ? card.archive : null;
+      if (archive?.name !== nextArchive?.name) nameAnchor.reset();
+      archive = nextArchive;
       scope = listing;
       const display = "display" in card ? card.display : null;
       details.hidden = !("change" in card);
       const message = "message" in card ? card.message : undefined;
       errorCard.hidden = !message;
       error.textContent = message ?? "";
-      count.hidden = meter.hidden = details.hidden && !display;
-      nameButton.disabled = details.hidden;
+      count.hidden = meter.hidden = details.hidden && !display && !archive;
+      nameButton.disabled = details.hidden && !archive;
       element.classList.toggle("stale-card", !!display);
-      cachedStage.hidden = !display;
+      cachedStage.hidden = !display && !archive;
       cachedTask.hidden = !display?.currentTaskTitle;
       if (!("change" in card)) {
-        if (display) {
+        if (archive) {
+          updateProgress(archive);
+          cachedStage.textContent = archiveLabel;
+        } else if (display) {
           updateProgress(display);
-          cachedStage.textContent = stageLabel(display.stage);
+          cachedStage.textContent =
+            "archived" in display ? archiveLabel : stageLabel(display.stage);
           cachedTask.textContent = display.currentTaskTitle;
         }
         change = null;
-        nameAnchor.reset();
+        if (archive) nameAnchor.update();
+        else nameAnchor.reset();
         currentTask.update(null);
         for (const { title } of taskRows.values()) title.update(null);
         validationAnchor.reset();
@@ -752,6 +815,15 @@ function validationFlyout(change: string, validation: ValidationResult): Validat
 
 function decodeFlyout(value: unknown): Flyout | null {
   if (!value || typeof value !== "object" || !("kind" in value)) return null;
+  if (value.kind === "archived")
+    return "name" in value &&
+      typeof value.name === "string" &&
+      "archive" in value &&
+      typeof value.archive === "string" &&
+      "directory" in value &&
+      typeof value.directory === "string"
+      ? { kind: "archived", name: value.name, archive: value.archive, directory: value.directory }
+      : null;
   if (value.kind === "task")
     return "id" in value &&
       typeof value.id === "string" &&
@@ -862,9 +934,9 @@ function renderFlyout(container: HTMLElement, data: Flyout, context: FlyoutConte
   }
   heading.textContent = data.name;
   const stage = document.createElement("p");
-  stage.textContent = stageLabel(data.stage);
+  stage.textContent = data.kind === "archived" ? archiveLabel : stageLabel(data.stage);
   container.replaceChildren(heading, stage);
-  if (data.goal) {
+  if (data.kind === "change" && data.goal) {
     const goal = document.createElement("p");
     goal.textContent = data.goal;
     container.append(goal);
@@ -873,33 +945,39 @@ function renderFlyout(container: HTMLElement, data: Flyout, context: FlyoutConte
   row.className = "card-actions";
   container.append(row);
   const { session, current, seed, afterAction, afterUntrack } = context;
-  const actions = (
-    data.offerContinue ? (["continue", "update"] as const) : (["update"] as const)
-  ).map((intent) =>
-    mountButton(row, {
-      label: intent,
-      variant: "secondary",
-      size: "xs",
-      onClick: () => {
-        void preparePrompt(
-          data.name,
-          planningPrompt({ id: data.name, goal: data.goal }, intent),
-          current,
-          session,
-          seed,
-        ).then((prepared) => {
-          if (prepared) afterAction?.();
-        });
-      },
-    }),
-  );
+  const actions =
+    data.kind === "change"
+      ? (data.offerContinue ? (["continue", "update"] as const) : (["update"] as const)).map(
+          (intent) =>
+            mountButton(row, {
+              label: intent,
+              variant: "secondary",
+              size: "xs",
+              onClick: () => {
+                void preparePrompt(
+                  data.name,
+                  planningPrompt({ id: data.name, goal: data.goal }, intent),
+                  current,
+                  session,
+                  seed,
+                ).then((prepared) => {
+                  if (prepared) afterAction?.();
+                });
+              },
+            }),
+        )
+      : [];
   actions.push(
     mountButton(row, {
       label: "Open in board",
       variant: "secondary",
       size: "xs",
       onClick: () => {
-        void openBoard(current, { directory: data.directory, change: data.name }).then((opened) => {
+        const target =
+          data.kind === "change"
+            ? { directory: data.directory, change: data.name }
+            : { directory: data.directory, archive: data.archive };
+        void openBoard(current, target).then((opened) => {
           if (opened) afterAction?.();
         });
       },
@@ -1115,11 +1193,47 @@ function read() {
       }
       const byId = new Map(listing.changes.map((item) => [item.id, item]));
       const active = new Set(byId.keys());
-      const changes = resolveSessionChanges(capturedSession, sessions, saved, active) ?? [];
-      selection = { active, saved, changes };
-      updatePicker(listing, changes);
+      const candidates = resolveSessionChanges(capturedSession, sessions, saved, validNames) ?? [];
+      const missing = candidates.filter((id) => !active.has(id));
+      const pending = missing.length
+        ? await Promise.allSettled([client.pendingArchives(listing)]).then(([result]) => result)
+        : null;
+      if (!current()) return;
+      if (
+        !sameChanges(
+          candidates,
+          resolveSessionChanges(capturedSession, sessions, saved, validNames) ?? [],
+        )
+      ) {
+        queued = true;
+        return;
+      }
+      const archives = new Map<string, PendingArchive>();
+      const eligible = new Set(active);
+      if (pending?.status === "fulfilled") {
+        for (const entry of pending.value) {
+          archives.set(entry.id, entry);
+          eligible.add(entry.id);
+        }
+      } else if (pending?.status === "rejected") {
+        for (const id of missing) eligible.add(id);
+      }
+      const changes = resolveSessionChanges(capturedSession, sessions, saved, eligible) ?? [];
+      selection = { eligible, saved, candidates, changes };
+      updatePicker(listing, changes, pending?.status === "fulfilled" ? pending.value : null);
       const cards = await Promise.all(
         changes.map(async (id): Promise<Card> => {
+          const entry = byId.get(id);
+          if (!entry) {
+            const archive = archives.get(id);
+            if (archive) return { id, archive };
+            const caught: unknown = pending?.status === "rejected" ? pending.reason : null;
+            return {
+              id,
+              message:
+                caught instanceof Error ? caught.message : "Could not check pending archives.",
+            };
+          }
           try {
             const [summaryResponse, taskResponse] = await Promise.allSettled([
               client.summary(listing, id),
@@ -1129,7 +1243,7 @@ function read() {
             if (taskResponse.status === "rejected") throw taskResponse.reason;
             return {
               id,
-              change: deriveChange({ ...summaryResponse.value, ...byId.get(id)! }),
+              change: deriveChange({ ...summaryResponse.value, ...entry }),
               tasks: taskResponse.value,
             };
           } catch (caught) {
@@ -1149,6 +1263,11 @@ function read() {
       );
       const display: DisplayCard[] = [];
       const visibleCards = cards.map((card) => {
+        if ("archive" in card) {
+          const { id, completedTasks, totalTasks } = card.archive;
+          display.push({ id, completedTasks, totalTasks, archived: true, currentTaskTitle: null });
+          return card;
+        }
         if ("change" in card) {
           const { id, completedTasks, totalTasks, stage } = card.change;
           const task = card.tasks.find(({ done }) => !done) ?? card.tasks.at(-1) ?? null;
@@ -1202,10 +1321,14 @@ function subscribeToProject(capturedDirectory: string) {
         sessions = snapshot;
         if (
           selection &&
-          !sameChanges(
-            resolveSessionChanges(sessionId, sessions, selection.saved, selection.active) ?? [],
-            selection.changes,
-          )
+          (!sameChanges(
+            resolveSessionChanges(sessionId, sessions, selection.saved, validNames) ?? [],
+            selection.candidates,
+          ) ||
+            !sameChanges(
+              resolveSessionChanges(sessionId, sessions, selection.saved, selection.eligible) ?? [],
+              selection.changes,
+            ))
         ) {
           epoch++;
           selection = null;
@@ -1293,7 +1416,7 @@ const offReady = host.onReady((ready) => {
         popoverActions = renderFlyout(panelRoot, data, {
           session: nextSession,
           current: () => !disposed && popoverSession === nextSession,
-          seed: () => (data.kind === "change" ? [data.name] : []),
+          seed: () => (data.kind === "change" || data.kind === "archived" ? [data.name] : []),
           afterAction: close,
           afterUntrack: close,
         });

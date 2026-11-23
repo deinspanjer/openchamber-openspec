@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { rm } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { createServiceHost } from "@openchamber/sdk";
-import { isChangeName } from "../model.js";
+import { decodeFocusTarget, type FocusTarget } from "../contracts.js";
 import { createOpenSpecAdapter } from "./openspec.js";
 import {
   MAX_RESPONSE_BYTES,
@@ -16,8 +16,6 @@ import {
 const MAX_BODY_BYTES = 64_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const FOCUS_TTL_MS = 30_000;
-
-type Focus = { directory: string; change: string };
 
 function send(response: ServerResponse, status: number, value: Json | null): void {
   const encoded = JSON.stringify(value);
@@ -66,7 +64,7 @@ export function createOpenSpecService(
   } = {},
 ) {
   const emit = options.emit ?? createServiceHost({ env: process.env }).emit;
-  let pendingFocus: { target: Focus; expiresAt: number } | null = null;
+  let pendingFocus: { target: FocusTarget; expiresAt: number } | null = null;
   return createServer(async (request, response) => {
     if (request.headers.authorization !== `Bearer ${token}`) {
       send(response, 401, {
@@ -124,9 +122,12 @@ export function createOpenSpecService(
       if (path === "/focus") {
         if (!isAbsolute(directory))
           throw serviceError("BAD_DIRECTORY", "Directory must be absolute.");
-        const change = requiredString(body, "change");
-        if (!isChangeName(change)) throw serviceError("BAD_CHANGE", "Change name is invalid.");
-        const target = { directory, change };
+        let target: FocusTarget;
+        try {
+          target = decodeFocusTarget(body);
+        } catch {
+          throw serviceError("BAD_CHANGE", "Board focus target is invalid.");
+        }
         pendingFocus = { target, expiresAt: Date.now() + FOCUS_TTL_MS };
         await emit("focus");
         return send(response, 200, { ok: true });
@@ -222,10 +223,17 @@ export function createOpenSpecService(
                                     requiredString(body, "expectedPlanning"),
                                     deadline,
                                   )
-                                : Promise.resolve({
-                                    ok: false as const,
-                                    error: serviceError("NOT_FOUND", "Route not found.", 404),
-                                  });
+                                : path === "/pending-archives"
+                                  ? adapter.pendingArchives(
+                                      directory,
+                                      requiredString(body, "expectedRoot"),
+                                      requiredString(body, "expectedPlanning"),
+                                      deadline,
+                                    )
+                                  : Promise.resolve({
+                                      ok: false as const,
+                                      error: serviceError("NOT_FOUND", "Route not found.", 404),
+                                    });
       let timer: NodeJS.Timeout | undefined;
       const result = await Promise.race([
         work,

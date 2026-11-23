@@ -123,6 +123,143 @@ test("modified-changes maps Git status only within the scoped local planning tre
   }
 });
 
+test("pending-archives compares this checkout with the first available base tree", async () => {
+  await withProjects(async (repo, outside) => {
+    const git = (...args) => exec("git", args, { cwd: repo });
+    const commit = async (message) => {
+      await git("add", "--", ".");
+      await git(
+        "-c",
+        "user.name=OpenSpec Test",
+        "-c",
+        "user.email=openspec@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--quiet",
+        "-m",
+        message,
+      );
+    };
+    const archive = async (directory, name, tasks) => {
+      const path = join(directory, "openspec", "changes", "archive", name);
+      await mkdir(path, { recursive: true });
+      await writeFile(join(path, "tasks.md"), tasks);
+    };
+    await git("init", "--quiet", "-b", "main");
+    await writeFile(join(repo, "baseline"), "");
+    await commit("Baseline");
+    const { stdout: base } = await git("rev-parse", "HEAD");
+    await git("switch", "--quiet", "-c", "feature");
+    await archive(repo, "add-login", "- [ ] Undated task\n");
+    await archive(repo, "2026-11-21-add-login", "- [ ] Earlier task\n");
+    await archive(repo, "2026-11-22-add-login", "- [x] Latest task\n- [ ] Another task\n");
+    await archive(repo, "fix-cache", "- [x] Fix it\n");
+    await archive(outside, "no-checkout", "- [x] Done\n");
+
+    await withService(async (url) => {
+      const post = async (path, directory, scope = {}) => {
+        const response = await fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory, ...scope }),
+        });
+        const value = await response.json();
+        assert.ok(response.ok || value.error, JSON.stringify(value));
+        return { status: response.status, value };
+      };
+      const scopeFor = async (directory) => {
+        const { status, value } = await post("/changes", directory);
+        assert.equal(status, 200, JSON.stringify(value));
+        return { expectedRoot: value.root, expectedPlanning: value.planning };
+      };
+      const scope = await scopeFor(repo);
+      const check = (directory = repo, expected = scope) =>
+        post("/pending-archives", directory, expected);
+      const pending = async () => {
+        const { status, value } = await check();
+        assert.equal(status, 200, JSON.stringify(value));
+        return value.changes.sort((a, b) => a.id.localeCompare(b.id));
+      };
+      const changes = [
+        { id: "add-login", name: "2026-11-22-add-login", completedTasks: 1, totalTasks: 2 },
+        { id: "fix-cache", name: "fix-cache", completedTasks: 1, totalTasks: 1 },
+      ];
+      assert.deepEqual(await pending(), changes);
+      await commit("Archive changes");
+      assert.deepEqual(await pending(), changes);
+      await git("branch", "-f", "main", "HEAD");
+      assert.deepEqual(await pending(), []);
+      await git("update-ref", "refs/remotes/origin/trunk", base.trim());
+      await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+      assert.deepEqual(await pending(), changes);
+      await git("update-ref", "refs/remotes/origin/trunk", "HEAD");
+      assert.deepEqual(await pending(), []);
+      await git("symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+      await git("branch", "-D", "main");
+      assert.deepEqual(await pending(), []);
+      await archive(repo, "2026-11-23-another-change", "- [x] Done\n");
+      assert.deepEqual(await pending(), [
+        {
+          id: "another-change",
+          name: "2026-11-23-another-change",
+          completedTasks: 1,
+          totalTasks: 1,
+        },
+      ]);
+
+      assert.deepEqual(await check(outside, await scopeFor(outside)), {
+        status: 200,
+        value: { changes: [] },
+      });
+      const planning = join(repo, "openspec");
+      await rename(planning, join(repo, "original-planning"));
+      await symlink(join(outside, "openspec"), planning);
+      const stale = await check();
+      assert.deepEqual([stale.status, stale.value.error?.code], [409, "PLANNING_CHANGED"]);
+      assert.deepEqual(await check(repo, await scopeFor(repo)), {
+        status: 200,
+        value: { changes: [] },
+      });
+    });
+  });
+});
+
+test("pending-archives distinguishes an unavailable CLI command from malformed output", async () => {
+  const directory = await mockProject("openspec-pending-errors-");
+  const root = { path: directory, source: "nearest" };
+  let listed = {
+    ok: false,
+    error: { code: "OPENSPEC_ERROR", message: "Unknown option --archived", status: 422 },
+  };
+  try {
+    await withService(
+      async (url) => {
+        const post = (path, scope = {}) =>
+          fetch(`${url}${path}`, {
+            method: "POST",
+            headers: { authorization: "Bearer test-token" },
+            body: JSON.stringify({ directory, ...scope }),
+          });
+        const listing = await (await post("/changes")).json();
+        const scope = { expectedRoot: listing.root, expectedPlanning: listing.planning };
+        const unavailable = await post("/pending-archives", scope);
+        assert.equal(unavailable.status, 200);
+        assert.deepEqual(await unavailable.json(), { changes: [] });
+
+        listed = { ok: true, value: { root, changes: [{ name: "missing-counts" }] } };
+        const malformed = await post("/pending-archives", scope);
+        assert.equal(malformed.status, 502);
+        assert.equal((await malformed.json()).error.code, "BAD_CLI_OUTPUT");
+      },
+      async (_directory, args) =>
+        args.includes("--archived") ? listed : { ok: true, value: { root, changes: [] } },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("shared planning scope rejects link retargets without changing the CLI root", async () => {
   await withProjects(async (main, replacement) => {
     const checkout = await mkdtemp(join(tempDirectory, "openspec-linked-"));
@@ -1136,13 +1273,13 @@ test("focus signals without sharing its target and only a matching directory cla
         fetch(`${url}/focus?${new URLSearchParams({ directory })}`, { headers }).then((response) =>
           response.json(),
         );
-      const setFocus = async (body) => {
+      const setFocus = async (body, status = 200) => {
         const response = await fetch(`${url}/focus`, {
           method: "POST",
           headers,
           body: JSON.stringify(body),
         });
-        assert.equal(response.status, 200);
+        assert.equal(response.status, status);
         await response.json();
       };
       assert.equal(await readFocus(first.directory), null);
@@ -1155,6 +1292,13 @@ test("focus signals without sharing its target and only a matching directory cla
       assert.equal(await readFocus(second.directory), null);
       await setFocus(first);
       now += 30_000;
+      assert.equal(await readFocus(first.directory), null);
+      const archive = { directory: first.directory, archive: "2026-11-23-first-change" };
+      await setFocus({ ...archive, archive: "../first-change" }, 400);
+      await setFocus({ ...archive, change: "first-change" }, 400);
+      await setFocus(archive);
+      assert.equal(await readFocus(second.directory), null);
+      assert.deepEqual(await readFocus(first.directory), archive);
       assert.equal(await readFocus(first.directory), null);
     },
     undefined,

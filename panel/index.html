@@ -77,6 +77,12 @@
         border-bottom: 1px solid var(--oc-border);
         overflow-wrap: anywhere;
       }
+      .browse-list > li[aria-current="true"] {
+        padding-inline: 8px;
+        border-radius: var(--oc-radius);
+        background: var(--oc-hover);
+        box-shadow: inset 2px 0 var(--oc-focus);
+      }
       .browse-meta {
         color: var(--oc-muted);
         font-variant-numeric: tabular-nums;

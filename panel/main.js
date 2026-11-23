@@ -1,10 +1,10 @@
 "use strict";
 (() => {
-  // node_modules/@openchamber/sdk/dist/api-version.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
   var OPENCHAMBER_SDK_CHANNEL = "openchamber.sdk";
   var OPENCHAMBER_SDK_API_VERSION = 1;
 
-  // node_modules/@openchamber/sdk/dist/scrollbar-style.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
   var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
   var GUEST_SCROLLBAR_CSS = `
 :root {
@@ -64,15 +64,15 @@
   }
   var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
 
-  // node_modules/@openchamber/sdk/dist/workspace.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
   var GUEST_STORAGE_KEY_MAX = 128;
   var GUEST_STORAGE_VALUE_BYTES = 65536;
 
-  // node_modules/@openchamber/sdk/dist/shells.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
   var GUEST_SHELL_ID_MAX = 128;
   var GUEST_SHELL_OUTPUT_TAIL_MAX = 65536;
 
-  // node_modules/@openchamber/sdk/dist/microphone.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
   var GUEST_MICROPHONE_SAMPLE_RATE_MIN = 8e3;
   var GUEST_MICROPHONE_SAMPLE_RATE_MAX = 192e3;
   var GUEST_MICROPHONE_OPEN_TIMEOUT_MS = 12e4;
@@ -117,7 +117,7 @@
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/status-controls.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
   var GUEST_STATUS_CONTROLS_MAX = 4;
   var GUEST_STATUS_CONTROL_ID = /^[a-z][a-z0-9-]{0,39}$/;
   var GUEST_STATUS_CONTROL_LABEL_MAX = 60;
@@ -160,12 +160,12 @@
     return true;
   };
 
-  // node_modules/@openchamber/sdk/dist/manifest.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
   var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
   var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
   var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
 
-  // node_modules/@openchamber/sdk/dist/session-events.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
   var GUEST_SESSION_EVENT_TYPES = [
     "turn-finished",
     "turn-failed",
@@ -179,11 +179,11 @@
   var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
   var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
 
-  // node_modules/@openchamber/sdk/dist/service-host.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
   var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
   var MENTIONS_IDLE_MS = 10 * 6e4;
 
-  // node_modules/@openchamber/sdk/dist/file-editor.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
   var GUEST_FILE_EDITOR_CONTENT_MAX = 2e7;
   var GUEST_FILE_EDITOR_VERSION_MAX = 256;
   var fileEditorPayloadSize = (value) => "bytes" in value ? value.bytes.byteLength : value.content.length;
@@ -202,7 +202,7 @@
     return true;
   };
 
-  // node_modules/@openchamber/sdk/dist/popover.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
   var GUEST_POPOVER_ID = /^[A-Za-z0-9_-]{1,80}$/;
   var GUEST_POPOVER_COORDINATE_MAX = 1e5;
   var GUEST_POPOVER_WIDTH_MIN = 160;
@@ -245,7 +245,7 @@
     }
   };
 
-  // node_modules/@openchamber/sdk/dist/contract.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
   var GUEST_BLOCK_ANSWER_MAX = 2e3;
   var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
   var isStartSessionResult = (value) => Boolean(value && "sessionId" in value);
@@ -464,7 +464,7 @@
     return wire;
   };
 
-  // node_modules/@openchamber/sdk/dist/host.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
   var isKeyEvent = (event) => "key" in event && "metaKey" in event && "ctrlKey" in event;
   var isSaveShortcut = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "s";
   var HostRequestError = class extends Error {
@@ -1546,7 +1546,7 @@
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/service-providers.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
   var BROWSER_CONTROL_ACTIONS = [
     "browser.open",
     "browser.snapshot",
@@ -1568,11 +1568,11 @@
   var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
   var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
 
-  // node_modules/@openchamber/sdk/dist/service-surface.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
   var SURFACE_CONTROLLERS = ["none", "agent", "user"];
   var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
-  // node_modules/@openchamber/sdk/dist/ui/theme.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
   var TOKEN_VARS = [
     ["--oc-bg", "background"],
     ["--oc-elevated", "elevated"],
@@ -1662,7 +1662,7 @@
     }
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/style.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
   var OC_ALIAS = {
     "surface-background": "bg",
     "surface-elevated": "elevated",
@@ -1973,7 +1973,7 @@ ${GUEST_SCROLLBAR_CSS}
 ${UI_SIZE_CSS}
 ${GUEST_UI_LOOK_CSS}`;
 
-  // node_modules/@openchamber/sdk/dist/ui/dom.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
   var STYLE_ID = "oc-sdk-ui-style";
   var clearNode = (node) => {
     while (node.firstChild) {
@@ -2032,7 +2032,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/button.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
     const spinner = document.createElement("span");
     spinner.className = "oc-sdk-spinner-ring";
@@ -2080,7 +2080,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/field.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/field.js
   var mountTextField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2128,7 +2128,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/icons.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
   var SVG_NS = "http://www.w3.org/2000/svg";
   var ICON_PATH = {
     search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
@@ -2154,7 +2154,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return node;
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/search.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
   var mountSearchField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2215,7 +2215,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/navigation.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/navigation.js
   var navigationKey = (event, axis = "vertical") => {
     const [next, previous] = axis === "vertical" ? ["ArrowDown", "ArrowUp"] : ["ArrowRight", "ArrowLeft"];
     if (event.key === next || event.ctrlKey && event.key.toLowerCase() === "n")
@@ -2249,7 +2249,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return target?.id ?? null;
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/option.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/option.js
   var optionId = (uid, id) => `${uid}-${id ?? ""}`;
   var createOption = (uid, role, spec, on) => {
     const node = button("oc-sdk-option");
@@ -2290,7 +2290,7 @@ ${GUEST_UI_LOOK_CSS}`;
     container.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/popup.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popup.js
   var placePopup = (popup, trigger) => {
     const rect = trigger.getBoundingClientRect();
     popup.style.minWidth = `${Math.round(rect.width)}px`;
@@ -2329,7 +2329,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/tabs.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/tabs.js
   var mountTabs = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2389,7 +2389,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/badge.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/badge.js
   var applyTone = (node, tone2) => {
     setAttr(node, "data-tone", tone2 && tone2 !== "neutral" ? tone2 : null);
   };
@@ -2414,7 +2414,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/progress.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/progress.js
   var clampProgress = (value) => Number.isFinite(value) ? Math.min(100, Math.max(0, Math.floor(value))) : 0;
   var mountProgress = (root2, initial) => {
     ensureStyle(UI_CSS);
@@ -2463,7 +2463,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/menu.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/menu.js
   var actions = (items) => items.filter((item) => !("separator" in item));
   var menuCount = 0;
   var mountMenu = (root2, initial) => {
@@ -2606,16 +2606,17 @@ ${GUEST_UI_LOOK_CSS}`;
     saved,
     items,
     worktreeName,
-    active: active2
+    eligible
   }) {
-    if (saved !== null) return { changes: saved.filter((name) => active2.has(name)), source: "saved" };
+    if (saved !== null)
+      return { changes: saved.filter((name) => eligible.has(name)), source: "saved" };
     for (const { data } of items) {
-      if (data && typeof data === "object" && "kind" in data && data.kind === "change" && "change" in data && typeof data.change === "string" && active2.has(data.change))
+      if (data && typeof data === "object" && "kind" in data && data.kind === "change" && "change" in data && typeof data.change === "string" && eligible.has(data.change))
         return { changes: [data.change], source: "item" };
     }
-    const legacy = items.find(({ id, data }) => data === void 0 && active2.has(id));
+    const legacy = items.find(({ id, data }) => data === void 0 && eligible.has(id));
     if (legacy) return { changes: [legacy.id], source: "item" };
-    if (worktreeName !== null && active2.has(worktreeName))
+    if (worktreeName !== null && eligible.has(worktreeName))
       return { changes: [worktreeName], source: "worktree" };
     return { changes: [], source: "none" };
   }
@@ -2703,6 +2704,30 @@ ${GUEST_UI_LOOK_CSS}`;
     if (new Set(archived.map(({ name }) => name)).size !== archived.length)
       throw new Error("Duplicate archived change.");
     return archived;
+  }
+  var archivedChangeId = (name) => name.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+  function decodeFocusTarget(value) {
+    const { directory, change, archive } = record(value);
+    if (typeof directory === "string") {
+      if (archive === void 0 && typeof change === "string" && isChangeName(change))
+        return { directory, change };
+      if (change === void 0 && typeof archive === "string" && isChangeName(archivedChangeId(archive)))
+        return { directory, archive };
+    }
+    throw new Error("Invalid board focus target.");
+  }
+  function decodePendingArchives(value) {
+    const { changes } = record(value);
+    if (!Array.isArray(changes)) throw new Error("Invalid pending archives.");
+    const pending = changes.map((value2) => {
+      const listing = decodeListingEntry(value2);
+      const name = string(record(value2).name);
+      if (archivedChangeId(name) !== listing.id) throw new Error("Invalid archived name.");
+      return { ...listing, name };
+    });
+    if (new Set(pending.map(({ id }) => id)).size !== pending.length)
+      throw new Error("Duplicate pending archive.");
+    return pending;
   }
   function decodeSpecs(value) {
     const { specs } = record(value);
@@ -2883,6 +2908,14 @@ ${GUEST_UI_LOOK_CSS}`;
         await request("/archived", { directory, expectedRoot: root2, expectedPlanning: planning }),
         decodeArchived
       ),
+      pendingArchives: async ({ directory, root: root2, planning }) => decode(
+        await request("/pending-archives", {
+          directory,
+          expectedRoot: root2,
+          expectedPlanning: planning
+        }),
+        decodePendingArchives
+      ),
       specs: async ({ directory, root: root2, planning }) => decode(
         await request("/specs", { directory, expectedRoot: root2, expectedPlanning: planning }),
         decodeSpecs
@@ -2940,16 +2973,15 @@ ${GUEST_UI_LOOK_CSS}`;
         }),
         decodeValidation
       ),
-      setFocus: async (directory, change) => {
-        if (record2(await request("/focus", { directory, change })).ok !== true) throw invalid();
+      setFocus: async (target) => {
+        if (record2(await request("/focus", target)).ok !== true) throw invalid();
       },
       claimFocus: async (directory) => {
         const value = await send({ method: "GET", path: "/focus", query: { directory } });
         if (value === null) return null;
-        const { directory: target, change } = record2(value);
-        if (target !== directory || typeof change !== "string" || !isChangeName(change))
-          throw invalid();
-        return change;
+        const target = decode(value, decodeFocusTarget);
+        if (target.directory !== directory) throw invalid();
+        return target;
       },
       summaries: async (scope, entries2) => {
         const value = decode(
@@ -3155,8 +3187,10 @@ ${GUEST_UI_LOOK_CSS}`;
         const browse = changePrefix(context, "");
         removeEntries((key) => !key.startsWith(browse));
       },
-      archived(scope) {
-        return read(scope, keyFor(scope, "", "archived"), () => client.archived(scope));
+      archived(scope, reload = false) {
+        const key = keyFor(scope, "", "archived");
+        if (reload) removeEntries((entry) => entry === key);
+        return read(scope, key, () => client.archived(scope));
       },
       specs(scope) {
         return read(scope, keyFor(scope, "", "specs"), () => client.specs(scope));
@@ -3494,18 +3528,28 @@ ${GUEST_UI_LOOK_CSS}`;
     archivedStatus.append(archivedMessage, archivedRetryRoot);
     panes.archived.append(archivedStatus, archivedList);
     let lastArchived;
+    let lastCurrentArchive = null;
     let lastArchiveQuery;
-    function updateArchived(state, query) {
-      if (lastArchived === state && lastArchiveQuery === query) return;
+    function updateArchived(state, query, currentArchive) {
+      if (lastArchived === state && lastArchiveQuery === query && lastCurrentArchive === currentArchive)
+        return;
       lastArchived = state;
       lastArchiveQuery = query;
+      lastCurrentArchive = currentArchive;
       const rows = (state?.value ?? []).map(({ name, completedTasks, totalTasks }) => {
         const dated = /^(\d{4}-\d{2}-\d{2})-(.+)$/.exec(name);
-        return { name: dated?.[2] ?? name, date: dated?.[1] ?? "", completedTasks, totalTasks };
+        return {
+          archive: name,
+          name: dated?.[2] ?? name,
+          date: dated?.[1] ?? "",
+          completedTasks,
+          totalTasks
+        };
       }).filter(({ name }) => name.toLocaleLowerCase().includes(query)).sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
       archivedList.replaceChildren(
-        ...rows.map(({ name, date, completedTasks, totalTasks }) => {
+        ...rows.map(({ archive: archive2, name, date, completedTasks, totalTasks }) => {
           const row = document.createElement("li");
+          if (archive2 === currentArchive) row.setAttribute("aria-current", "true");
           const title = document.createElement("span");
           title.textContent = name;
           const count2 = document.createElement("span");
@@ -3691,6 +3735,9 @@ ${GUEST_UI_LOOK_CSS}`;
       scrollForChanges() {
         return view === "changes" ? window.scrollY : positions.get("changes")?.scroll ?? 0;
       },
+      scrollToCurrentArchive() {
+        archivedList.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+      },
       focusSpec(id) {
         const button2 = specsList.querySelector(`[data-spec="${CSS.escape(id)}"]`);
         (button2 ?? tablist.querySelector("#board-tab-specs"))?.focus({
@@ -3762,7 +3809,7 @@ ${GUEST_UI_LOOK_CSS}`;
           cards.delete(id);
         }
         const query = state.search.trim().toLocaleLowerCase();
-        updateArchived(state.archived, query);
+        updateArchived(state.archived, query, state.currentArchive);
         updateSpecs(state.specs, query);
         for (const entry of cards.values()) {
           if (!entry.current.change.id.toLocaleLowerCase().includes(query)) entry.node.remove();
@@ -3818,7 +3865,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   }
 
-  // node_modules/marked/lib/marked.esm.js
+  // ../openchamber-openspec/node_modules/marked/lib/marked.esm.js
   function I() {
     return { async: false, breaks: false, extensions: null, gfm: true, hooks: null, pedantic: false, renderer: null, silent: false, tokenizer: null, walkTokens: null };
   }
@@ -5141,7 +5188,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   var Rn = T.parse;
   var Tn = R.lex;
 
-  // node_modules/dompurify/dist/purify.es.mjs
+  // ../openchamber-openspec/node_modules/dompurify/dist/purify.es.mjs
   function _OverloadYield(e, d) {
     this.v = e, this.k = d;
   }
@@ -8339,7 +8386,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       throw new Error("Invalid tracked OpenSpec changes.");
     return [...new Set(value.changes)];
   }
-  function resolveSessionChanges(sessionId, sessions, saved, active2) {
+  function resolveSessionChanges(sessionId, sessions, saved, eligible) {
     const candidate = sessions?.sessions.find(({ id }) => id === sessionId);
     const coverage = sessions?.coverage.find(({ directory }) => directory === candidate?.directory);
     if (saved === null && candidate && coverage?.state !== "ready") return null;
@@ -8347,7 +8394,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       saved,
       items: candidate?.items ?? [],
       worktreeName: candidate?.worktree?.name ?? null,
-      active: active2
+      eligible
     }).changes;
   }
   async function updateTrackedChanges(host2, sessionId, current, seed, update) {
@@ -8500,7 +8547,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     let workflows = new Set(CORE_WORKFLOWS);
     let listedIds = /* @__PURE__ */ new Set();
     let checkFocus = true;
-    let focusedChange = null;
+    let focusTarget = null;
     let staleIds = /* @__PURE__ */ new Set();
     let unavailableIds = /* @__PURE__ */ new Set();
     let failures = [];
@@ -8514,6 +8561,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     let search = "";
     let boardTab = "changes";
     let archivedState = null;
+    let currentArchive = null;
     let specsState = null;
     let specState = null;
     let selectedSpec = null;
@@ -8544,7 +8592,8 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       changes = [];
       workflows = new Set(CORE_WORKFLOWS);
       listedIds = /* @__PURE__ */ new Set();
-      focusedChange = null;
+      focusTarget = null;
+      checkFocus = true;
       staleIds = /* @__PURE__ */ new Set();
       unavailableIds = /* @__PURE__ */ new Set();
       failures = [];
@@ -8742,6 +8791,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       archivedState = specsState = specState = null;
       returningToSpec = null;
       if (resetSelection) {
+        currentArchive = null;
         selectedSpec = null;
         specListScroll = 0;
       }
@@ -8755,15 +8805,17 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         } else if (!specsState) readSpecs(scope);
       }
     }
-    function readArchived(captured) {
-      const read = resources.archived(captured);
+    function readArchived(captured, reload = false) {
+      const read = resources.archived(captured, reload);
       archivedState = read.state;
       if (read.completion)
         void read.completion.then((state) => {
           if (disposed || scope !== captured || archivedState !== read.state) return;
           archivedState = state;
-          render();
+          if (!boardActive && focusTarget?.kind === "archive") applyFocus();
+          else render();
         });
+      return read.state;
     }
     function readSpecs(captured) {
       const read = resources.specs(captured);
@@ -9007,6 +9059,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       if (!captured || scope !== captured || epoch !== originatingEpoch || unavailableIds.has(change.id) || !changes.some((item) => item.id === change.id))
         return;
       selectedSpec = null;
+      currentArchive = null;
       boardTab = "changes";
       selectedChange = change;
       boardScroll = boardView.scrollForChanges();
@@ -9020,22 +9073,50 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       queueMicrotask(() => appRoot.querySelector(".detail-back button")?.focus());
     }
     function applyFocus() {
-      if (boardActive || !focusedChange) return;
-      const target = focusedChange;
-      focusedChange = null;
+      if (boardActive || !scope || !focusTarget) return;
+      const target = focusTarget;
+      const captured = scope;
+      if (target.kind === "archive") {
+        if (selectedChange) closeDetail(false);
+        selectedSpec = null;
+        returningToSpec = null;
+        boardTab = "archived";
+        const state = archivedState ?? readArchived(captured);
+        if (state.value?.some(({ name }) => name === target.name)) {
+          currentArchive = target.name;
+          focusTarget = null;
+          if (!archivedChangeId(target.name).includes(search.trim().toLocaleLowerCase())) search = "";
+          requestAnimationFrame(() => {
+            if (scope === captured && currentArchive === target.name)
+              boardView.scrollToCurrentArchive();
+          });
+        } else if (state.value && !target.reloaded) {
+          target.reloaded = true;
+          readArchived(captured, true);
+        } else if (!state.pending) {
+          focusTarget = null;
+          if (!state.error) focusNotice(`${target.name} isn't in this board's archived list.`);
+        }
+        render();
+        return;
+      }
+      focusTarget = null;
       if (listedIds.has(target.name)) {
         const change = changes.find(({ id }) => id === target.name);
         if (change) openDetail(change, scope, epoch);
       } else if (!target.reloaded) {
         if (selectedChange) closeDetail();
-        focusedChange = { name: target.name, reloaded: true };
+        focusTarget = { ...target, reloaded: true };
         loadBoard({ refresh: true });
       } else {
         if (selectedChange) closeDetail();
-        void host2.toast({ kind: "info", message: `${target.name} isn't in this board's list.` }).catch(
-          (caught) => console.warn("Could not show the OpenSpec focus notice.", caught)
-        );
+        focusNotice(`${target.name} isn't in this board's list.`);
       }
+    }
+    function focusNotice(message) {
+      void host2.toast({ kind: "info", message }).catch(
+        (caught) => console.warn("Could not show the OpenSpec focus notice.", caught)
+      );
     }
     function claimFocus() {
       const captured = scope;
@@ -9045,9 +9126,11 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         return;
       }
       checkFocus = false;
-      void client.claimFocus(captured.directory).then((change) => {
-        if (!change || disposed || scope !== captured || epoch !== startingEpoch) return;
-        focusedChange = { name: change, reloaded: false };
+      void client.claimFocus(captured.directory).then((target) => {
+        if (!target || disposed || scope !== captured || epoch !== startingEpoch) return;
+        currentArchive = null;
+        focusTarget = "archive" in target ? { kind: "archive", name: target.archive, reloaded: false } : { kind: "change", name: target.change, reloaded: false };
+        render();
         applyFocus();
       }).catch(
         (caught) => console.warn("Could not claim the OpenSpec board focus.", caught)
@@ -9147,6 +9230,10 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       },
       select: (view) => {
         boardTab = view;
+        if (view !== "archived") {
+          currentArchive = null;
+          if (focusTarget?.kind === "archive") focusTarget = null;
+        }
         returningToSpec = null;
         readBrowse();
         render();
@@ -9264,11 +9351,12 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       boardView.focusSpec(id);
       window.scrollTo(0, specListScroll);
     }
-    function closeDetail() {
+    function closeDetail(restorePosition = true) {
       const name = selectedChange?.id;
       selection2++;
       detailOpening++;
       selectedChange = null;
+      if (!restorePosition) return;
       render();
       requestAnimationFrame(() => window.scrollTo(0, boardScroll));
       queueMicrotask(() => focusBoard(name));
@@ -9305,6 +9393,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         workflows,
         view: boardTab,
         archived: archivedState,
+        currentArchive,
         specs: specsState,
         cards: changes.map((change) => ({
           change,

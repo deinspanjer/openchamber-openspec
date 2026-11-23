@@ -1,19 +1,22 @@
 import type { GuestRequest, HostClient } from "@openchamber/sdk";
 import {
   decodeArchived,
+  decodeFocusTarget,
   decodeTaskResponse,
   decodeListing,
   decodeModifiedChanges,
+  decodePendingArchives,
   decodeSummary,
   decodeSummaries,
   decodeSpecs,
   decodeValidation,
   decodeWorkflows,
   type ChangeMetadata,
+  type FocusTarget,
   type Task,
   type ListingEntry,
 } from "../contracts.js";
-import { isChangeName, type ChangeSummary } from "../model.js";
+import type { ChangeSummary } from "../model.js";
 
 export class ServiceRequestError extends Error {
   constructor(
@@ -87,6 +90,15 @@ export function createClient(host: HostClient) {
         await request("/archived", { directory, expectedRoot: root, expectedPlanning: planning }),
         decodeArchived,
       ),
+    pendingArchives: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/pending-archives", {
+          directory,
+          expectedRoot: root,
+          expectedPlanning: planning,
+        }),
+        decodePendingArchives,
+      ),
     specs: async ({ directory, root, planning }: Scope) =>
       decode(
         await request("/specs", { directory, expectedRoot: root, expectedPlanning: planning }),
@@ -152,16 +164,15 @@ export function createClient(host: HostClient) {
         }),
         decodeValidation,
       ),
-    setFocus: async (directory: string, change: string) => {
-      if (record(await request("/focus", { directory, change })).ok !== true) throw invalid();
+    setFocus: async (target: FocusTarget) => {
+      if (record(await request("/focus", target)).ok !== true) throw invalid();
     },
     claimFocus: async (directory: string) => {
       const value = await send({ method: "GET", path: "/focus", query: { directory } });
       if (value === null) return null;
-      const { directory: target, change } = record(value);
-      if (target !== directory || typeof change !== "string" || !isChangeName(change))
-        throw invalid();
-      return change;
+      const target = decode(value, decodeFocusTarget);
+      if (target.directory !== directory) throw invalid();
+      return target;
     },
     summaries: async (
       scope: Scope,

@@ -33,7 +33,7 @@ test("tracked change resolution retains active saved changes in saved order", ()
       saved: ["second-change", "archived-change", "first-change"],
       items: [{ id: "session-change", data: { kind: "change", change: "item-change" } }],
       worktreeName: "tree-change",
-      active: new Set(["first-change", "item-change", "tree-change", "second-change"]),
+      eligible: new Set(["first-change", "item-change", "tree-change", "second-change"]),
     }),
     { changes: ["second-change", "first-change"], source: "saved" },
   );
@@ -46,7 +46,7 @@ test("tracked change resolution does not derive a change from an effectively emp
         saved,
         items: [{ id: "tree-change" }],
         worktreeName: "tree-change",
-        active: new Set(["tree-change"]),
+        eligible: new Set(["tree-change"]),
       }),
       { changes: [], source: "saved" },
     );
@@ -64,7 +64,7 @@ test("tracked change resolution takes the first active typed item before legacy 
         { id: "another-session-change", data: { kind: "change", change: "other-change" } },
       ],
       worktreeName: null,
-      active: new Set(["legacy-change", "item-change", "other-change"]),
+      eligible: new Set(["legacy-change", "item-change", "other-change"]),
     }),
     { changes: ["item-change"], source: "item" },
   );
@@ -76,7 +76,7 @@ test("tracked change resolution uses an active legacy item ID before the worktre
       saved: null,
       items: [{ id: "inactive-item" }, { id: "legacy-change" }],
       worktreeName: "tree-change",
-      active: new Set(["legacy-change", "tree-change"]),
+      eligible: new Set(["legacy-change", "tree-change"]),
     }),
     { changes: ["legacy-change"], source: "item" },
   );
@@ -88,7 +88,7 @@ test("tracked change resolution never uses an archive-all item even if its ID is
       saved: null,
       items: [{ id: "archive-all", data: { kind: "archive-all" } }],
       worktreeName: null,
-      active: new Set(["archive-all"]),
+      eligible: new Set(["archive-all"]),
     }),
     { changes: [], source: "none" },
   );
@@ -100,7 +100,7 @@ test("tracked change resolution uses an active worktree name", () => {
       saved: null,
       items: [],
       worktreeName: "tree-change",
-      active: new Set(["tree-change"]),
+      eligible: new Set(["tree-change"]),
     }),
     { changes: ["tree-change"], source: "worktree" },
   );
@@ -112,9 +112,30 @@ test("tracked change resolution returns no change when no candidate matches the 
       saved: null,
       items: [{ id: "inactive-item" }],
       worktreeName: "inactive-worktree",
-      active: new Set(["unrelated-change"]),
+      eligible: new Set(["unrelated-change"]),
     }),
     { changes: [], source: "none" },
+  );
+});
+
+test("tracked change resolution retains eligible archives without duplicating active names", () => {
+  const eligible = new Set(["active-change", "archived-change", "active-change"]);
+  const worktree = { saved: null, items: [], worktreeName: "archived-change", eligible };
+  assert.deepEqual(resolveTrackedChanges(worktree), {
+    changes: ["archived-change"],
+    source: "worktree",
+  });
+  const item = { id: "item", data: { kind: "change", change: "archived-change" } };
+  assert.deepEqual(resolveTrackedChanges({ ...worktree, items: [item] }), {
+    changes: ["archived-change"],
+    source: "item",
+  });
+  assert.deepEqual(
+    resolveTrackedChanges({
+      ...worktree,
+      saved: ["archived-change", "missing-change", "active-change"],
+    }),
+    { changes: ["archived-change", "active-change"], source: "saved" },
   );
 });
 

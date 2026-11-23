@@ -20,7 +20,7 @@ export function resolveSessionChanges(
   sessionId: string | null,
   sessions: GuestSessionsSnapshot | null,
   saved: string[] | null,
-  active: ReadonlySet<string>,
+  eligible: Pick<ReadonlySet<string>, "has">,
 ): string[] | null {
   const candidate = sessions?.sessions.find(({ id }) => id === sessionId);
   const coverage = sessions?.coverage.find(({ directory }) => directory === candidate?.directory);
@@ -29,7 +29,7 @@ export function resolveSessionChanges(
     saved,
     items: candidate?.items ?? [],
     worktreeName: candidate?.worktree?.name ?? null,
-    active,
+    eligible,
   }).changes;
 }
 

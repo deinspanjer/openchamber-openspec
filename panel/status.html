@@ -179,13 +179,16 @@
         white-space: normal;
         text-align: start;
       }
-      .section-picker li button[aria-describedby]::after {
+      .section-picker li button[aria-describedby="picker-modified-description"]::after {
         content: "";
         flex: 0 0 0.9em;
         height: 0.9em;
         margin-inline-start: auto;
         background: currentColor;
         clip-path: polygon(4% 75%, 4% 96%, 25% 96%, 96% 25%, 75% 4%);
+      }
+      .section-picker li:not(.archive-choice) + .archive-choice {
+        margin-block-start: 4px;
       }
       summary {
         cursor: pointer;

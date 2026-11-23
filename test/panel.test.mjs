@@ -99,6 +99,19 @@ function hostHtml(statusCase, pointer, popovers) {
       { id: "first-change", goal: "Read the proposal", completedTasks: 1, totalTasks: 2 },
       { id: "second-change", goal: "Review the specs", completedTasks: 0, totalTasks: 0 },
     ];
+    let pendingArchives = [];
+    let holdPendingArchives = false;
+    const pendingArchiveReads = [];
+    window.__holdPendingArchives = () => { holdPendingArchives = true; };
+    window.__releasePendingArchives = (index) => { pendingArchiveReads.splice(index, 1)[0]?.(); };
+    window.__pendingArchives = (value) => { pendingArchives = value; };
+    window.__archiveForStatus = (id) => {
+      const at = changes.findIndex((change) => change.id === id);
+      if (at >= 0) changes.splice(at, 1);
+      pendingArchives = [...pendingArchives, {
+        id, name: "2026-11-23-" + id, completedTasks: 7, totalTasks: 7,
+      }];
+    };
     let proposal = "First version of proposal";
     const documents = {};
     let customSelector = "checklist.md";
@@ -417,6 +430,15 @@ function hostHtml(statusCase, pointer, popovers) {
             };
             if (holdModifiedChanges) pendingModifiedChanges.push(finish); else finish([]);
           }
+          else if (path === "/pending-archives") {
+           const snapshot = pendingArchives;
+           const finish = () => {
+             if (snapshot === null)
+               send({ error: { code: "BAD_CLI_OUTPUT", message: "Invalid archived listing." } }, 502);
+             else send({ changes: snapshot });
+           };
+           if (holdPendingArchives) pendingArchiveReads.push(finish); else finish();
+         }
           else if (path === "/archived") {
            if (archivedChanges === null)
              send({ error: { code: "OPENSPEC_ERROR", message: "Cannot list archived changes" } }, 422);
@@ -456,7 +478,8 @@ function hostHtml(statusCase, pointer, popovers) {
          }
          else if (path === "/summary") respondSummary(body, send);
          else if (path === "/focus") {
-           pendingFocus = body;
+           const { directory, change, archive } = body;
+           pendingFocus = archive === undefined ? { directory, change } : { directory, archive };
            __serviceEvent("focus");
            send({ ok: true });
          }
@@ -1343,6 +1366,93 @@ test("session section orders the picker by task counts and persists a filtered c
   });
 });
 
+test("session picker offers pending archives after active choices and tracks a filtered archive", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=picker`);
+    const frame = page.frameLocator("iframe");
+    const track = frame.getByRole("button", { name: "＋ Track a change", exact: true });
+    const list = frame.getByRole("list", { name: "Changes", exact: true });
+    const choices = list.getByRole("button");
+    await page.evaluate(() => {
+      __pendingArchives([
+        {
+          id: "archived-change",
+          name: "2026-11-23-archived-change",
+          completedTasks: 7,
+          totalTasks: 7,
+        },
+      ]);
+    });
+    await track.click();
+    const archived = list.getByRole("button", { name: "archived-change", exact: true });
+    await archived.waitFor({ timeout: 3000 });
+    assert.deepEqual(await choices.allTextContents(), [
+      "z-progress-change",
+      "first-change",
+      "not-started-change",
+      "second-change",
+      "complete-change",
+      "archived-change",
+    ]);
+    assert.equal(await list.getByText("Archived · not landed", { exact: true }).isVisible(), true);
+    const search = frame.getByRole("searchbox", { name: "Search changes" });
+    await search.fill("ARCHIVED");
+    assert.deepEqual(await choices.allTextContents(), ["archived-change"]);
+    await archived.click();
+    await frame.getByRole("article").getByText("Archived · not landed", { exact: true }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() => __stored()["session-change:fixture-session"].changes),
+      ["archived-change"],
+    );
+    await page.close();
+  });
+});
+
+test("session picker opens with active choices and discards a pending archive from a closed opening", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=picker`);
+    const frame = page.frameLocator("iframe");
+    const track = frame.getByRole("button", { name: "＋ Track a change", exact: true });
+    const list = frame.getByRole("list", { name: "Changes", exact: true });
+    const active = list.getByRole("button", { name: "first-change", exact: true });
+    await page.evaluate(() => {
+      __holdPendingArchives();
+      __pendingArchives([
+        { id: "old-archive", name: "old-archive", completedTasks: 0, totalTasks: 0 },
+      ]);
+    });
+    await track.click();
+    await active.waitFor();
+    await page.waitForFunction(
+      () => __requests.some(({ path }) => path === "/pending-archives"),
+      null,
+      { timeout: 3000 },
+    );
+    await track.click();
+    await page.evaluate(() => {
+      __pendingArchives([
+        { id: "new-archive", name: "new-archive", completedTasks: 0, totalTasks: 0 },
+      ]);
+    });
+    await track.click();
+    await page.waitForFunction(
+      () => __requests.filter(({ path }) => path === "/pending-archives").length === 2,
+    );
+    await page.evaluate(() => {
+      __releasePendingArchives(0);
+      __theme("light");
+    });
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal(await list.getByRole("button", { name: "old-archive", exact: true }).count(), 0);
+    await page.evaluate(() => __releasePendingArchives(0));
+    await list.getByRole("button", { name: "new-archive", exact: true }).waitFor();
+    assert.equal(await list.getByRole("button", { name: "old-archive", exact: true }).count(), 0);
+    await page.close();
+  });
+});
+
 test("session picker requests Git hints only on eligible openings without saving tracking", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
@@ -1980,6 +2090,83 @@ for (const exists of [true, false]) {
   });
 }
 
+for (const mode of ["new board", "retained list", "still missing", "other directory"]) {
+  test(`archived board focus resolves the exact row with ${mode}`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?status=saved${mode === "new board" ? "&open-board" : ""}`);
+      const section = page.frameLocator('iframe[title="OpenSpec test panel"]');
+      const board = page.frameLocator('iframe[title="OpenSpec test board"]');
+      const change = section.getByRole("button", { name: "second-change", exact: true });
+      await change.waitFor();
+      if (mode !== "new board") {
+        await page.evaluate(
+          (directory) => __mountBoard(directory),
+          mode === "other directory" ? "/tmp/other-project" : directory,
+        );
+        await page.waitForFunction(() => __focusClaims.length === 1);
+      }
+      const tab = board.getByRole("tab", { name: "Archived", exact: true });
+      const archive = board.getByRole("tabpanel", { name: "Archived" });
+      const search = board.getByRole("searchbox", { name: "Search changes" });
+      const retained = mode === "retained list" || mode === "still missing";
+      if (retained) {
+        await page.evaluate(() =>
+          __archived([{ name: "2026-11-21-second-change", completedTasks: 1, totalTasks: 1 }]),
+        );
+        await tab.click();
+        await archive.getByText("2026-11-21", { exact: true }).waitFor();
+        await search.fill("hides-target");
+        await board.getByRole("tab", { name: "Changes", exact: true }).click();
+      }
+      await page.evaluate((exists) => {
+        __archiveForStatus("second-change");
+        if (exists)
+          __archived([
+            { name: "2026-11-21-second-change", completedTasks: 1, totalTasks: 1 },
+            { name: "2026-11-23-second-change", completedTasks: 7, totalTasks: 7 },
+          ]);
+      }, mode !== "still missing");
+      await section.getByRole("button", { name: "Refresh", exact: true }).click();
+      await section.getByText("Archived · not landed", { exact: true }).waitFor();
+      await change.click();
+      await section.getByRole("button", { name: "Open in board", exact: true }).click();
+      await page.waitForFunction(() => __requests.some(({ path }) => path === "open-surface"));
+      assert.deepEqual(
+        await page.evaluate(() => __requests.find(({ path }) => path === "/focus")?.body),
+        { directory, archive: "2026-11-23-second-change" },
+      );
+      const current = archive.getByRole("listitem").and(archive.locator('[aria-current="true"]'));
+      if (mode === "other directory") {
+        await page.waitForFunction(() => __focusClaims.length === 2);
+        assert.equal(await tab.getAttribute("aria-selected"), "false");
+      } else if (mode === "still missing") {
+        await page.waitForFunction(
+          () =>
+            __requests.some(
+              ({ path, body }) =>
+                path === "toast" && body.message.includes("isn't in this board's archived list"),
+            ),
+          null,
+          { timeout: 3000 },
+        );
+        assert.equal(await current.count(), 0);
+      } else {
+        await current.getByText("2026-11-23", { exact: true }).waitFor({ timeout: 3000 });
+        assert.equal(await search.inputValue(), "");
+        await board.getByRole("tab", { name: "Changes", exact: true }).click();
+        await tab.click();
+        assert.equal(await current.count(), 0);
+      }
+      assert.equal(
+        await page.evaluate(() => __requests.filter(({ path }) => path === "/archived").length),
+        retained ? 2 : mode === "new board" ? 1 : 0,
+      );
+      await page.close();
+    });
+  });
+}
+
 test("a hidden board does not claim a focus event but a new board still claims on mount", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
@@ -2454,6 +2641,96 @@ test("session section reads once on an idle session switch, then once for a fini
       await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
       1,
     );
+    await page.close();
+  });
+});
+
+test("session section requests pending archives only when a tracked name is missing", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=saved`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("heading", { name: "second-change" }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/pending-archives").length),
+      0,
+    );
+
+    await page.evaluate(() => {
+      __archiveForStatus("second-change");
+      __lifecycle("fixture-session", "started");
+      __lifecycle("fixture-session", "completed");
+    });
+    await page.waitForFunction(() => __completed.includes("/pending-archives"), undefined, {
+      timeout: 3000,
+    });
+    await frame.getByRole("button", { name: "Refresh", exact: true }).last().click();
+    await page.waitForFunction(
+      () => __completed.filter((path) => path === "/pending-archives").length === 2,
+    );
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => r.path === "/tasks").map((r) => r.body.change),
+      ),
+      ["second-change"],
+    );
+    await page.close();
+  });
+});
+
+test("pending archive card keeps final progress and can be untracked from its read-only flyout", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=saved&popovers`);
+    const frame = page.frameLocator("iframe").first();
+    const name = frame.getByRole("button", { name: "second-change", exact: true });
+    await name.waitFor();
+    await page.evaluate(() => __archiveForStatus("second-change"));
+    await frame.getByRole("button", { name: "Refresh", exact: true }).click();
+    const card = frame.getByRole("article").filter({ hasText: "second-change" });
+    await card.getByText("Archived · not landed", { exact: true }).waitFor({ timeout: 3000 });
+    assert.equal(await card.getByText("7/7", { exact: true }).isVisible(), true);
+    assert.equal(await card.getByRole("progressbar").getAttribute("aria-valuenow"), "100");
+    assert.equal(await card.getByText("Tasks:", { exact: true }).isVisible(), false);
+    assert.deepEqual(await card.getByRole("button").allTextContents(), ["second-change"]);
+
+    await name.click();
+    const flyout = page.frameLocator("iframe").last();
+    const untrack = flyout.getByRole("button", { name: "Untrack", exact: true });
+    await untrack.waitFor();
+    assert.equal(
+      await flyout.getByRole("button", { name: "Open in board", exact: true }).isVisible(),
+      true,
+    );
+    await untrack.click();
+    await name.waitFor({ state: "hidden" });
+    assert.deepEqual(
+      await page.evaluate(() => __stored()["session-change:fixture-session"].changes),
+      [],
+    );
+    await page.close();
+  });
+});
+
+test("pending archive error keeps last known archived progress and exposes a card retry", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?status=saved`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("heading", { name: "second-change" }).waitFor();
+    await page.evaluate(() => __archiveForStatus("second-change"));
+    const refresh = frame.getByRole("button", { name: "Refresh", exact: true }).last();
+    await refresh.click();
+    const card = frame.getByRole("article").filter({ hasText: "second-change" });
+    const archived = card.getByText("Archived · not landed", { exact: true });
+    await archived.waitFor({ timeout: 3000 });
+    await page.evaluate(() => __pendingArchives(null));
+    await refresh.click();
+    await card.getByRole("alert").getByText("Invalid archived listing.").waitFor();
+    assert.equal(await archived.isVisible(), true);
+    await page.evaluate(() => __pendingArchives([]));
+    await card.getByRole("button", { name: "Refresh", exact: true }).click();
+    await card.waitFor({ state: "hidden" });
     await page.close();
   });
 });

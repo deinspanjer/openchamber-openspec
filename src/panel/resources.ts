@@ -101,8 +101,10 @@ export function createResources(
       const browse = changePrefix(context, "");
       removeEntries((key) => !key.startsWith(browse));
     },
-    archived(scope: Scope) {
-      return read(scope, keyFor(scope, "", "archived"), () => client.archived(scope));
+    archived(scope: Scope, reload = false) {
+      const key = keyFor(scope, "", "archived");
+      if (reload) removeEntries((entry) => entry === key);
+      return read(scope, key, () => client.archived(scope));
     },
     specs(scope: Scope) {
       return read(scope, keyFor(scope, "", "specs"), () => client.specs(scope));

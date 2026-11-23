@@ -1,6 +1,7 @@
 import { HostRequestError, type HostClient } from "@openchamber/sdk";
 import { deriveChange, type DerivedChange } from "../model.js";
 import {
+  archivedChangeId,
   documentKey,
   type ArchivedChange,
   type SpecEntry,
@@ -43,7 +44,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let workflows: ReadonlySet<Workflow> = new Set(CORE_WORKFLOWS);
   let listedIds: ReadonlySet<string> = new Set();
   let checkFocus = true;
-  let focusedChange: { name: string; reloaded: boolean } | null = null;
+  let focusTarget: { kind: "change" | "archive"; name: string; reloaded: boolean } | null = null;
   let staleIds = new Set<string>();
   let unavailableIds = new Set<string>();
   let failures: { id: string; error: string }[] = [];
@@ -57,6 +58,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let search = "";
   let boardTab: BoardView = "changes";
   let archivedState: ReadState<ArchivedChange[]> | null = null;
+  let currentArchive: string | null = null;
   let specsState: ReadState<SpecEntry[]> | null = null;
   let specState: ReadState<string> | null = null;
   let selectedSpec: string | null = null;
@@ -89,7 +91,8 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     changes = [];
     workflows = new Set(CORE_WORKFLOWS);
     listedIds = new Set();
-    focusedChange = null;
+    focusTarget = null;
+    checkFocus = true;
     staleIds = new Set();
     unavailableIds = new Set();
     failures = [];
@@ -318,6 +321,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     archivedState = specsState = specState = null;
     returningToSpec = null;
     if (resetSelection) {
+      currentArchive = null;
       selectedSpec = null;
       specListScroll = 0;
     }
@@ -333,15 +337,17 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     }
   }
 
-  function readArchived(captured: Scope) {
-    const read = resources.archived(captured);
+  function readArchived(captured: Scope, reload = false) {
+    const read = resources.archived(captured, reload);
     archivedState = read.state;
     if (read.completion)
       void read.completion.then((state) => {
         if (disposed || scope !== captured || archivedState !== read.state) return;
         archivedState = state;
-        render();
+        if (!boardActive && focusTarget?.kind === "archive") applyFocus();
+        else render();
       });
+    return read.state;
   }
 
   function readSpecs(captured: Scope) {
@@ -668,6 +674,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     )
       return;
     selectedSpec = null;
+    currentArchive = null;
     boardTab = "changes";
     selectedChange = change;
     boardScroll = boardView.scrollForChanges();
@@ -684,24 +691,53 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   }
 
   function applyFocus() {
-    if (boardActive || !focusedChange) return;
-    const target = focusedChange;
-    focusedChange = null;
+    if (boardActive || !scope || !focusTarget) return;
+    const target = focusTarget;
+    const captured = scope;
+    if (target.kind === "archive") {
+      if (selectedChange) closeDetail(false);
+      selectedSpec = null;
+      returningToSpec = null;
+      boardTab = "archived";
+      const state = archivedState ?? readArchived(captured);
+      if (state.value?.some(({ name }) => name === target.name)) {
+        currentArchive = target.name;
+        focusTarget = null;
+        if (!archivedChangeId(target.name).includes(search.trim().toLocaleLowerCase())) search = "";
+        requestAnimationFrame(() => {
+          if (scope === captured && currentArchive === target.name)
+            boardView.scrollToCurrentArchive();
+        });
+      } else if (state.value && !target.reloaded) {
+        target.reloaded = true;
+        readArchived(captured, true);
+      } else if (!state.pending) {
+        focusTarget = null;
+        if (!state.error) focusNotice(`${target.name} isn't in this board's archived list.`);
+      }
+      render();
+      return;
+    }
+    focusTarget = null;
     if (listedIds.has(target.name)) {
       const change = changes.find(({ id }) => id === target.name);
       if (change) openDetail(change, scope, epoch);
     } else if (!target.reloaded) {
       if (selectedChange) closeDetail();
-      focusedChange = { name: target.name, reloaded: true };
+      focusTarget = { ...target, reloaded: true };
       loadBoard({ refresh: true });
     } else {
       if (selectedChange) closeDetail();
-      void host
-        .toast({ kind: "info", message: `${target.name} isn't in this board's list.` })
-        .catch((caught: unknown) =>
-          console.warn("Could not show the OpenSpec focus notice.", caught),
-        );
+      focusNotice(`${target.name} isn't in this board's list.`);
     }
+  }
+
+  function focusNotice(message: string) {
+    void host
+      .toast({ kind: "info", message })
+      .catch((caught: unknown) =>
+        console.warn("Could not show the OpenSpec focus notice.", caught),
+      );
   }
 
   function claimFocus() {
@@ -714,9 +750,14 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     checkFocus = false;
     void client
       .claimFocus(captured.directory)
-      .then((change) => {
-        if (!change || disposed || scope !== captured || epoch !== startingEpoch) return;
-        focusedChange = { name: change, reloaded: false };
+      .then((target) => {
+        if (!target || disposed || scope !== captured || epoch !== startingEpoch) return;
+        currentArchive = null;
+        focusTarget =
+          "archive" in target
+            ? { kind: "archive", name: target.archive, reloaded: false }
+            : { kind: "change", name: target.change, reloaded: false };
+        render();
         applyFocus();
       })
       .catch((caught: unknown) =>
@@ -841,6 +882,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     },
     select: (view) => {
       boardTab = view;
+      if (view !== "archived") {
+        currentArchive = null;
+        if (focusTarget?.kind === "archive") focusTarget = null;
+      }
       returningToSpec = null;
       readBrowse();
       render();
@@ -965,11 +1010,12 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     window.scrollTo(0, specListScroll);
   }
 
-  function closeDetail() {
+  function closeDetail(restorePosition = true) {
     const name = selectedChange?.id;
     selection++;
     detailOpening++;
     selectedChange = null;
+    if (!restorePosition) return;
     render();
     requestAnimationFrame(() => window.scrollTo(0, boardScroll));
     queueMicrotask(() => focusBoard(name));
@@ -1013,6 +1059,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       workflows,
       view: boardTab,
       archived: archivedState,
+      currentArchive,
       specs: specsState,
       cards: changes.map((change) => ({
         change,

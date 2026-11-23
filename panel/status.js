@@ -1,10 +1,10 @@
 "use strict";
 (() => {
-  // node_modules/@openchamber/sdk/dist/api-version.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/api-version.js
   var OPENCHAMBER_SDK_CHANNEL = "openchamber.sdk";
   var OPENCHAMBER_SDK_API_VERSION = 1;
 
-  // node_modules/@openchamber/sdk/dist/scrollbar-style.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/scrollbar-style.js
   var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
   var GUEST_SCROLLBAR_CSS = `
 :root {
@@ -64,15 +64,15 @@
   }
   var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
 
-  // node_modules/@openchamber/sdk/dist/workspace.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/workspace.js
   var GUEST_STORAGE_KEY_MAX = 128;
   var GUEST_STORAGE_VALUE_BYTES = 65536;
 
-  // node_modules/@openchamber/sdk/dist/shells.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/shells.js
   var GUEST_SHELL_ID_MAX = 128;
   var GUEST_SHELL_OUTPUT_TAIL_MAX = 65536;
 
-  // node_modules/@openchamber/sdk/dist/microphone.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/microphone.js
   var GUEST_MICROPHONE_SAMPLE_RATE_MIN = 8e3;
   var GUEST_MICROPHONE_SAMPLE_RATE_MAX = 192e3;
   var GUEST_MICROPHONE_OPEN_TIMEOUT_MS = 12e4;
@@ -117,7 +117,7 @@
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/status-controls.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/status-controls.js
   var GUEST_STATUS_CONTROLS_MAX = 4;
   var GUEST_STATUS_CONTROL_ID = /^[a-z][a-z0-9-]{0,39}$/;
   var GUEST_STATUS_CONTROL_LABEL_MAX = 60;
@@ -160,12 +160,12 @@
     return true;
   };
 
-  // node_modules/@openchamber/sdk/dist/manifest.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/manifest.js
   var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
   var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
   var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
 
-  // node_modules/@openchamber/sdk/dist/session-events.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/session-events.js
   var GUEST_SESSION_EVENT_TYPES = [
     "turn-finished",
     "turn-failed",
@@ -179,11 +179,11 @@
   var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
   var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
 
-  // node_modules/@openchamber/sdk/dist/service-host.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-host.js
   var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
   var MENTIONS_IDLE_MS = 10 * 6e4;
 
-  // node_modules/@openchamber/sdk/dist/file-editor.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/file-editor.js
   var GUEST_FILE_EDITOR_CONTENT_MAX = 2e7;
   var GUEST_FILE_EDITOR_VERSION_MAX = 256;
   var fileEditorPayloadSize = (value) => "bytes" in value ? value.bytes.byteLength : value.content.length;
@@ -202,7 +202,7 @@
     return true;
   };
 
-  // node_modules/@openchamber/sdk/dist/popover.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/popover.js
   var GUEST_POPOVER_ID = /^[A-Za-z0-9_-]{1,80}$/;
   var GUEST_POPOVER_COORDINATE_MAX = 1e5;
   var GUEST_POPOVER_WIDTH_MIN = 160;
@@ -245,7 +245,7 @@
     }
   };
 
-  // node_modules/@openchamber/sdk/dist/contract.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/contract.js
   var GUEST_BLOCK_ANSWER_MAX = 2e3;
   var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
   var isStartSessionResult = (value) => Boolean(value && "sessionId" in value);
@@ -464,7 +464,7 @@
     return wire;
   };
 
-  // node_modules/@openchamber/sdk/dist/host.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/host.js
   var isKeyEvent = (event) => "key" in event && "metaKey" in event && "ctrlKey" in event;
   var isSaveShortcut = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "s";
   var HostRequestError = class extends Error {
@@ -1546,7 +1546,7 @@
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/service-providers.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-providers.js
   var BROWSER_CONTROL_ACTIONS = [
     "browser.open",
     "browser.snapshot",
@@ -1568,11 +1568,11 @@
   var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
   var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
 
-  // node_modules/@openchamber/sdk/dist/service-surface.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/service-surface.js
   var SURFACE_CONTROLLERS = ["none", "agent", "user"];
   var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
-  // node_modules/@openchamber/sdk/dist/ui/theme.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/theme.js
   var TOKEN_VARS = [
     ["--oc-bg", "background"],
     ["--oc-elevated", "elevated"],
@@ -1662,7 +1662,7 @@
     }
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/style.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/style.js
   var OC_ALIAS = {
     "surface-background": "bg",
     "surface-elevated": "elevated",
@@ -1973,7 +1973,7 @@ ${GUEST_SCROLLBAR_CSS}
 ${UI_SIZE_CSS}
 ${GUEST_UI_LOOK_CSS}`;
 
-  // node_modules/@openchamber/sdk/dist/ui/dom.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/dom.js
   var STYLE_ID = "oc-sdk-ui-style";
   var ensureStyle = (css) => {
     const existing = document.getElementById(STYLE_ID);
@@ -2015,7 +2015,7 @@ ${GUEST_UI_LOOK_CSS}`;
     }
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/button.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/button.js
   var ring = () => {
     const spinner = document.createElement("span");
     spinner.className = "oc-sdk-spinner-ring";
@@ -2063,7 +2063,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/icons.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/icons.js
   var SVG_NS = "http://www.w3.org/2000/svg";
   var ICON_PATH = {
     search: "M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.868-3.133-7-7-7-3.868 0-7 3.132-7 7 0 3.867 3.132 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z",
@@ -2089,7 +2089,7 @@ ${GUEST_UI_LOOK_CSS}`;
     return node;
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/search.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/search.js
   var mountSearchField = (root2, initial) => {
     ensureStyle(UI_CSS);
     let props = initial;
@@ -2150,7 +2150,7 @@ ${GUEST_UI_LOOK_CSS}`;
     };
   };
 
-  // node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
+  // ../openchamber-openspec/node_modules/@openchamber/sdk/dist/ui/popover-anchor.js
   var nextPopoverAnchorId = 0;
   var isKeyboardEvent = (event) => "key" in event;
   var mountPopoverAnchor = (element, options2) => {
@@ -2412,16 +2412,17 @@ ${GUEST_UI_LOOK_CSS}`;
     saved,
     items,
     worktreeName,
-    active: active2
+    eligible
   }) {
-    if (saved !== null) return { changes: saved.filter((name) => active2.has(name)), source: "saved" };
+    if (saved !== null)
+      return { changes: saved.filter((name) => eligible.has(name)), source: "saved" };
     for (const { data } of items) {
-      if (data && typeof data === "object" && "kind" in data && data.kind === "change" && "change" in data && typeof data.change === "string" && active2.has(data.change))
+      if (data && typeof data === "object" && "kind" in data && data.kind === "change" && "change" in data && typeof data.change === "string" && eligible.has(data.change))
         return { changes: [data.change], source: "item" };
     }
-    const legacy = items.find(({ id, data }) => data === void 0 && active2.has(id));
+    const legacy = items.find(({ id, data }) => data === void 0 && eligible.has(id));
     if (legacy) return { changes: [legacy.id], source: "item" };
-    if (worktreeName !== null && active2.has(worktreeName))
+    if (worktreeName !== null && eligible.has(worktreeName))
       return { changes: [worktreeName], source: "worktree" };
     return { changes: [], source: "none" };
   }
@@ -2515,6 +2516,30 @@ ${GUEST_UI_LOOK_CSS}`;
     if (new Set(archived.map(({ name }) => name)).size !== archived.length)
       throw new Error("Duplicate archived change.");
     return archived;
+  }
+  var archivedChangeId = (name) => name.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+  function decodeFocusTarget(value) {
+    const { directory: directory2, change, archive } = record(value);
+    if (typeof directory2 === "string") {
+      if (archive === void 0 && typeof change === "string" && isChangeName(change))
+        return { directory: directory2, change };
+      if (change === void 0 && typeof archive === "string" && isChangeName(archivedChangeId(archive)))
+        return { directory: directory2, archive };
+    }
+    throw new Error("Invalid board focus target.");
+  }
+  function decodePendingArchives(value) {
+    const { changes } = record(value);
+    if (!Array.isArray(changes)) throw new Error("Invalid pending archives.");
+    const pending = changes.map((value2) => {
+      const listing = decodeListingEntry(value2);
+      const name = string(record(value2).name);
+      if (archivedChangeId(name) !== listing.id) throw new Error("Invalid archived name.");
+      return { ...listing, name };
+    });
+    if (new Set(pending.map(({ id }) => id)).size !== pending.length)
+      throw new Error("Duplicate pending archive.");
+    return pending;
   }
   function decodeSpecs(value) {
     const { specs } = record(value);
@@ -2719,6 +2744,14 @@ ${GUEST_UI_LOOK_CSS}`;
         await request("/archived", { directory: directory2, expectedRoot: root2, expectedPlanning: planning }),
         decodeArchived
       ),
+      pendingArchives: async ({ directory: directory2, root: root2, planning }) => decode2(
+        await request("/pending-archives", {
+          directory: directory2,
+          expectedRoot: root2,
+          expectedPlanning: planning
+        }),
+        decodePendingArchives
+      ),
       specs: async ({ directory: directory2, root: root2, planning }) => decode2(
         await request("/specs", { directory: directory2, expectedRoot: root2, expectedPlanning: planning }),
         decodeSpecs
@@ -2776,16 +2809,15 @@ ${GUEST_UI_LOOK_CSS}`;
         }),
         decodeValidation
       ),
-      setFocus: async (directory2, change) => {
-        if (record2(await request("/focus", { directory: directory2, change })).ok !== true) throw invalid();
+      setFocus: async (target) => {
+        if (record2(await request("/focus", target)).ok !== true) throw invalid();
       },
       claimFocus: async (directory2) => {
         const value = await send({ method: "GET", path: "/focus", query: { directory: directory2 } });
         if (value === null) return null;
-        const { directory: target, change } = record2(value);
-        if (target !== directory2 || typeof change !== "string" || !isChangeName(change))
-          throw invalid();
-        return change;
+        const target = decode2(value, decodeFocusTarget);
+        if (target.directory !== directory2) throw invalid();
+        return target;
       },
       summaries: async (scope, entries) => {
         const value = decode2(
@@ -3062,6 +3094,8 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       try {
         const cards = entry.cards.map((card) => {
           const listing = decodeListingEntry(card);
+          if (card && typeof card === "object" && "archived" in card && card.archived === true)
+            return { ...listing, archived: true, currentTaskTitle: null };
           if (!card || typeof card !== "object" || !("stage" in card))
             throw new Error("Missing stage.");
           const stage = stages.find(({ id }) => id === card.stage)?.id;
@@ -3133,7 +3167,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       throw new Error("Invalid tracked OpenSpec changes.");
     return [...new Set(value.changes)];
   }
-  function resolveSessionChanges(sessionId2, sessions2, saved, active2) {
+  function resolveSessionChanges(sessionId2, sessions2, saved, eligible) {
     const candidate = sessions2?.sessions.find(({ id }) => id === sessionId2);
     const coverage = sessions2?.coverage.find(({ directory: directory2 }) => directory2 === candidate?.directory);
     if (saved === null && candidate && coverage?.state !== "ready") return null;
@@ -3141,7 +3175,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       saved,
       items: candidate?.items ?? [],
       worktreeName: candidate?.worktree?.name ?? null,
-      active: active2
+      eligible
     }).changes;
   }
   async function updateTrackedChanges(host2, sessionId2, current, seed, update) {
@@ -3193,6 +3227,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   }
 
   // src/status.ts
+  var archiveLabel = "Archived \xB7 not landed";
   var isValidationIssue = ({ level }) => level !== "INFO";
   var root = document.querySelector("#root");
   if (!root) throw new Error("Status section root is missing");
@@ -3214,6 +3249,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   var workflows;
   var refreshWorkflows = false;
   var contextRead;
+  var validNames = { has: isChangeName };
   var selection2 = null;
   var hasDeviceStorage = false;
   var hasPopovers = false;
@@ -3305,15 +3341,17 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     onClick: () => setPickerOpen(false)
   });
   var pickerItems = [];
-  var pickerScope = null;
+  var pickerListing = null;
+  var pickerTracked = [];
+  var pickerArchives = null;
   var latestPickerScope = null;
-  var hintOpening = null;
+  var pickerOpening = null;
   var viewKey = "";
   var showingLive = false;
   var readError;
   var mountedCards = /* @__PURE__ */ new Map();
   function setPickerOpen(open, restoreFocus = true) {
-    hintOpening = null;
+    pickerOpening = null;
     picker.hidden = !open;
     pickerTrigger.setAttribute("aria-expanded", String(open));
     if (open) {
@@ -3322,21 +3360,32 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       renderPickerRows();
       if (!searchRoot.hidden) searchInput.focus();
       else choices.querySelector("button:enabled")?.focus();
-      const scope = pickerScope;
-      if (scope && pickerItems.length && samePickerScope(scope, latestPickerScope)) {
-        const opening = { hints: /* @__PURE__ */ new Set() };
-        hintOpening = opening;
+      const scope = pickerListing;
+      if (scope && samePickerScope(scope, latestPickerScope)) {
+        const opening = { hints: /* @__PURE__ */ new Set(), archives: null };
+        pickerOpening = opening;
         const current = captureContext();
-        void client.modifiedChanges(scope).then(
-          (ids) => {
-            if (hintOpening !== opening || !current() || !samePickerScope(scope, latestPickerScope))
-              return;
-            opening.hints = new Set(ids);
-            renderPickerRows();
-          },
-          () => {
-          }
-        );
+        const stillOpen = () => pickerOpening === opening && current() && samePickerScope(scope, latestPickerScope);
+        if (pickerItems.length)
+          void client.modifiedChanges(scope).then(
+            (ids) => {
+              if (!stillOpen()) return;
+              opening.hints = new Set(ids);
+              renderPickerRows();
+            },
+            () => {
+            }
+          );
+        if (pickerArchives === null)
+          void client.pendingArchives(scope).then(
+            (archives) => {
+              if (!stillOpen()) return;
+              opening.archives = archives;
+              renderPickerRows();
+            },
+            () => {
+            }
+          );
       }
     } else if (restoreFocus) pickerTrigger.focus();
   }
@@ -3404,17 +3453,22 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   function updateLatestPickerScope(scope) {
     if (samePickerScope(scope, latestPickerScope)) return;
     latestPickerScope = scope;
-    if (!hintOpening) return;
-    hintOpening = null;
+    pickerOpening = null;
+    pickerArchives = null;
     renderPickerRows();
   }
-  function updatePicker(listing, tracked) {
-    pickerScope = listing;
+  function updatePicker(listing, tracked, archives) {
+    pickerListing = listing;
+    pickerTracked = tracked;
+    pickerArchives = archives;
     pickerItems = listing.changes.filter(({ id }) => !tracked.includes(id)).sort((left, right) => pickerPriority(left) - pickerPriority(right)).map(({ id }) => id);
     renderPickerRows();
   }
   function mountPickerRow(id) {
     const row = document.createElement("li");
+    const archiveNote = document.createElement("span");
+    archiveNote.className = "note";
+    archiveNote.id = `picker-archive-${id}`;
     const button2 = mountButton(row, {
       label: id,
       size: "sm",
@@ -3433,15 +3487,24 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
       }
     });
     const control = row.querySelector("button");
-    return { row, button: button2, control };
+    row.append(archiveNote);
+    return { row, button: button2, control, archiveNote };
   }
   function renderPickerRows() {
     const query = pickerQuery.trim().toLocaleLowerCase();
-    const hints = hintOpening?.hints;
-    const items = pickerItems.filter((id) => id.toLocaleLowerCase().includes(query)).sort((left, right) => Number(hints?.has(right) ?? false) - Number(hints?.has(left) ?? false));
-    searchRoot.hidden = pickerItems.length <= 1 && pickerQuery === "";
+    const hints = pickerOpening?.hints;
+    const activeIds = new Set(pickerListing?.changes.map(({ id }) => id));
+    const archives = (pickerArchives ?? pickerOpening?.archives ?? []).map(({ id }) => id).filter((id) => !activeIds.has(id) && !pickerTracked.includes(id)).sort((a, b) => a.localeCompare(b));
+    const archivedIds = new Set(archives);
+    const activeItems = pickerItems.filter((id) => id.toLocaleLowerCase().includes(query)).sort((left, right) => Number(hints?.has(right) ?? false) - Number(hints?.has(left) ?? false));
+    const items = [
+      ...activeItems,
+      ...archives.filter((id) => id.toLocaleLowerCase().includes(query))
+    ];
+    const total = pickerItems.length + archives.length;
+    searchRoot.hidden = total <= 1 && pickerQuery === "";
     emptyChoices.hidden = items.length !== 0;
-    emptyChoices.textContent = pickerItems.length ? "No matching changes." : "No untracked changes.";
+    emptyChoices.textContent = total ? "No matching changes." : "No untracked changes.";
     const focused = document.activeElement;
     const hadChoiceFocus = choices.contains(focused);
     const visible = new Set(items);
@@ -3457,8 +3520,14 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         mounted = mountPickerRow(id);
         pickerRows.set(id, mounted);
       }
-      const { row, control } = mounted;
-      if (hints?.has(id)) {
+      const { row, control, archiveNote } = mounted;
+      const archived = archivedIds.has(id);
+      row.classList.toggle("archive-choice", archived);
+      archiveNote.hidden = !archived;
+      archiveNote.textContent = archived ? archiveLabel : "";
+      if (archived) {
+        control.setAttribute("aria-describedby", archiveNote.id);
+      } else if (hints?.has(id)) {
         control.setAttribute("aria-describedby", modifiedDescription.id);
       } else control.removeAttribute("aria-describedby");
       let previous = choices.children.item(index);
@@ -3476,7 +3545,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     }
   }
   function seedTrackedChanges() {
-    return selection2 ? resolveSessionChanges(sessionId, sessions, null, selection2.active) : [];
+    return selection2 ? resolveSessionChanges(sessionId, sessions, null, selection2.eligible) : [];
   }
   async function showError(current, caught, fallback) {
     if (!current()) return;
@@ -3488,7 +3557,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   async function openBoard(current, target) {
     try {
       if (!current()) return false;
-      if (target) await client.setFocus(target.directory, target.change);
+      if (target) await client.setFocus(target);
       if (!current()) return false;
       await host.openSurface("plugin:openspec-board");
       return current();
@@ -3558,10 +3627,11 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     const inline = document.createElement("div");
     inline.hidden = true;
     let change = null;
+    let archive = null;
     const nameAnchor = mountFlyout(
       nameButton,
       inline,
-      () => change && scope && workflows ? changeFlyout(change, scope.directory, workflows) : null
+      () => archive && scope ? { kind: "archived", name: id, archive: archive.name, directory: scope.directory } : change && scope && workflows ? changeFlyout(change, scope.directory, workflows) : null
     );
     const count2 = document.createElement("span");
     heading.append(count2);
@@ -3686,25 +3756,32 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         for (const { title: title2 } of taskRows.values()) title2.refreshAnchor();
       },
       update(card, listing) {
+        const nextArchive = "archive" in card ? card.archive : null;
+        if (archive?.name !== nextArchive?.name) nameAnchor.reset();
+        archive = nextArchive;
         scope = listing;
         const display = "display" in card ? card.display : null;
         details.hidden = !("change" in card);
         const message = "message" in card ? card.message : void 0;
         errorCard.hidden = !message;
         error.textContent = message ?? "";
-        count2.hidden = meter.hidden = details.hidden && !display;
-        nameButton.disabled = details.hidden;
+        count2.hidden = meter.hidden = details.hidden && !display && !archive;
+        nameButton.disabled = details.hidden && !archive;
         element.classList.toggle("stale-card", !!display);
-        cachedStage.hidden = !display;
+        cachedStage.hidden = !display && !archive;
         cachedTask.hidden = !display?.currentTaskTitle;
         if (!("change" in card)) {
-          if (display) {
+          if (archive) {
+            updateProgress(archive);
+            cachedStage.textContent = archiveLabel;
+          } else if (display) {
             updateProgress(display);
-            cachedStage.textContent = stageLabel(display.stage);
+            cachedStage.textContent = "archived" in display ? archiveLabel : stageLabel(display.stage);
             cachedTask.textContent = display.currentTaskTitle;
           }
           change = null;
-          nameAnchor.reset();
+          if (archive) nameAnchor.update();
+          else nameAnchor.reset();
           currentTask.update(null);
           for (const { title: title2 } of taskRows.values()) title2.update(null);
           validationAnchor.reset();
@@ -3825,6 +3902,8 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
   }
   function decodeFlyout(value) {
     if (!value || typeof value !== "object" || !("kind" in value)) return null;
+    if (value.kind === "archived")
+      return "name" in value && typeof value.name === "string" && "archive" in value && typeof value.archive === "string" && "directory" in value && typeof value.directory === "string" ? { kind: "archived", name: value.name, archive: value.archive, directory: value.directory } : null;
     if (value.kind === "task")
       return "id" in value && typeof value.id === "string" && "description" in value && typeof value.description === "string" ? { kind: "task", id: value.id, description: value.description } : null;
     if (value.kind === "validation" && "change" in value && typeof value.change === "string") {
@@ -3899,9 +3978,9 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     }
     heading.textContent = data.name;
     const stage = document.createElement("p");
-    stage.textContent = stageLabel(data.stage);
+    stage.textContent = data.kind === "archived" ? archiveLabel : stageLabel(data.stage);
     container.replaceChildren(heading, stage);
-    if (data.goal) {
+    if (data.kind === "change" && data.goal) {
       const goal = document.createElement("p");
       goal.textContent = data.goal;
       container.append(goal);
@@ -3910,7 +3989,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
     row.className = "card-actions";
     container.append(row);
     const { session, current, seed, afterAction, afterUntrack } = context;
-    const actions = (data.offerContinue ? ["continue", "update"] : ["update"]).map(
+    const actions = data.kind === "change" ? (data.offerContinue ? ["continue", "update"] : ["update"]).map(
       (intent) => mountButton(row, {
         label: intent,
         variant: "secondary",
@@ -3927,14 +4006,15 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           });
         }
       })
-    );
+    ) : [];
     actions.push(
       mountButton(row, {
         label: "Open in board",
         variant: "secondary",
         size: "xs",
         onClick: () => {
-          void openBoard(current, { directory: data.directory, change: data.name }).then((opened) => {
+          const target = data.kind === "change" ? { directory: data.directory, change: data.name } : { directory: data.directory, archive: data.archive };
+          void openBoard(current, target).then((opened) => {
             if (opened) afterAction?.();
           });
         }
@@ -4124,11 +4204,42 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         }
         const byId = new Map(listing.changes.map((item) => [item.id, item]));
         const active2 = new Set(byId.keys());
-        const changes = resolveSessionChanges(capturedSession, sessions, saved, active2) ?? [];
-        selection2 = { active: active2, saved, changes };
-        updatePicker(listing, changes);
+        const candidates = resolveSessionChanges(capturedSession, sessions, saved, validNames) ?? [];
+        const missing = candidates.filter((id) => !active2.has(id));
+        const pending = missing.length ? await Promise.allSettled([client.pendingArchives(listing)]).then(([result]) => result) : null;
+        if (!current()) return;
+        if (!sameChanges(
+          candidates,
+          resolveSessionChanges(capturedSession, sessions, saved, validNames) ?? []
+        )) {
+          queued = true;
+          return;
+        }
+        const archives = /* @__PURE__ */ new Map();
+        const eligible = new Set(active2);
+        if (pending?.status === "fulfilled") {
+          for (const entry of pending.value) {
+            archives.set(entry.id, entry);
+            eligible.add(entry.id);
+          }
+        } else if (pending?.status === "rejected") {
+          for (const id of missing) eligible.add(id);
+        }
+        const changes = resolveSessionChanges(capturedSession, sessions, saved, eligible) ?? [];
+        selection2 = { eligible, saved, candidates, changes };
+        updatePicker(listing, changes, pending?.status === "fulfilled" ? pending.value : null);
         const cards = await Promise.all(
           changes.map(async (id) => {
+            const entry = byId.get(id);
+            if (!entry) {
+              const archive = archives.get(id);
+              if (archive) return { id, archive };
+              const caught = pending?.status === "rejected" ? pending.reason : null;
+              return {
+                id,
+                message: caught instanceof Error ? caught.message : "Could not check pending archives."
+              };
+            }
             try {
               const [summaryResponse, taskResponse] = await Promise.allSettled([
                 client.summary(listing, id),
@@ -4138,7 +4249,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
               if (taskResponse.status === "rejected") throw taskResponse.reason;
               return {
                 id,
-                change: deriveChange({ ...summaryResponse.value, ...byId.get(id) }),
+                change: deriveChange({ ...summaryResponse.value, ...entry }),
                 tasks: taskResponse.value
               };
             } catch (caught) {
@@ -4157,6 +4268,11 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         );
         const display = [];
         const visibleCards = cards.map((card) => {
+          if ("archive" in card) {
+            const { id, completedTasks, totalTasks } = card.archive;
+            display.push({ id, completedTasks, totalTasks, archived: true, currentTaskTitle: null });
+            return card;
+          }
           if ("change" in card) {
             const { id, completedTasks, totalTasks, stage } = card.change;
             const task = card.tasks.find(({ done }) => !done) ?? card.tasks.at(-1) ?? null;
@@ -4206,10 +4322,13 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
         const off = await host.onSessions(project.id, (snapshot) => {
           if (!current()) return;
           sessions = snapshot;
-          if (selection2 && !sameChanges(
-            resolveSessionChanges(sessionId, sessions, selection2.saved, selection2.active) ?? [],
+          if (selection2 && (!sameChanges(
+            resolveSessionChanges(sessionId, sessions, selection2.saved, validNames) ?? [],
+            selection2.candidates
+          ) || !sameChanges(
+            resolveSessionChanges(sessionId, sessions, selection2.saved, selection2.eligible) ?? [],
             selection2.changes
-          )) {
+          ))) {
             epoch++;
             selection2 = null;
             showCached();
@@ -4285,7 +4404,7 @@ Revise ${target}'s existing planning artefacts as I describe and keep them consi
           popoverActions = renderFlyout(panelRoot, data, {
             session: nextSession,
             current: () => !disposed && popoverSession === nextSession,
-            seed: () => data.kind === "change" ? [data.name] : [],
+            seed: () => data.kind === "change" || data.kind === "archived" ? [data.name] : [],
             afterAction: close,
             afterUntrack: close
           });

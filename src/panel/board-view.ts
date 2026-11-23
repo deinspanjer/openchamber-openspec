@@ -41,6 +41,7 @@ export type BoardState = {
   workflows: ReadonlySet<Workflow>;
   view: BoardView;
   archived: ReadState<ArchivedChange[]> | null;
+  currentArchive: string | null;
   specs: ReadState<SpecEntry[]> | null;
 };
 
@@ -176,21 +177,39 @@ export function mountBoardView(
   archivedStatus.append(archivedMessage, archivedRetryRoot);
   panes.archived.append(archivedStatus, archivedList);
   let lastArchived: BoardState["archived"] | undefined;
+  let lastCurrentArchive: string | null = null;
   let lastArchiveQuery: string | undefined;
-  function updateArchived(state: BoardState["archived"], query: string) {
-    if (lastArchived === state && lastArchiveQuery === query) return;
+  function updateArchived(
+    state: BoardState["archived"],
+    query: string,
+    currentArchive: string | null,
+  ) {
+    if (
+      lastArchived === state &&
+      lastArchiveQuery === query &&
+      lastCurrentArchive === currentArchive
+    )
+      return;
     lastArchived = state;
     lastArchiveQuery = query;
+    lastCurrentArchive = currentArchive;
     const rows = (state?.value ?? [])
       .map(({ name, completedTasks, totalTasks }) => {
         const dated = /^(\d{4}-\d{2}-\d{2})-(.+)$/.exec(name);
-        return { name: dated?.[2] ?? name, date: dated?.[1] ?? "", completedTasks, totalTasks };
+        return {
+          archive: name,
+          name: dated?.[2] ?? name,
+          date: dated?.[1] ?? "",
+          completedTasks,
+          totalTasks,
+        };
       })
       .filter(({ name }) => name.toLocaleLowerCase().includes(query))
       .sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
     archivedList.replaceChildren(
-      ...rows.map(({ name, date, completedTasks, totalTasks }) => {
+      ...rows.map(({ archive, name, date, completedTasks, totalTasks }) => {
         const row = document.createElement("li");
+        if (archive === currentArchive) row.setAttribute("aria-current", "true");
         const title = document.createElement("span");
         title.textContent = name;
         const count = document.createElement("span");
@@ -405,6 +424,9 @@ export function mountBoardView(
     scrollForChanges() {
       return view === "changes" ? window.scrollY : (positions.get("changes")?.scroll ?? 0);
     },
+    scrollToCurrentArchive() {
+      archivedList.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+    },
     focusSpec(id: string) {
       const button = specsList.querySelector<HTMLElement>(`[data-spec="${CSS.escape(id)}"]`);
       (button ?? tablist.querySelector<HTMLElement>("#board-tab-specs"))?.focus({
@@ -478,7 +500,7 @@ export function mountBoardView(
         cards.delete(id);
       }
       const query = state.search.trim().toLocaleLowerCase();
-      updateArchived(state.archived, query);
+      updateArchived(state.archived, query, state.currentArchive);
       updateSpecs(state.specs, query);
       for (const entry of cards.values()) {
         if (!entry.current.change.id.toLocaleLowerCase().includes(query)) entry.node.remove();
