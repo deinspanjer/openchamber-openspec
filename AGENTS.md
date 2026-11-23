@@ -74,9 +74,10 @@
 
 ## Live-host checks
 
-- After `npm run build`, use the OpenChamber browser tool in **Settings > Extensions** to
-  **Disable** then **Enable** the OpenSpec extension; confirm it is **Enabled**. Reloading the
-  iframe does not restart the service.
+- **Live extension checks:** Follow [Test a worktree on the live host](README.md#test-a-worktree-on-the-live-host).
+  Use the OpenChamber browser tool to switch between installs in **Settings > Extensions**.
+  Confirm **OpenSpec (dev)** is **Enabled** before testing, then restore the Git install and
+  leave dev disabled. Use `npm run dev:deploy` from the worktree, not a build in the Git install.
 - Check behaviour inside the extension with Playwright in its own browser:
   `uv run --with playwright python <script>` against the running OpenChamber web UI
   (`http://127.0.0.1:57123` on this machine). The OpenChamber browser tool cannot see inside the

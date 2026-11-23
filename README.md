@@ -91,5 +91,29 @@ or repair it.
 ## Develop
 
 Requires Node 22.13+, npm and the OpenSpec CLI. Run `npm ci`, `npx playwright install chromium`,
-then `npm run check`. OpenChamber does not build extensions on install, so rebuild, then disable and
-re-enable the extension to restart its service. More detail is in `AGENTS.md`.
+then `npm run check`. Use `npm run build` to build the release package.
+
+### Test a worktree on the live host
+
+Use **OpenSpec (dev)** to test without changing the Git-installed extension. Disable the dev
+extension before deploying if it is already installed. From the worktree you want to test, with its
+dependencies installed, run:
+
+```bash
+npm run dev:deploy
+```
+
+The command builds the current files, including uncommitted edits, into
+`~/.local/share/openchamber-openspec-dev` and prints the absolute path.
+
+1. For the first test, open **Settings > Extensions > Add extension**. Add the printed folder path
+   on the OpenChamber server. Review the permissions for **OpenSpec (dev)** and approve the
+   extension if you trust the build. Keep it disabled outside tests.
+2. Disable the Git-installed **OpenSpec** and enable **OpenSpec (dev)**. Open the project or
+   worktree you want to test in OpenChamber. The deployment selects the extension code, not the
+   project it displays. Work Status tracking is separate from the Git install.
+3. When you finish, disable **OpenSpec (dev)** and re-enable the Git install.
+
+To test another worktree, run `npm run dev:deploy` there while dev is disabled. Use the same
+extension entry in Settings. Rebuilding the folder does not require reinstalling it. Enabling the
+dev extension starts a fresh service. Reloading its iframe does not restart the service.

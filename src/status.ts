@@ -30,6 +30,8 @@ import {
 import { stageLabel } from "./panel/workflow.js";
 import { cardChips, loadWorkflows } from "./panel/workflows.js";
 
+declare const __OPENSPEC_PANEL_SURFACE__: string;
+
 type View =
   | { kind: "empty" | "loading" }
   | { kind: "stale"; cards: DisplayCard[]; message?: string }
@@ -434,7 +436,7 @@ async function openBoard(current: () => boolean, target?: FocusTarget) {
     if (!current()) return false;
     if (target) await client.setFocus(target);
     if (!current()) return false;
-    await host.openSurface("plugin:openspec-board");
+    await host.openSurface(__OPENSPEC_PANEL_SURFACE__);
     return current();
   } catch (caught) {
     await showError(current, caught, "Could not open the OpenSpec board.");
