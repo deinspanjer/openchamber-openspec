@@ -7,19 +7,21 @@
     "preversion": "npm run check",
     "version": "npm run build && git add panel/main.js panel/status.js service/main.js",
     "build": "npm run build:panel && npm run build:status && npm run build:service",
-    "build:panel": "esbuild src/panel.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=panel/main.js --define:__OPENSPEC_PANEL_ID__=\\\"openspec-board\\\"",
-    "build:service": "esbuild src/service.ts --bundle --format=cjs --platform=node --target=node22 --outfile=service/main.js",
+    "build:panel": "node scripts/build-extension.mjs panel",
+    "build:service": "node scripts/build-extension.mjs service",
     "build:model:test": "esbuild src/model.ts --bundle --format=esm --platform=node --target=node22 --outfile=build/model.mjs",
     "build:resources:test": "esbuild src/panel/resources.ts --bundle --format=esm --platform=node --target=node22 --outfile=build/resources.mjs",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
     "lint": "eslint src eslint.config.mjs",
     "lint:fix": "eslint src eslint.config.mjs --fix",
-    "format:check": "prettier --check src test panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
-    "format": "prettier --write src test panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
+    "format:check": "prettier --check src test scripts/*.mjs panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
+    "format": "prettier --write src test scripts/*.mjs panel/*.html service/package.json package.json tsconfig.json eslint.config.mjs README.md .prettierrc .vscode/tasks.json",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && npm run build:model:test && npm run build:resources:test && node --test test/*.test.mjs",
     "clean": "node -e \"for (const file of ['panel/main.js', 'panel/status.js', 'service/main.js']) require('node:fs').rmSync(file, { force: true })\"",
-    "build:status": "esbuild src/status.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=panel/status.js --define:__OPENSPEC_PANEL_SURFACE__=\\\"plugin:openspec-board\\\""
+    "build:status": "node scripts/build-extension.mjs status",
+    "dev:deploy": "node scripts/build-extension.mjs dev",
+    "check:version": "node scripts/check-extension-version.mjs"
   },
   "openchamber": {
     "apiVersion": 1,
@@ -72,6 +74,7 @@
     "eslint": "^10.11.0",
     "playwright": "^1.58.2",
     "prettier": "^3.9.9",
+    "semver": "^7.8.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1"
   }

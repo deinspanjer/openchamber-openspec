@@ -78,8 +78,10 @@
 
 ## Live-host checks
 
-- Update/reinstall the extension to pick up checkout changes, then **Disable** and **Enable** it in
-  **Settings > Extensions**; confirm **Enabled**. Reloading the iframe does not restart the service.
+- For a live check, follow [Test a worktree on the live host](README.md#test-a-worktree-on-the-live-host).
+  Deploy from the worktree, not the Git-installed checkout. Switch installs in **Settings >
+  Extensions** and confirm **OpenSpec (dev)** is **Enabled** before testing. Restore the Git install
+  and leave dev disabled. Reloading the iframe does not restart the service.
 - The OpenChamber browser tool cannot inspect the extension iframe. Use Playwright in its own
   browser against the running host, for example `uv run --with playwright python <script>`.
 - Ask the user before a check creates real sessions or worktrees.
@@ -91,7 +93,8 @@
 - Ask before tagging, pushing, or creating a GitHub Release. After tag approval, use
   `npm version patch` (or `minor` / `major`; `prerelease --preid=alpha` for alphas). Keep lifecycle
   hooks enabled and avoid `--force`: they run the checks and stage rebuilt bundles into npm's
-  version commit.
+  version commit. Run `npm run check:version` against the published `origin/main` before shipping.
+  Keep that release check separate from `npm run check` so source-only changes can pass verification.
 - Inspect `git show --stat HEAD` and `git status --short`; confirm `vX.Y.Z` points to the version
   commit.
 - Label merged PRs using `.github/release.yml`. Write `highlights.md` outside the checkout with what
