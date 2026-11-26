@@ -188,7 +188,7 @@ export function mountDetailView(
   const footer = document.createElement("footer");
   footer.className = "detail-footer";
   const actionRoot = document.createElement("span");
-  const action = mountPrimaryAction(actionRoot);
+  const action = mountPrimaryAction(actionRoot, true);
   const verifyRoot = document.createElement("span");
   const verify = mountButton(verifyRoot, {
     label: "verify",

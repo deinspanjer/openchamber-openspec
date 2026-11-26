@@ -24,8 +24,8 @@ The extension requires OpenChamber 2.7.1 or later.
 3. In your project, run `openspec init --tools opencode`.
 4. In OpenChamber, open **Settings > Extensions** and add
    `https://github.com/jaythomasonprojects/openchamber-openspec.git`. Its service runs `openspec`
-   and `git` with your user access. The `sessions` permission lets it start sessions for worktree
-   Apply and bulk archiving. If you trust that, choose **Allow and enable**.
+   and `git` with your user access. The `sessions` permission lets it start worktree Apply sessions
+   and recovery sessions for bulk archive failures. If you trust that, choose **Allow and enable**.
 5. Open the **OpenSpec** rail panel, or find it under **Extension pages**.
 
 On a phone, open the board from the workspace drawer or the sessions list's **More** menu.
@@ -43,8 +43,14 @@ and **Specs** to read the project's main OpenSpec specs. **Archived** requires O
 
 Board actions follow the workflows you select with `openspec config profile`. Planning changes offer
 **ff** if configured, then **continue** if configured, or **propose**. Completed changes offer
-**verify** only if you configure that workflow. **archive all** uses **bulk-archive** if configured.
-Run `openspec update` after changing the profile to install the selected skills.
+**verify** only if you configure that workflow. Run `openspec update` after changing the profile to
+install the selected skills.
+
+Archiving from the extension requires OpenSpec 2.0 or later. **archive** syncs specs and archives
+the change directly from the board or Work Status. The board detail's archive menu also offers
+**archive without sync**. If a normal archive fails, the extension prepares an unsent recovery
+prompt. **archive all** processes completed changes one at a time and opens a recovery session only
+for failures.
 
 To create a change, enter its name. Record its purpose in the proposal. Goals already recorded on
 older changes remain visible.
@@ -63,9 +69,9 @@ Expand **Tasks:** to see up to five tasks around the current task. Select a task
 description. The workflow chips follow the change's stage and the profile set by
 `openspec config profile`. Optional workflows such as **ff** and **verify** appear when configured.
 Run `openspec update` after changing the profile to install the configured skills. If the CLI cannot
-report the profile, the section uses the core workflows. Workflow chips prepare drafts without
-sending them. **validate** runs OpenSpec validation and previews the result. For the full report,
-run `openspec validate <change> --type change --json`.
+report the profile, the section uses the core workflows. Except for **archive**, workflow chips
+prepare drafts without sending them. **validate** runs OpenSpec validation and previews the result.
+For the full report, run `openspec validate <change> --type change --json`.
 
 The footer contains **＋ Track a change**, **new** (when configured), **board**, and **Refresh**.
 **board** opens the board without changing its current view. To open a specific change, select its
