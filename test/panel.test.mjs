@@ -87,6 +87,21 @@ function hostHtml() {
     let unknownDelete = false;
     let malformedDelete = false;
     let failNextListing = false;
+    let workflows = ["propose", "explore", "apply", "update", "sync", "archive"];
+    window.__workflows = (value) => { workflows = value; };
+    let archivedChanges = [];
+    window.__archived = (changes) => { archivedChanges = changes; };
+    let mainSpecs = [];
+    const mainSpecContent = new Map();
+    window.__specs = (specs) => { mainSpecs = specs; };
+    window.__spec = (id, content) => { mainSpecContent.set(id, content); };
+    let holdWorkflows = false;
+    const pendingWorkflows = [];
+    window.__holdWorkflows = () => { holdWorkflows = true; };
+    window.__releaseWorkflows = () => {
+      holdWorkflows = false;
+      pendingWorkflows.splice(0).forEach((finish) => finish());
+    };
     const pendingDeletes = [];
     const pendingCreates = [];
     let holdProposal = false;
@@ -204,13 +219,38 @@ function hostHtml() {
         if (body.expectedPlanning && body.expectedPlanning !== currentPlanning) {
           send({error:{code:"PLANNING_CHANGED",message:"Planning target changed. Refresh to establish the new scope."}},409); return;
         }
-        if (path === "/changes") {
+          if (path === "/workflows") {
+            const configured = workflows;
+            const finish = () => {
+              if (configured === null)
+                reply({ status: 422, body: JSON.stringify({ error: { code: "OPENSPEC_ERROR", message: "Cannot read workflows" } }) });
+              else reply({ status: 200, body: JSON.stringify({ workflows: configured }) });
+            };
+            if (holdWorkflows) pendingWorkflows.push(finish); else finish();
+         }
+         else if (path === "/changes") {
            if (failNextListing) { failNextListing = false;
              send({ error: { code: "CLI_UNAVAILABLE", message: "Cannot check listing" } }, 503); return; }
            const finish = () => send({ directory: body.directory, root: body.directory === directory ? currentRoot : body.directory + "/openspec",
             changes: body.directory === directory ? changes.map(({ id, completedTasks, totalTasks }) => ({ id, completedTasks, totalTasks })) : [] });
           if (holdListing) pending.push(finish); else finish();
         }
+          else if (path === "/archived") {
+           if (archivedChanges === null)
+             send({ error: { code: "OPENSPEC_ERROR", message: "Cannot list archived changes" } }, 422);
+           else send({ changes: archivedChanges });
+         }
+         else if (path === "/specs") {
+           if (mainSpecs === null)
+             send({ error: { code: "OPENSPEC_ERROR", message: "Cannot list specs" } }, 422);
+           else send({ specs: mainSpecs });
+         }
+         else if (path === "/spec") {
+           const content = mainSpecContent.get(body.spec);
+           if (typeof content !== "string")
+             send({ error: { code: "SPEC_UNAVAILABLE", message: "Spec is no longer listed." } }, 404);
+           else reply({ status: 200, body: JSON.stringify({ id: body.spec, content }) });
+         }
         else if (path === "/summaries") {
           if (body.directory !== directory) { send({ root: body.directory + "/openspec", changes: [] }); return; }
           if (batchReply) {
@@ -260,7 +300,7 @@ function hostHtml() {
           else finish();
         }
         else if (path === "/create") {
-          if (createWrites) changes.push({ id: body.name, goal: body.goal, completedTasks: 0, totalTasks: 0 });
+          if (createWrites) changes.push({ id: body.name, goal: null, completedTasks: 0, totalTasks: 0 });
           const finish = () => {
             if (createReply === "invalid-json") reply({ status: 200, body: "{" });
             else if (createReply === "null") send(null);
@@ -579,7 +619,10 @@ test("presentation footer keeps equal 12px control gaps and an external separato
         'Use your skill tool to load and invoke the openspec-apply-change skill for OpenSpec change "first-change".',
       ),
     );
-    await page.evaluate(() => __edit("Completed"));
+    await page.evaluate(() => {
+      __edit("Completed");
+      __workflows(["verify"]);
+    });
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     await footer.getByRole("button", { name: "verify", exact: true }).waitFor();
     await page.setViewportSize({ width: 320, height: 700 });
@@ -684,7 +727,338 @@ test("presentation page fills short boards and preserves long board and detail s
   });
 });
 
-test("one board load requests one listing and one summaries batch", async () => {
+test("board tabs retain the Changes cards, scroll and focus without reading again", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 420, height: 460 } });
+    await page.goto(`${url}?hold-ready`);
+    const panel = page.frameLocator("iframe");
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __edit("Completed");
+      for (let i = 0; i < 16; i++) __recreate(`long-board-${String(i).padStart(2, "0")}`);
+      __releaseReady();
+    });
+    const last = panel.getByRole("button", { name: "long-board-15", exact: true });
+    await last.waitFor();
+    const tabs = panel.getByRole("tablist", { name: "OpenSpec views" });
+    const changes = tabs.getByRole("tab", { name: "Changes", exact: true });
+    const archived = tabs.getByRole("tab", { name: "Archived", exact: true });
+    const specs = tabs.getByRole("tab", { name: "Specs", exact: true });
+    await changes.waitFor({ timeout: 3000 });
+    assert.equal(await changes.getAttribute("aria-selected"), "true");
+    assert.equal(await tabs.evaluate((node) => node.closest("header") === null), true);
+    const before = await page.evaluate(
+      () =>
+        __requests.filter(({ path }) => ["/changes", "/workflows", "/summaries"].includes(path))
+          .length,
+    );
+    await last.scrollIntoViewIfNeeded();
+    const scroll = await last.evaluate((node) => {
+      node.focus({ preventScroll: true });
+      window.lastChangeControl = node;
+      return window.scrollY;
+    });
+    assert.ok(scroll > 0);
+    await archived.evaluate((node) => node.click());
+    assert.equal(await archived.getAttribute("aria-selected"), "true");
+    assert.equal(await last.count(), 0);
+    await specs.evaluate((node) => node.click());
+    assert.equal(await specs.getAttribute("aria-selected"), "true");
+    assert.equal(await panel.getByRole("button", { name: "new change" }).isEnabled(), true);
+    assert.equal(await panel.getByRole("button", { name: "archive all" }).isEnabled(), true);
+    const search = panel.getByRole("searchbox", { name: "Search changes" });
+    await search.fill("long-board");
+    await changes.evaluate((node) => node.click());
+    assert.equal(await search.inputValue(), "long-board");
+    assert.equal(await panel.getByRole("button", { name: "first-change", exact: true }).count(), 0);
+    assert.deepEqual(
+      await last.evaluate((node) => ({
+        same: node === window.lastChangeControl,
+        focused: document.activeElement === node,
+        scroll: window.scrollY,
+      })),
+      { same: true, focused: true, scroll },
+    );
+    await search.fill("Recreated goal");
+    assert.equal(await last.count(), 0);
+    assert.equal(
+      await page.evaluate(
+        () =>
+          __requests.filter(({ path }) => ["/changes", "/workflows", "/summaries"].includes(path))
+            .length,
+      ),
+      before,
+    );
+  });
+});
+
+test("Archived orders and filters archived changes without reading them before opening", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() =>
+      __archived([
+        { name: "no-date", completedTasks: 0, totalTasks: 0 },
+        { name: "2026-11-20-add-login", completedTasks: 7, totalTasks: 7 },
+        { name: "2026-11-22-fix-cache", completedTasks: 3, totalTasks: 3 },
+        { name: "2026-11-22-add-cache", completedTasks: 1, totalTasks: 2 },
+      ]),
+    );
+    assert.equal(await page.evaluate(() => __requests.some((r) => r.path === "/archived")), false);
+    await panel.getByRole("tab", { name: "Archived", exact: true }).click();
+    const archive = panel.getByRole("tabpanel", { name: "Archived" });
+    await archive.getByText("fix-cache", { exact: true }).waitFor({ timeout: 3000 });
+    const rows = archive.getByRole("listitem");
+    assert.deepEqual(await rows.allTextContents(), [
+      "add-cache2026-11-221 of 2 tasks",
+      "fix-cache2026-11-223 of 3 tasks",
+      "add-login2026-11-207 of 7 tasks",
+      "no-date0 of 0 tasks",
+    ]);
+    await panel.getByRole("searchbox", { name: "Search changes" }).fill("login");
+    assert.deepEqual(await rows.allTextContents(), ["add-login2026-11-207 of 7 tasks"]);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      1,
+    );
+  });
+});
+
+test("Archived retains reads across tab switches but a Refresh on Changes invalidates them", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    const archived = panel.getByRole("tab", { name: "Archived", exact: true });
+    const changes = panel.getByRole("tab", { name: "Changes", exact: true });
+    const archive = panel.getByRole("tabpanel", { name: "Archived" });
+    await archived.click();
+    await archive.getByText("No changes are archived.").waitFor({ timeout: 3000 });
+    await changes.click();
+    await page.evaluate(() =>
+      __archived([{ name: "2026-11-22-fix-cache", completedTasks: 3, totalTasks: 3 }]),
+    );
+    await archived.click();
+    await archive.getByText("No changes are archived.").waitFor();
+    assert.equal(await page.evaluate(() => __completed.filter((p) => p === "/archived").length), 1);
+    await changes.click();
+    await page.evaluate(() => __recreate("loaded-on-refresh"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "loaded-on-refresh", exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      1,
+    );
+    await archived.click();
+    await archive.getByText("fix-cache", { exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      2,
+    );
+  });
+});
+
+test("Archived shows the CLI error without rows and refresh retries the shown view", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => __archived(null));
+    await panel.getByRole("tab", { name: "Archived", exact: true }).click();
+    const archive = panel.getByRole("tabpanel", { name: "Archived" });
+    await archive.getByText("Cannot list archived changes").waitFor({ timeout: 3000 });
+    assert.equal(await archive.getByRole("listitem").count(), 0);
+    await page.evaluate(() => __archived([]));
+    await archive.getByRole("button", { name: "refresh", exact: true }).click();
+    await archive.getByText("No changes are archived.").waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/archived").length),
+      2,
+    );
+  });
+});
+
+test("Specs lists ids in CLI order, pluralizes counts and searches by id", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() =>
+      __specs([
+        { id: "team/nested", requirementCount: 5 },
+        { id: "public-api", requirementCount: 1 },
+      ]),
+    );
+    assert.equal(
+      await page.evaluate(() => __requests.some((r) => ["/specs", "/spec"].includes(r.path))),
+      false,
+    );
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    const list = panel.getByRole("tabpanel", { name: "Specs" });
+    await list.getByText("5 requirements", { exact: true }).waitFor({ timeout: 3000 });
+    const rows = list.getByRole("listitem");
+    const labels = await rows.allTextContents();
+    assert.match(labels[0], /team\/nested.*5 requirements/);
+    assert.match(labels[1], /public-api.*1 requirement$/);
+    await panel.getByRole("searchbox", { name: "Search changes" }).fill("API");
+    assert.deepEqual(await rows.allTextContents(), [labels[1]]);
+  });
+});
+
+test("Specs renders the entire file safely and Back preserves the scrolled list without rereading", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 420, height: 460 } });
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => {
+      __specs(Array.from({ length: 40 }, (_, n) => ({ id: `readable-${n}`, requirementCount: 1 })));
+      __spec(
+        "readable-39",
+        "# Main spec\n\n## Purpose\n\nA real document.\n\n## Extra notes\n\n- As written\n\n" +
+          '<button id="untrusted">Raw HTML</button>\n\n[Unsafe link](mailto:inert@example.com)',
+      );
+    });
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    const last = panel.getByRole("button", { name: /readable-39/ });
+    await last.waitFor({ timeout: 3000 });
+    await last.scrollIntoViewIfNeeded();
+    const listScroll = await last.evaluate(() => window.scrollY);
+    assert.ok(listScroll > 0);
+    await last.click();
+    const doc = panel.locator(".document-content:visible");
+    await doc.getByRole("heading", { name: "Extra notes" }).waitFor({ timeout: 3000 });
+    assert.equal(await doc.getByRole("listitem").filter({ hasText: "As written" }).count(), 1);
+    await doc.getByText('<button id="untrusted">Raw HTML</button>', { exact: true }).waitFor();
+    assert.equal(await doc.getByRole("button", { name: "Raw HTML" }).count(), 0);
+    assert.equal(await doc.getByRole("link", { name: "Unsafe link" }).count(), 0);
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    assert.equal(await last.evaluate(() => window.scrollY), listScroll);
+    await last.click();
+    await doc.getByRole("heading", { name: "Extra notes" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec"],
+    );
+  });
+});
+
+test("Specs retains the list and documents across tabs until a Refresh elsewhere", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    const specs = panel.getByRole("tab", { name: "Specs", exact: true });
+    const changes = panel.getByRole("tab", { name: "Changes", exact: true });
+    await page.evaluate(() => {
+      __specs([{ id: "example", requirementCount: 1 }]);
+      __spec("example", "# Before Refresh");
+    });
+    await specs.click();
+    await panel.getByRole("button", { name: /example/ }).click({ timeout: 3000 });
+    await panel.getByRole("heading", { name: "Before Refresh" }).waitFor();
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    await changes.click();
+    await page.evaluate(() => {
+      __specs([{ id: "example", requirementCount: 5 }]);
+      __spec("example", "# After Refresh");
+    });
+    await specs.click();
+    await panel.getByText("1 requirement", { exact: true }).waitFor();
+    await panel.getByRole("button", { name: /example/ }).click();
+    await panel.getByRole("heading", { name: "Before Refresh" }).waitFor();
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    await changes.click();
+    await page.evaluate(() => __recreate("loaded-on-refresh"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "loaded-on-refresh", exact: true }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec"],
+    );
+    await specs.click();
+    await panel.getByText("5 requirements", { exact: true }).waitFor();
+    await panel.getByRole("button", { name: /example/ }).click();
+    await panel.getByRole("heading", { name: "After Refresh" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec", "/specs", "/spec"],
+    );
+  });
+});
+
+test("a failed spec read offers a retry without showing partial content", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => __specs([{ id: "example", requirementCount: 1 }]));
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    await panel.getByRole("button", { name: /example/ }).click({ timeout: 3000 });
+    await panel.getByText("Spec is no longer listed.").waitFor({ timeout: 3000 });
+    assert.equal(await panel.locator(".document-content:visible").count(), 0);
+    await page.evaluate(() => __spec("example", "# Recovered spec"));
+    await panel.getByRole("button", { name: "Retry document", exact: true }).click();
+    await panel.getByRole("heading", { name: "Recovered spec" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/spec", "/spec"],
+    );
+  });
+});
+
+test("Refresh reads the shown spec without prefetching the hidden list", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await panel.getByRole("tab", { name: "Specs", exact: true }).click();
+    await panel.getByText("No specs exist yet.").waitFor();
+    await page.evaluate(() => {
+      __specs([{ id: "example", requirementCount: 1 }]);
+      __spec("example", "# First spec version");
+    });
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: /example/ }).click();
+    await panel.getByRole("heading", { name: "First spec version" }).waitFor();
+    await page.evaluate(() => __spec("example", "# Refreshed spec version"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("heading", { name: "Refreshed spec version" }).waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/specs", "/spec", "/spec"],
+    );
+    await page.evaluate(() => __specs([]));
+    await panel.getByRole("button", { name: "Back to specs" }).click();
+    await panel.getByText("No specs exist yet.").waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter((r) => ["/specs", "/spec"].includes(r.path)).map((r) => r.path),
+      ),
+      ["/specs", "/specs", "/spec", "/spec", "/specs"],
+    );
+  });
+});
+
+test("one board load requests one listing, workflow read and summaries batch", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(url);
@@ -693,7 +1067,95 @@ test("one board load requests one listing and one summaries batch", async () => 
     const paths = await page.evaluate(() => __requests.map((item) => item.path));
     assert.deepEqual(
       paths.filter((path) => path.startsWith("/")),
-      ["/changes", "/summaries"],
+      ["/changes", "/workflows", "/summaries"],
+    );
+  });
+});
+
+test("board reads configured workflows on mount, refresh and directory change", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => __recreate("loaded-on-refresh"));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "loaded-on-refresh", exact: true }).waitFor();
+    await page.evaluate(() => __directory("/tmp/board-workflows-other-project"));
+    await panel.getByText("0 changes · 0 of 0 tasks complete", { exact: true }).waitFor();
+    await panel.locator(".new-change-control button:enabled").waitFor();
+    assert.deepEqual(
+      await page.evaluate(() =>
+        __requests.filter(({ path }) => path === "/workflows").map(({ body }) => body),
+      ),
+      [{ directory }, { directory }, { directory: "/tmp/board-workflows-other-project" }],
+    );
+  });
+});
+
+for (const first of ["/changes", "/workflows"]) {
+  test(`board waits for both the listing and workflows when ${first} answers first`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?hold-ready`);
+      const panel = page.frameLocator("iframe");
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate((path) => {
+        const frame = document.querySelector("iframe").contentWindow;
+        frame.addEventListener("message", (event) => {
+          const body = event.data?.payload?.body;
+          if (event.data?.type !== "result" || typeof body !== "string") return;
+          const value = JSON.parse(body);
+          if (
+            path === "/changes" ? !Array.isArray(value?.changes) : !Array.isArray(value?.workflows)
+          )
+            return;
+          frame.document.documentElement.dataset.firstBoardReply = path;
+        });
+        if (path === "/changes") __holdWorkflows();
+        else __holdListing();
+        __releaseReady();
+      }, first);
+      await page.waitForFunction(
+        () => ["/changes", "/workflows"].every((path) => __requests.some((r) => r.path === path)),
+        null,
+        { timeout: 3000 },
+      );
+      await panel.locator(`html[data-first-board-reply="${first}"]`).waitFor();
+      assert.equal(await panel.locator(".change-card").count(), 0);
+      assert.equal(
+        await panel.locator(".board-tally").textContent(),
+        "0 changes · 0 of 0 tasks complete",
+      );
+      await page.evaluate((path) => {
+        if (path === "/changes") __releaseWorkflows();
+        else __releaseListing();
+      }, first);
+      await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    });
+  });
+}
+
+test("board falls back to core workflows without showing the config error", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?hold-ready`);
+    const panel = page.frameLocator("iframe");
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __workflows(null);
+      __readiness("blocked-tasks");
+      __releaseReady();
+    });
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "second-change" })
+      .getByRole("button", { name: "propose", exact: true })
+      .waitFor();
+    assert.equal(await panel.getByText("Cannot read workflows").count(), 0);
+    assert.equal(
+      await page.evaluate(() => __completed.filter((p) => p === "/workflows").length),
+      1,
     );
   });
 });
@@ -1061,8 +1523,10 @@ test("four cards arrive together after the listing count and tally", async () =>
     assert.equal(await panel.locator(".change-card").count(), 4);
     assert.deepEqual(await page.evaluate(() => __requests.map((item) => item.path)), [
       "/changes",
+      "/workflows",
       "/summaries",
       "/changes",
+      "/workflows",
       "/summaries",
     ]);
   });
@@ -1445,24 +1909,16 @@ test("archive all submits one completed-only prompt and preserves rail/page fres
       assert.equal(launch.body.projectId, undefined);
       assert.equal(launch.body.providerId, "openspec-board");
       assert.ok(launch.body.text.length < 16000);
-      for (const pattern of [
-        /openspec list --json/,
-        /openspec status/,
-        /CLI-reported task/,
-        /positive task total/,
-        /done.*skipped/s,
-        /sequentially/,
-        /openspec-archive-change/,
-        /Use your skill tool to load and invoke the openspec-archive-change skill/,
-        /unfinished/,
-        /unavailable/,
-        /unreadable/,
-        /verification/,
-        /sync.*choices/s,
-        /archived.*skipped.*blocked/s,
-        /none qualify.*no.*mutations/s,
-      ])
-        assert.match(launch.body.text, pattern);
+      assert.equal(
+        launch.body.text,
+        `Archive all completed OpenSpec changes in this session's project/worktree.
+
+Run openspec list --json for a fresh active-change listing and resolve its OpenSpec planning context, honouring declared stores and the selected CLI root. Inspect each change with openspec status --change "<name>" --json and current CLI-reported task counts. Only changes with every applicable planning artefact done or explicitly skipped, a positive task total, and all tasks complete qualify. Skip unfinished, zero-task, unavailable or unreadable changes. Never use an incomplete-work warning override or infer successful verification from a Complete card or task counts.
+
+Use your skill tool to load and invoke the openspec-archive-change skill for each qualifying named change sequentially. Recheck completion before each archive and assess spec sync against the current main specs after any preceding archive. Preserve the skill's prerequisites, sync assessment, user choices and blockers; ask its required questions rather than treating this bulk request as permission to bypass them. Do not implement unfinished work or automatically resolve blockers.
+
+Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`,
+      );
       assert.equal(await page.evaluate(() => __draft()), "Earlier draft");
       assert.equal(await panel.locator(".board-shell").isVisible(), true);
       await page.waitForFunction(() => __requests.some((r) => r.path === "toast"));
@@ -1472,6 +1928,33 @@ test("archive all submits one completed-only prompt and preserves rail/page fres
       );
       await page.close();
     }
+  });
+});
+
+test("archive all submits the selection-preserving bulk prompt when configured", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(url);
+    const panel = page.frameLocator("iframe");
+    await panel.getByRole("button", { name: "first-change", exact: true }).waitFor();
+    await page.evaluate(() => {
+      __workflows(["bulk-archive"]);
+      __edit("Completed");
+    });
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await confirmArchive(panel);
+    await page.waitForFunction(() => __requests.some((r) => r.path === "start-session"));
+    const prompt = await page.evaluate(
+      () => __requests.find((r) => r.path === "start-session").body.text,
+    );
+    assert.equal(
+      prompt,
+      `Archive all completed OpenSpec changes in this session's project/worktree.
+
+Use your skill tool to load and invoke the openspec-bulk-archive-change skill. Before its selection step, run openspec list --json and openspec status --change "<name>" --json for each change. A change qualifies only when every applicable planning artefact is done or explicitly skipped and it has a positive task total with all tasks complete. When the skill asks which changes to archive, offer only qualifying changes and recommend all of them. Skip any selected change that does not qualify; never use an incomplete-work override or infer verification from task counts.
+
+Preserve the skill's spec-sync assessment, user choices and blockers. Report archived, skipped and blocked changes with reasons. If none qualify, make no OpenSpec mutations and report that outcome.`,
+    );
   });
 });
 
@@ -1830,8 +2313,7 @@ test("affected area refresh retains handles and focus, wraps labels and discards
     await panel
       .getByRole("button", { name: "refresh", exact: true })
       .evaluate((button) => button.click());
-    await page.waitForFunction((before) => __requests.length >= before + 7, before);
-    await panel.getByRole("button", { name: "refresh", exact: true }).waitFor();
+    await page.waitForFunction((before) => __requests.length >= before + 8, before);
     assert.ok(
       await panel
         .locator(".detail")
@@ -1850,8 +2332,9 @@ test("affected area refresh retains handles and focus, wraps labels and discards
       before,
     );
     assert.equal(requests.filter((path) => path === "/changes").length, 1);
+    assert.equal(requests.filter((path) => path === "/workflows").length, 1);
     assert.equal(requests.filter((path) => path === "/summaries").length, 1);
-    assert.equal(requests.length, 7);
+    assert.equal(requests.length, 8);
     await page.evaluate((id) => __areas(id, ["replacement"]), longTitle);
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     await panel
@@ -1962,6 +2445,7 @@ test("explicit Refresh retains opened-change observations until a new opening", 
     await panel.getByRole("button", { name: "first-change" }).waitFor();
     assert.deepEqual(await page.evaluate(() => __requests.map((request) => request.path)), [
       "/changes",
+      "/workflows",
       "/summaries",
     ]);
     await panel.getByRole("button", { name: "first-change" }).click();
@@ -2589,7 +3073,6 @@ test("create dialogue keeps concise actions and a width-stable busy button", asy
         28,
       );
       await panel.getByLabel("Change name", { exact: true }).fill("created-change");
-      await panel.getByLabel("Goal").fill("Test creation");
       await page.evaluate(() => __holdCreate());
       await create.click();
       await create.locator(".oc-sdk-spinner-ring").waitFor();
@@ -2630,7 +3113,10 @@ test("creation and detail use named dialogue, one main landmark and unique docum
     assert.equal(await panel.getByRole("main").count(), 1);
     assert.equal(await panel.locator(".detail-content details .document-content").count(), 3);
     assert.equal(await panel.locator("[id=document-content]").count(), 0);
-    assert.equal(await panel.locator("[role=tabpanel][aria-labelledby]").count(), 1);
+    assert.equal(
+      await panel.getByRole("tabpanel").and(panel.locator("[aria-labelledby]")).count(),
+      1,
+    );
     await page.close();
   });
 });
@@ -2642,7 +3128,6 @@ test("numeric-prefixed names are created and shown on the board", async () => {
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("100-add-feature");
-    await panel.getByLabel("Goal").fill("Numeric change");
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "100-add-feature" }).waitFor();
     assert.equal(
@@ -2660,9 +3145,12 @@ test("safe creation refreshes the board and prompts stay unsent", async () => {
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("created-change");
-    await panel.getByLabel("Goal").fill("Test creation");
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "created-change" }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
+      1,
+    );
     await panel
       .locator(".change-card")
       .filter({ hasText: "created-change" })
@@ -2862,7 +3350,7 @@ test("canonical-root replacement discards late composer success and failure with
   });
 });
 
-test("planning, ready and complete actions prepare the appropriate unsent composer text", async () => {
+test("core planning, ready and complete actions prepare the appropriate unsent composer text", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(url);
@@ -2888,12 +3376,12 @@ test("planning, ready and complete actions prepare the appropriate unsent compos
     await panel
       .locator(".change-card")
       .filter({ hasText: "first-change" })
-      .getByRole("button", { name: "verify" })
+      .getByRole("button", { name: "archive", exact: true })
       .click();
-    await page.waitForFunction(() => __draft().includes("openspec-verify-change"));
+    await page.waitForFunction(() => __draft().includes("openspec-archive-change"));
     assert.equal(
       await page.evaluate(() => __draft()),
-      'Use your skill tool to load and invoke the openspec-verify-change skill for OpenSpec change "first-change".',
+      'Use your skill tool to load and invoke the openspec-archive-change skill for OpenSpec change "first-change".',
     );
     assert.doesNotMatch(await page.evaluate(() => __draft()), /\/tmp\/fixture-project/);
     await page.evaluate(() => __readiness("pending"));
@@ -2920,7 +3408,7 @@ test("planning, ready and complete actions prepare the appropriate unsent compos
   });
 });
 
-test("propose preserves goals and conditionally records a missing goal without sending or writing", async () => {
+test("propose includes only recorded goals without sending or writing", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage();
     await page.goto(url);
@@ -2944,11 +3432,6 @@ test("propose preserves goals and conditionally records a missing goal without s
           `Use your skill tool to load and invoke the openspec-propose skill for OpenSpec change "first-change" (existing change).${goal?.trim() ? `\nGoal: ${goal}` : ""}\n\n`,
         ),
       );
-      assert.match(draft, /Inspect .*status and current metadata/);
-      assert.match(draft, /Preserve existing decisions and any recorded goal/);
-      assert.match(draft, /only if current metadata has no goal/);
-      assert.match(draft, /establish and record a concise goal from existing change context/);
-      assert.match(draft, /Ask the user for clarification if the goal is unclear/);
       assert.match(
         draft,
         /complete missing planning artefacts using OpenSpec's artefact instructions/,
@@ -2962,7 +3445,8 @@ test("propose preserves goals and conditionally records a missing goal without s
           (before) =>
             __requests
               .slice(before)
-              .filter((r) => r.path !== "toast")
+              // Saving a new tracked list may inspect session metadata.
+              .filter(({ path }) => !["toast", "storage", "workspace-read"].includes(path))
               .map((r) => r.path),
           before,
         ),
@@ -3031,7 +3515,6 @@ test("explore is a secondary, unsent goal-aware action only in Planning", async 
     await card.getByRole("button", { name: "explore" }).click();
     await page.waitForFunction(() => __draft().includes('"first-change".\n\n'));
     const draft = await page.evaluate(() => __draft());
-    assert.match(draft, /inspect existing context and ask the user to clarify it if necessary/);
     assert.doesNotMatch(draft, /Goal:|record a|write a/);
     assert.equal(
       await page.evaluate(
@@ -3101,6 +3584,8 @@ test("board title and toolbar reflow as intact rows without moving the gutter", 
           actionsTop: actions.top,
           toolbarTop: toolbar.top,
           headerBottom: rect(".board-header").bottom,
+          tabsTop: rect(".board-tabs").top,
+          tabsBottom: rect(".board-tabs").bottom,
           bodyTop: rect(".board-body").top,
           boardTop: rect(".board").top,
           searchWidth: search.width,
@@ -3131,8 +3616,9 @@ test("board title and toolbar reflow as intact rows without moving the gutter", 
       );
       assert.ok(layout.actionsRight <= width - 15);
       assert.ok(layout.toolbarTop > layout.titleTop);
-      assert.equal(layout.bodyTop - layout.headerBottom, 24);
-      assert.equal(layout.boardTop - layout.headerBottom, 24);
+      assert.ok(layout.tabsTop >= layout.headerBottom);
+      assert.equal(layout.bodyTop - layout.tabsBottom, 24);
+      assert.equal(layout.boardTop - layout.tabsBottom, 24);
       if (width === 320) {
         assert.ok(layout.tallyTop > layout.titleTop);
         assert.ok(layout.actionsTop > layout.searchTop);
@@ -3319,6 +3805,7 @@ test("long change titles and completed-card actions remain reachable at sidebar 
     await page.evaluate((next) => {
       __rename("first-change", next);
       __edit("done");
+      __workflows(["verify"]);
     }, name);
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     const card = panel.locator(".change-card").filter({ hasText: name });
@@ -3444,6 +3931,11 @@ test("confirmed deletion removes one change and returns to a refreshed, searched
     assert.equal(await dialog.isVisible(), true);
     await page.evaluate(() => __releaseDelete());
     await panel.getByRole("heading", { name: "Planning 0" }).waitFor();
+    await page.waitForFunction(() => __completed.filter((p) => p === "/summaries").length === 2);
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
+      1,
+    );
     assert.equal(await search.inputValue(), "first");
     assert.equal(await panel.getByRole("button", { name: "first-change" }).count(), 0);
     assert.equal(
@@ -3507,9 +3999,11 @@ test("pre-removal summary cannot restore a deleted card, but a new listing can s
       __recreate("first-change");
       __releaseListing();
     });
-    await panel.getByRole("button", { name: "first-change" }).waitFor();
-    await panel.getByLabel("Search changes").fill("Recreated goal");
-    assert.equal(await panel.getByRole("button", { name: "first-change" }).count(), 1);
+    await panel.getByRole("button", { name: "first-change" }).click();
+    await panel
+      .getByRole("region", { name: "Recorded objective" })
+      .getByText("Recreated goal")
+      .waitFor();
     await page.close();
   });
 });
@@ -3693,7 +4187,7 @@ test("a context switch during uncertain deletion reconciles the original root on
   });
 });
 
-test("completed board and detail independently prepare Verify and Archive without changing stage", async () => {
+test("completed board and detail offer Verify only when configured", async () => {
   await withPanel(async (browser, url) => {
     const page = await browser.newPage({ viewport: { width: 320, height: 700 } });
     await page.goto(url);
@@ -3703,6 +4197,15 @@ test("completed board and detail independently prepare Verify and Archive withou
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     const card = panel.locator(".change-card").filter({ hasText: "first-change" });
     await card.getByRole("button", { name: "archive", exact: true }).waitFor();
+    assert.equal(await card.getByRole("button", { name: "verify", exact: true }).count(), 0);
+    await card.getByRole("button", { name: "first-change", exact: true }).click();
+    const footer = panel.locator(".detail-footer");
+    await footer.getByRole("button", { name: "archive", exact: true }).waitFor();
+    assert.equal(await footer.getByRole("button", { name: "verify", exact: true }).count(), 0);
+    await panel.getByRole("button", { name: "Back to changes" }).click();
+    await page.evaluate(() => __workflows(["verify"]));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await card.getByRole("button", { name: "verify", exact: true }).waitFor({ timeout: 3000 });
     assert.deepEqual(await card.locator(".card-actions button:visible").allTextContents(), [
       "verify",
       "archive",
@@ -3783,6 +4286,83 @@ test("completed board and detail independently prepare Verify and Archive withou
     );
     assert.equal(await panel.locator(".stage-label").innerText(), "Complete");
     await page.close();
+  });
+});
+
+for (const [label, workflows, skill] of [
+  ["ff", ["continue", "ff"], "openspec-ff-change"],
+  ["continue", ["continue"], "openspec-continue-change"],
+  ["propose", ["propose"], "openspec-propose"],
+]) {
+  test(`board and detail Planning primary prepare ${label} for the configured workflows`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage();
+      await page.goto(`${url}?hold-ready`);
+      const panel = page.frameLocator("iframe");
+      await page.waitForFunction(() => typeof window.__releaseReady === "function");
+      await page.evaluate((configured) => {
+        __workflows(configured);
+        __readiness("pending");
+        __releaseReady();
+      }, workflows);
+      const card = panel.locator(".change-card").filter({ hasText: "first-change" });
+      await card.getByRole("button", { name: label, exact: true }).click({ timeout: 3000 });
+      await card.getByRole("button", { name: "first-change", exact: true }).click();
+      await panel
+        .locator(".detail-footer")
+        .getByRole("button", { name: label, exact: true })
+        .click({ timeout: 3000 });
+      await page.waitForFunction(() => __requests.filter((r) => r.path === "compose").length === 2);
+      const prompts = await page.evaluate(() =>
+        __requests.filter((r) => r.path === "compose").map(({ body }) => body),
+      );
+      for (const prompt of prompts) {
+        assert.equal(prompt.mode, "replace");
+        assert.ok(
+          prompt.text.startsWith(
+            `Use your skill tool to load and invoke the ${skill} skill for OpenSpec change "first-change"`,
+          ),
+          prompt.text,
+        );
+        assert.match(prompt.text, /Goal: Read the proposal/);
+      }
+    });
+  });
+}
+
+test("a previously rendered Planning card keeps its captured ff intent after refresh", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage();
+    await page.goto(`${url}?hold-ready`);
+    const panel = page.frameLocator("iframe");
+    await page.waitForFunction(() => typeof window.__releaseReady === "function");
+    await page.evaluate(() => {
+      __workflows(["ff"]);
+      __readiness("pending");
+      __releaseReady();
+    });
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "first-change" })
+      .getByRole("button", { name: "ff", exact: true })
+      .evaluate(
+        (button) => {
+          window.previousPrimary = button;
+        },
+        undefined,
+        { timeout: 3000 },
+      );
+    await panel.getByRole("searchbox", { name: "Search changes" }).fill("second-change");
+    await page.evaluate(() => __workflows(["continue"]));
+    await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel
+      .locator(".change-card")
+      .filter({ hasText: "second-change" })
+      .getByRole("button", { name: "continue", exact: true })
+      .waitFor({ timeout: 3000 });
+    await panel.locator("html").evaluate(() => window.previousPrimary.click());
+    await page.waitForFunction(() => __requests.some((r) => r.path === "compose"));
+    assert.match(await page.evaluate(() => __draft()), /openspec-ff-change.*"first-change"/);
   });
 });
 
@@ -4164,7 +4744,9 @@ test("long custom tabs scroll within a 320 px panel without hiding fallback Task
       false,
     );
     assert.equal(
-      await panel.locator(".oc-sdk-tabs").evaluate((node) => node.scrollWidth > node.clientWidth),
+      await panel
+        .getByRole("tablist", { name: "Planning artefacts" })
+        .evaluate((node) => node.scrollWidth > node.clientWidth),
       true,
     );
     await custom.focus();
@@ -4539,10 +5121,13 @@ test("uncertain creation reconciles in the original context and opens the observ
     await page.evaluate(() => __unknownCreate());
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("observed-change");
-    await panel.getByLabel("Goal").fill("Observe before retry");
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "Inspect change" }).click();
     await panel.locator(".detail").getByRole("heading", { name: "observed-change" }).waitFor();
+    assert.equal(
+      await page.evaluate(() => __requests.filter((r) => r.path === "/workflows").length),
+      1,
+    );
     assert.equal(
       await page.evaluate(() => __requests.filter((item) => item.path === "/create").length),
       1,
@@ -4570,7 +5155,6 @@ test("malformed creation replies reconcile instead of permitting another write",
       await page.evaluate((value) => __createReply(value), reply);
       await panel.getByRole("button", { name: "new change" }).click();
       await panel.getByLabel("Change name", { exact: true }).fill(`created-${reply}`);
-      await panel.getByLabel("Goal").fill("Retain uncertain write");
       await panel.getByRole("button", { name: "create", exact: true }).click();
       await panel.getByRole("button", { name: "Inspect change" }).waitFor({ timeout: 5000 });
       assert.equal(
@@ -4603,7 +5187,6 @@ test("failed creation reconciliation survives dismissal and closes safely across
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("uncertain-change");
-    await panel.getByLabel("Goal").fill("Retain the draft");
     await page.evaluate(() => {
       __createReply("null");
       __failNextListing();
@@ -4650,11 +5233,9 @@ test("creation no-match reconciliation permits only explicit resubmission and kn
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("not-created");
-    await panel.getByLabel("Goal").fill("A retained draft");
     await page.evaluate(() => __createReply("invalid-json", false));
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByText(/no matching change was found/).waitFor();
-    assert.equal(await panel.getByLabel("Goal").inputValue(), "A retained draft");
     assert.equal(
       await page.evaluate(() => __requests.filter((request) => request.path === "/create").length),
       1,
@@ -4668,11 +5249,9 @@ test("creation no-match reconciliation permits only explicit resubmission and kn
     );
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("known-rejected");
-    await panel.getByLabel("Goal").fill("Retain on rejection");
     await page.evaluate(() => __createReply("known-error", false));
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByText("Known rejection").waitFor();
-    assert.equal(await panel.getByLabel("Goal").inputValue(), "Retain on rejection");
     assert.equal(
       await panel.getByRole("button", { name: "create", exact: true }).isEnabled(),
       true,
@@ -4690,7 +5269,6 @@ test("uncertain creation still inspects while board summaries are pending", asyn
     await create.waitFor();
     await create.click();
     await panel.getByLabel("Change name", { exact: true }).fill("observed-while-loading");
-    await panel.getByLabel("Goal").fill("Confirm a pending write");
     await page.evaluate(() => __unknownCreate());
     await panel.getByRole("button", { name: "create", exact: true }).click();
     await panel.getByRole("button", { name: "Inspect change" }).click();
@@ -4714,7 +5292,6 @@ test("uncertain creation checks its original project after the selected project 
     const panel = page.frameLocator("iframe");
     await panel.getByRole("button", { name: "new change" }).click();
     await panel.getByLabel("Change name", { exact: true }).fill("observed-after-switch");
-    await panel.getByLabel("Goal").fill("Keep the original scope");
     await page.evaluate(() => {
       __unknownCreate();
       __holdCreate();

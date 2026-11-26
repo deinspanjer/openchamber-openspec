@@ -2,14 +2,21 @@ import { lstat, open, readdir, realpath, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
+  CORE_WORKFLOWS,
+  decodeArchived,
   decodeArtifacts,
   decodeListingEntry,
+  decodeSpecs,
   decodeTasks,
+  isWorkflow,
+  isSpecId,
   type ListingEntry,
+  type SpecEntry,
   type ChangeMetadata,
 } from "../contracts.js";
 import { isChangeName } from "../model.js";
 import {
+  MAX_RESPONSE_BYTES,
   runOpenSpec,
   serviceError,
   type CliResult,
@@ -25,6 +32,24 @@ type Document = { artifactId: string; selector: string; label: string };
 const failure = (error: ServiceError): { ok: false; error: ServiceError } => ({ ok: false, error });
 const inside = (path: string, parent: string): boolean =>
   path === parent || path.startsWith(`${parent}${sep}`);
+
+async function readDocumentText(path: string): Promise<string> {
+  const file = await open(path, "r");
+  try {
+    const buffer = Buffer.alloc(MAX_RESPONSE_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    if (length > MAX_RESPONSE_BYTES)
+      throw serviceError("DOCUMENT_TOO_LARGE", "Document is too large to display.", 413);
+    return buffer.toString("utf8", 0, length);
+  } finally {
+    await file.close();
+  }
+}
 
 export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: typeof rm = rm) {
   async function planningScope(root: string, expectedPlanning?: string): Promise<Scope> {
@@ -330,6 +355,90 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     return { ok: true, value: { directory, ...listing, planning: current.planning } };
   }
 
+  async function workflows(directory: string): Promise<CliResult> {
+    if (!isAbsolute(directory))
+      return failure(serviceError("BAD_DIRECTORY", "Directory must be absolute."));
+    const result = await run(directory, ["config", "list"]);
+    if (!result.ok) return result;
+    const { profile, workflows } = result.value;
+    if (
+      typeof profile !== "string" ||
+      (workflows !== undefined &&
+        (!Array.isArray(workflows) || workflows.some((name) => typeof name !== "string")))
+    )
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec workflow config.", 502));
+    if (profile !== "custom") return { ok: true, value: { workflows: CORE_WORKFLOWS } };
+    const configured = Array.isArray(workflows) ? workflows.filter(isWorkflow) : [];
+    const archive = configured.findIndex((name) => name === "archive" || name === "bulk-archive");
+    if (archive !== -1 && !configured.includes("sync")) configured.splice(archive, 0, "sync");
+    return { ok: true, value: { workflows: configured } };
+  }
+
+  async function archived(
+    directory: string,
+    expectedRoot: string,
+    expectedPlanning?: string,
+  ): Promise<CliResult> {
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const result = await checked(directory, ["list", "--archived"], current, true, true);
+    if (!result.ok) return result;
+    await planningScope(expectedRoot, current.planning);
+    try {
+      return { ok: true, value: { changes: decodeArchived(result.value) } };
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec archived listing.", 502));
+    }
+  }
+
+  async function listSpecs(directory: string, current: Scope): Promise<SpecEntry[] | ServiceError> {
+    const result = await checked(directory, ["list", "--specs"], current, true, true);
+    if (!result.ok) return result.error;
+    await planningScope(current.root, current.planning);
+    try {
+      return decodeSpecs(result.value);
+    } catch {
+      return serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec spec listing.", 502);
+    }
+  }
+
+  async function specs(
+    directory: string,
+    expectedRoot: string,
+    expectedPlanning?: string,
+  ): Promise<CliResult> {
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const entries = await listSpecs(directory, current);
+    return Array.isArray(entries) ? { ok: true, value: { specs: entries } } : failure(entries);
+  }
+
+  async function spec(
+    directory: string,
+    id: unknown,
+    expectedRoot: string,
+    expectedPlanning?: string,
+  ): Promise<CliResult> {
+    if (!isSpecId(id)) return failure(serviceError("BAD_SPEC", "Spec id is invalid."));
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const entries = await listSpecs(directory, current);
+    if (!Array.isArray(entries)) return failure(entries);
+    if (!entries.some((entry) => entry.id === id))
+      return failure(serviceError("SPEC_UNAVAILABLE", "Spec is no longer listed.", 404));
+
+    const specsRoot = join(current.planningRoot, "specs");
+    try {
+      const path = await realpath(join(specsRoot, id, "spec.md"));
+      if (!inside(path, specsRoot) || path === specsRoot)
+        return failure(serviceError("BAD_SPEC_PATH", "Spec path is outside the specs tree.", 502));
+      const content = await readDocumentText(path);
+      await planningScope(expectedRoot, current.planning);
+      return { ok: true, value: { id, content } };
+    } catch (caught) {
+      if ((caught as NodeJS.ErrnoException).code === "ENOENT")
+        return failure(serviceError("SPEC_UNAVAILABLE", "Spec is no longer available.", 404));
+      throw caught;
+    }
+  }
+
   async function summaries(
     directory: string,
     expectedRoot: string,
@@ -447,30 +556,14 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
       return failure(
         serviceError("BAD_DOCUMENT_PATH", "Document path is outside the selected change.", 502),
       );
-    const file = await open(path, "r");
-    try {
-      const buffer = Buffer.alloc(240_001);
-      let length = 0;
-      while (length < buffer.length) {
-        const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
-        if (bytesRead === 0) break;
-        length += bytesRead;
-      }
-      if (length > 240_000)
-        return failure(
-          serviceError("DOCUMENT_TOO_LARGE", "Document is too large to display.", 413),
-        );
-      return {
-        ok: true,
-        value: {
-          artifactId: selected.artifactId,
-          selector: selected.selector,
-          content: buffer.toString("utf8", 0, length),
-        },
-      };
-    } finally {
-      await file.close();
-    }
+    return {
+      ok: true,
+      value: {
+        artifactId: selected.artifactId,
+        selector: selected.selector,
+        content: await readDocumentText(path),
+      },
+    };
   }
 
   async function tasks(
@@ -539,7 +632,6 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
   async function createChange(
     directory: string,
     name: string,
-    goal: string,
     expectedRoot?: string,
     expectedPlanning?: string,
   ): Promise<CliResult> {
@@ -547,7 +639,6 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
       return failure(
         serviceError("BAD_CHANGE", "Use lowercase letters or digits separated by single hyphens."),
       );
-    if (!goal.trim()) return failure(serviceError("BAD_GOAL", "Goal is required."));
     const current = await context(directory, expectedRoot, expectedPlanning);
     if ("code" in current) return failure(current);
     const pinned = await context(dirname(current.planningRoot));
@@ -563,11 +654,7 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
         serviceError("BAD_CHANGE_ROOT", "Changes parent is not a real directory.", 409),
       );
     try {
-      const result = await checked(
-        pinned.root,
-        ["new", "change", name, "--goal", goal.trim()],
-        pinned,
-      );
+      const result = await checked(pinned.root, ["new", "change", name], pinned);
       if (!result.ok)
         return failure(
           serviceError(result.error.code, result.error.message, result.error.status, "unknown"),
@@ -660,5 +747,16 @@ export function createOpenSpecAdapter(run: CommandRunner = runOpenSpec, remove: 
     }
   }
 
-  return { changes, summaries, tasks, documentFor, createChange, deleteChange };
+  return {
+    archived,
+    specs,
+    spec,
+    changes,
+    workflows,
+    summaries,
+    tasks,
+    documentFor,
+    createChange,
+    deleteChange,
+  };
 }

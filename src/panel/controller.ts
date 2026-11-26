@@ -1,15 +1,25 @@
 import { HostRequestError, type HostClient } from "@openchamber/sdk";
 import { deriveChange, type DerivedChange } from "../model.js";
-import { documentKey, type Task } from "../contracts.js";
+import {
+  documentKey,
+  type ArchivedChange,
+  type SpecEntry,
+  type Task,
+  type Workflow,
+} from "../contracts.js";
 import { createClient, ServiceRequestError, type Scope } from "./client.js";
 import { createResources, type ReadState } from "./resources.js";
-import { mountBoardView } from "./board-view.js";
+import { mountBoardView, type BoardView } from "./board-view.js";
 import { mountDetailView, taskArtifact } from "./detail-view.js";
+import { mountSpecView } from "./spec-view.js";
 import { mountCreateDialog } from "./create-dialog.js";
 import { mountDeleteDialog } from "./delete-dialog.js";
 import { mountArchiveDialog } from "./archive-dialog.js";
 import { archiveAllPrompt } from "./archive-prompt.js";
+import { actionPrompt, planningPrompt } from "./prompts.js";
+import type { PrimaryIntent } from "./primary-action.js";
 import { inspectWorktreeDestination } from "./worktree.js";
+import { CORE_WORKFLOWS, loadWorkflows } from "./workflows.js";
 
 export function mountController(host: HostClient, appRoot: HTMLElement): () => void {
   const client = createClient(host);
@@ -28,6 +38,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     minOperation: number;
   } | null = null;
   let changes: DerivedChange[] = [];
+  let workflows: ReadonlySet<Workflow> = new Set(CORE_WORKFLOWS);
   let staleIds = new Set<string>();
   let unavailableIds = new Set<string>();
   let failures: { id: string; error: string }[] = [];
@@ -39,6 +50,13 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let settled = false;
   let errorMessage: string | null = null;
   let search = "";
+  let boardTab: BoardView = "changes";
+  let archivedState: ReadState<ArchivedChange[]> | null = null;
+  let specsState: ReadState<SpecEntry[]> | null = null;
+  let specState: ReadState<string> | null = null;
+  let selectedSpec: string | null = null;
+  let specListScroll = 0;
+  let returningToSpec: string | null = null;
   let selectedChange: DerivedChange | null = null;
   let selectedArtifact = "";
   let activeView: "document" | "tasks" = "document";
@@ -62,7 +80,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     pendingInspection = null;
     scope = null;
     resources.setContext(null);
+    clearBrowse(true);
     changes = [];
+    workflows = new Set(CORE_WORKFLOWS);
     staleIds = new Set();
     unavailableIds = new Set();
     failures = [];
@@ -76,6 +96,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     detailOpening++;
     readGeneration++;
     search = "";
+    boardView.resetPositions();
     errorMessage = null;
     render();
   }
@@ -88,7 +109,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     render();
   }
 
-  function loadBoard(refresh = false, reconcile = false) {
+  function loadBoard({
+    refresh = false,
+    reconcile = false,
+    workflows: readWorkflows = false,
+  } = {}) {
     if (boardActive) {
       if (reconcile) reconcileQueued = true;
       return;
@@ -99,7 +124,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       return;
     }
     if (refresh) {
-      resources.refresh();
+      if (readWorkflows) {
+        resources.refresh();
+        clearBrowse(false);
+      } else resources.refreshChanges();
       readGeneration++;
       detailOpening++;
       files = new Map();
@@ -113,7 +141,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     render();
     void (async () => {
       try {
-        const listing = await client.list(currentDirectory);
+        const [listing, configuredWorkflows] = await Promise.all([
+          client.list(currentDirectory),
+          readWorkflows ? loadWorkflows(client, currentDirectory) : workflows,
+        ]);
         if (
           directory !== currentDirectory ||
           epoch !== startingEpoch ||
@@ -122,15 +153,19 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           return;
         if (scope && scope.root !== listing.root) {
           invalidate();
-          loadBoard();
+          loadBoard({ workflows: true });
           return;
         }
+        workflows = configuredWorkflows;
+        const previousScope = scope;
         scope =
           scope?.root === listing.root && scope.planning === listing.planning
             ? scope
             : { directory: currentDirectory, root: listing.root, planning: listing.planning };
         const current = scope;
         resources.setContext(current);
+        if (current !== previousScope) clearBrowse(true);
+        readBrowse();
         const listed = new Set(listing.changes.map((entry) => entry.id));
         if (selectedChange && !listed.has(selectedChange.id)) {
           unavailableIds.add(selectedChange.id);
@@ -159,7 +194,8 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         pendingSummaries = listedCount;
         settled = true;
         render();
-        const summaries = await client.summaries(current, listing.changes);
+        const summaryRequest = client.summaries(current, listing.changes);
+        const summaries = await summaryRequest;
         if (epoch !== startingEpoch || scope !== current || operation !== boardOperation) return;
         for (const entry of summaries) {
           try {
@@ -212,7 +248,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             }
             if (caught instanceof ServiceRequestError && caught.code === "ROOT_CHANGED") {
               invalidate();
-              loadBoard();
+              loadBoard({ workflows: true });
               return;
             }
             failures = [
@@ -244,7 +280,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         }
         if (caught instanceof ServiceRequestError && caught.code === "ROOT_CHANGED") {
           invalidate();
-          loadBoard();
+          loadBoard({ workflows: true });
           return;
         }
         pendingSummaries = 0;
@@ -261,37 +297,73 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           render();
           if (reconcileQueued) {
             reconcileQueued = false;
-            loadBoard(true);
+            loadBoard({ refresh: true });
           }
         }
       }
     })();
   }
 
-  function actionPrompt(change: DerivedChange, intent: "primary" | "verify" | "explore"): string {
-    const target = `OpenSpec change "${change.id}"`;
-    const goal = change.goal?.trim() ? `\nGoal: ${change.goal}` : "";
-    if (intent === "explore")
-      return `Use your skill tool to load and invoke the openspec-explore skill for ${target}.${goal}\n\nInvestigate the goal, relevant code, options and trade-offs for ${target}. Discuss findings without file changes or implementation. If no goal is recorded, inspect existing context and ask the user to clarify it if necessary; do not invent a goal.`;
-    if (change.stage === "planning")
-      return `Use your skill tool to load and invoke the openspec-propose skill for ${target} (existing change).${goal}\n\nInspect ${target}'s status and current metadata. Preserve existing decisions and any recorded goal; only if current metadata has no goal, establish and record a concise goal from existing change context. Ask the user for clarification if the goal is unclear. Finish planning this existing scaffold and complete missing planning artefacts using OpenSpec's artefact instructions. Do not create another change or implement code. If the skill requires new-change creation, explain the conflict rather than creating another change.`;
-    if (change.stage === "ready" || change.stage === "progress") {
-      const progress =
-        change.stage === "progress"
-          ? `\n${change.completedTasks} of ${change.totalTasks} tasks complete. Pick up where implementation left off and complete the remaining tasks.`
-          : "";
-      return `Use your skill tool to load and invoke the openspec-apply-change skill for ${target}.${progress}\n\nComplete all remaining tasks in ${target}, then verify the implementation against its change artefacts. Resolve any issues found and verify again until all tasks are complete and verification passes. If blocked, report the blocker rather than marking unfinished work complete.`;
+  function clearBrowse(resetSelection: boolean) {
+    archivedState = specsState = specState = null;
+    returningToSpec = null;
+    if (resetSelection) {
+      selectedSpec = null;
+      specListScroll = 0;
     }
-    if (intent === "verify")
-      return `Use your skill tool to load and invoke the openspec-verify-change skill for ${target}.`;
-    return `Use your skill tool to load and invoke the openspec-archive-change skill for ${target}.`;
+  }
+
+  function readBrowse() {
+    if (!scope || selectedChange) return;
+    if (boardTab === "archived" && !archivedState) readArchived(scope);
+    else if (boardTab === "specs") {
+      if (selectedSpec) {
+        if (!specState) readSpec(scope, selectedSpec);
+      } else if (!specsState) readSpecs(scope);
+    }
+  }
+
+  function readArchived(captured: Scope) {
+    const read = resources.archived(captured);
+    archivedState = read.state;
+    if (read.completion)
+      void read.completion.then((state) => {
+        if (disposed || scope !== captured || archivedState !== read.state) return;
+        archivedState = state;
+        render();
+      });
+    return read.state;
+  }
+
+  function readSpecs(captured: Scope) {
+    const read = resources.specs(captured);
+    specsState = read.state;
+    if (read.completion)
+      void read.completion.then((state) => {
+        if (disposed || scope !== captured || specsState !== read.state) return;
+        specsState = state;
+        render();
+        restoreSpecList();
+      });
+  }
+
+  function readSpec(captured: Scope, id: string, retry = false) {
+    const read = resources.spec(captured, id, retry);
+    specState = read.state;
+    if (read.completion)
+      void read.completion.then((state) => {
+        if (disposed || scope !== captured || selectedSpec !== id || specState !== read.state)
+          return;
+        specState = state;
+        render();
+      });
   }
 
   async function preparePrompt(
     change: DerivedChange,
     captured: Scope | null,
     originatingEpoch: number,
-    intent: "primary" | "worktree" | "verify" | "explore",
+    intent: PrimaryIntent | "verify" | "explore",
     originatingSession: string | null = sessionId,
   ) {
     const current = changes.find((item) => item.id === change.id);
@@ -302,9 +374,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       sessionId !== originatingSession ||
       unavailableIds.has(change.id) ||
       !current ||
-      (intent === "verify" && current.stage !== "complete") ||
-      (intent === "explore" && current.stage !== "planning") ||
-      ((intent === "primary" || intent === "worktree") && current.stage !== change.stage)
+      current.stage !== change.stage ||
+      (intent === "verify" && (current.stage !== "complete" || !workflows.has("verify"))) ||
+      (intent === "explore" && current.stage !== "planning")
     )
       return;
     if (intent === "worktree") {
@@ -313,15 +385,21 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       return;
     }
     const expectedSession = sessionId;
+    const currentContext = () =>
+      scope === captured && epoch === originatingEpoch && sessionId === expectedSession;
     try {
-      await host.compose({ text: actionPrompt(change, intent), mode: "replace" });
-      if (scope !== captured || epoch !== originatingEpoch || sessionId !== expectedSession) return;
+      const text =
+        intent === "ff" || intent === "continue"
+          ? planningPrompt(change, intent)
+          : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
+      await host.compose({ text, mode: "replace" });
+      if (!currentContext()) return;
       await host.toast({
         kind: "success",
         message: "Workflow prompt prepared in the open composer.",
       });
     } catch (caught) {
-      if (scope !== captured || epoch !== originatingEpoch || sessionId !== expectedSession) return;
+      if (!currentContext()) return;
       await host.toast({
         kind: "error",
         message:
@@ -426,7 +504,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     }
     if (state.error.code === "ROOT_CHANGED") {
       invalidate();
-      loadBoard();
+      loadBoard({ workflows: true });
       return true;
     }
     if (state.error.code === "CHANGE_UNAVAILABLE") {
@@ -568,8 +646,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       !changes.some((item) => item.id === change.id)
     )
       return;
+    selectedSpec = null;
+    boardTab = "changes";
     selectedChange = change;
-    boardScroll = window.scrollY;
+    boardScroll = boardView.scrollForChanges();
     selectedArtifact = "";
     render();
     const first = change.artifacts.find(
@@ -590,7 +670,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         scope.root === origin.root &&
         scope.planning === origin.planning
       )
-        loadBoard(true, true);
+        loadBoard({ refresh: true, reconcile: true });
     },
     inspect: (origin, name) => {
       if (
@@ -600,7 +680,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       )
         return;
       pendingInspection = { scope, epoch, name, minOperation: boardOperation + 1 };
-      loadBoard(true, true);
+      loadBoard({ refresh: true, reconcile: true });
     },
   });
   async function openHelp() {
@@ -637,7 +717,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         title: "Archive completed OpenSpec changes",
         url: "https://openspec.dev/docs/quickstart",
         navigation: "preserve",
-        text: archiveAllPrompt,
+        text: archiveAllPrompt(workflows),
       });
       if (!current()) return;
       if (result.sessionId && result.sent === "sent") {
@@ -691,14 +771,50 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     create: () => {
       if (scope) createView.open();
     },
-    retry: () => loadBoard(true),
+    retry: () => loadBoard({ refresh: true, workflows: true }),
     search: (value) => {
       search = value;
       render();
     },
+    select: (view) => {
+      boardTab = view;
+      returningToSpec = null;
+      readBrowse();
+      render();
+    },
+    openSpec: (id) => {
+      if (!scope || boardTab !== "specs" || !specsState?.value?.some((item) => item.id === id))
+        return;
+      specListScroll = window.scrollY;
+      selectedSpec = id;
+      readSpec(scope, id);
+      render();
+      specView?.focusBack();
+    },
   });
   const detailRoot = document.createElement("div");
   appRoot.append(detailRoot);
+  let specView: ReturnType<typeof mountSpecView> | null = null;
+  const specCallbacks = {
+    close: () => {
+      returningToSpec = selectedSpec;
+      selectedSpec = null;
+      specState = null;
+      readBrowse();
+      render();
+      restoreSpecList();
+    },
+    refresh: () => loadBoard({ refresh: true, workflows: true }),
+    retry: () => {
+      if (!scope || !selectedSpec) return;
+      if (!specState && errorMessage) loadBoard({ refresh: true, workflows: true });
+      else {
+        readSpec(scope, selectedSpec, true);
+        render();
+      }
+    },
+    openUrl: openDocumentLink,
+  };
   const deleteView = mountDeleteDialog(appRoot, client, {
     current: () =>
       selectedChange && scope ? { scope, epoch, selection, name: selectedChange.id } : null,
@@ -719,10 +835,8 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       if (pendingInspection?.name === attempt.name) pendingInspection = null;
       resources.invalidateChange(attempt.scope, attempt.name);
       render();
-      loadBoard(true, true);
-      queueMicrotask(() =>
-        appRoot.querySelector<HTMLInputElement>('input[aria-label="Search changes"]')?.focus(),
-      );
+      loadBoard({ refresh: true, reconcile: true });
+      queueMicrotask(() => focusBoard());
     },
   });
   const detailView = mountDetailView(detailRoot, {
@@ -743,39 +857,13 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         await host.toast({ kind: "success", message: "Change name copied" });
       })().catch(() => {});
     },
-    openUrl: (url) => {
-      void host
-        .openUrl(url)
-        .catch(async (caught: unknown) => {
-          await host.toast({
-            kind: "error",
-            message:
-              caught instanceof HostRequestError ? caught.message : "Cannot open document link",
-          });
-        })
-        .catch(() => {});
-    },
-    refresh: () => loadBoard(true),
+    openUrl: openDocumentLink,
+    refresh: () => loadBoard({ refresh: true, workflows: true }),
     delete: () => {
       if (scope && selectedChange && !unavailableIds.has(selectedChange.id))
         deleteView.open({ scope, epoch, selection, name: selectedChange.id });
     },
-    close: () => {
-      const name = selectedChange?.id;
-      selection++;
-      detailOpening++;
-      selectedChange = null;
-      render();
-      requestAnimationFrame(() => window.scrollTo(0, boardScroll));
-      queueMicrotask(() => {
-        const opener = [...appRoot.querySelectorAll<HTMLButtonElement>(".card-main")].find(
-          (button) => button.textContent === name,
-        );
-        (
-          opener ?? appRoot.querySelector<HTMLInputElement>('input[aria-label="Search changes"]')
-        )?.focus();
-      });
-    },
+    close: closeDetail,
     selectArtifact,
     selectTasks: () => {
       selectedArtifact = taskArtifact(selectedChange!) ?? "";
@@ -791,6 +879,47 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       if (selectedChange) void preparePrompt(selectedChange, scope, epoch, intent);
     },
   });
+
+  function openDocumentLink(url: string) {
+    void host
+      .openUrl(url)
+      .catch(async (caught: unknown) => {
+        await host.toast({
+          kind: "error",
+          message:
+            caught instanceof HostRequestError ? caught.message : "Cannot open document link",
+        });
+      })
+      .catch(() => {});
+  }
+
+  function restoreSpecList() {
+    const id = returningToSpec;
+    if (!id || specsState?.pending || boardTab !== "specs" || selectedSpec || selectedChange)
+      return;
+    returningToSpec = null;
+    boardView.focusSpec(id);
+    window.scrollTo(0, specListScroll);
+  }
+
+  function closeDetail() {
+    const name = selectedChange?.id;
+    selection++;
+    detailOpening++;
+    selectedChange = null;
+    render();
+    requestAnimationFrame(() => window.scrollTo(0, boardScroll));
+    queueMicrotask(() => focusBoard(name));
+  }
+
+  function focusBoard(name?: string) {
+    const opener = name
+      ? [...appRoot.querySelectorAll<HTMLButtonElement>(".card-main")].find(
+          (button) => button.textContent === name,
+        )
+      : undefined;
+    (opener ?? appRoot.querySelector<HTMLElement>('input[aria-label="Search changes"]'))?.focus();
+  }
 
   function render() {
     const originatingSession = sessionId;
@@ -814,6 +943,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       settled,
       error: errorMessage,
       failures,
+      workflows,
+      view: boardTab,
+      archived: archivedState,
+      specs: specsState,
       cards: changes.map((change) => ({
         change,
         stale: staleIds.has(change.id),
@@ -829,11 +962,19 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           void preparePrompt(change, captured, originatingEpoch, intent, originatingSession),
       })),
     });
-    boardView.setVisible(!selectedChange);
+    boardView.setVisible(!selectedChange && !selectedSpec);
+    if (selectedSpec) {
+      specView ??= mountSpecView(appRoot, specCallbacks);
+      specView.update(selectedSpec, specState, loading, errorMessage);
+    } else if (specView) {
+      specView.dispose();
+      specView = null;
+    }
     detailView.update(
       selectedChange
         ? {
             change: selectedChange,
+            workflows,
             selectedArtifact,
             activeView,
             files,
@@ -866,14 +1007,14 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     sessionId = ready.session?.id ?? null;
     if (changed) {
       invalidate();
-      loadBoard();
+      loadBoard({ workflows: true });
     } else render();
   });
   const offDirectory = host.onDirectory((nextDirectory) => {
     if (directory === nextDirectory) return;
     directory = nextDirectory;
     invalidate();
-    loadBoard();
+    loadBoard({ workflows: true });
   });
   const offSession = host.onSession((nextSession) => {
     sessionId = nextSession?.id ?? null;
@@ -889,6 +1030,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     offSession();
     resources.dispose();
     boardView.dispose();
+    specView?.dispose();
     detailView.dispose();
     deleteView.dispose();
     createView.dispose();

@@ -19,8 +19,8 @@ The extension requires OpenChamber 2.7.1 or later.
 
 1. Install the [OpenSpec CLI](https://openspec.dev/docs/installation) on the OpenChamber server
    (tested with 1.13.1 and 2.1.0).
-2. Run `openspec config profile`. Keep the core workflows, add **verify**, and choose skills
-   delivery.
+2. Run `openspec config profile` and choose skills delivery. Add **verify** if you want the
+   **verify** action on completed changes.
 3. In your project, run `openspec init --tools opencode`.
 4. In OpenChamber, open **Settings > Extensions** and add
    `https://github.com/jaythomasonprojects/openchamber-openspec.git`. Its service runs `openspec`
@@ -30,6 +30,19 @@ The extension requires OpenChamber 2.7.1 or later.
 
 The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
 `openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
+
+## Browse changes and specs
+
+Use **Changes** to work on active changes, **Archived** to read past changes' dates and task counts,
+and **Specs** to read the project's main OpenSpec specs. **Archived** requires OpenSpec 2.x.
+
+Board actions follow the workflows you select with `openspec config profile`. Planning changes offer
+**ff** if configured, then **continue** if configured, or **propose**. Completed changes offer
+**verify** only if you configure that workflow. **archive all** uses **bulk-archive** if configured.
+Run `openspec update` after changing the profile to install the selected skills.
+
+To create a change, enter its name. Record its purpose in the proposal. Goals already recorded on
+older changes remain visible.
 
 ## Planning across worktrees
 

@@ -1,8 +1,11 @@
 import type { HostClient } from "@openchamber/sdk";
 import {
+  decodeArchived,
   decodeTaskResponse,
   decodeListing,
   decodeSummaries,
+  decodeSpecs,
+  decodeWorkflows,
   type Task,
   type ListingEntry,
 } from "../contracts.js";
@@ -71,6 +74,25 @@ export function createClient(host: HostClient) {
   };
 
   return {
+    archived: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/archived", { directory, expectedRoot: root, expectedPlanning: planning }),
+        decodeArchived,
+      ),
+    specs: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/specs", { directory, expectedRoot: root, expectedPlanning: planning }),
+        decodeSpecs,
+      ),
+    spec: async ({ directory, root, planning }: Scope, spec: string): Promise<string> => {
+      const value = record(
+        await request("/spec", { directory, expectedRoot: root, expectedPlanning: planning, spec }),
+      );
+      if (value.id !== spec || typeof value.content !== "string") throw invalid();
+      return value.content;
+    },
+    workflows: async (directory: string) =>
+      decode(await request("/workflows", { directory }), decodeWorkflows),
     list: async (
       directory: string,
       expectedRoot?: string,
@@ -164,7 +186,7 @@ export function createClient(host: HostClient) {
         throw invalid();
       return value.content;
     },
-    create: async (scope: Scope, name: string, goal: string): Promise<void> => {
+    create: async (scope: Scope, name: string): Promise<void> => {
       let value: Record<string, unknown>;
       try {
         value = record(
@@ -173,7 +195,6 @@ export function createClient(host: HostClient) {
             expectedRoot: scope.root,
             expectedPlanning: scope.planning,
             name,
-            goal,
           }),
         );
       } catch (caught) {
