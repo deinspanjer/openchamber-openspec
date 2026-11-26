@@ -15,6 +15,8 @@ features are welcome.
 
 ## Get started
 
+The extension requires OpenChamber 2.7.1 or later.
+
 1. Install the [OpenSpec CLI](https://openspec.dev/docs/installation) on the OpenChamber server
    (tested with 1.13.1 and 2.1.0).
 2. Run `openspec config profile`. Keep the core workflows, add **verify**, and choose skills

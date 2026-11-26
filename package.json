@@ -22,6 +22,9 @@
   },
   "openchamber": {
     "apiVersion": 1,
+    "engines": {
+      "openchamber": ">=2.7.1"
+    },
     "contributes": {
       "panel": {
         "id": "openspec-board",
@@ -46,7 +49,7 @@
     }
   },
   "dependencies": {
-    "@openchamber/sdk": "1.24.2",
+    "@openchamber/sdk": "2.7.3",
     "cross-spawn": "^7.0.6",
     "dompurify": "^3.4.16",
     "marked": "^18.0.14",

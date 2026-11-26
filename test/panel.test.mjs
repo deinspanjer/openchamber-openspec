@@ -1003,6 +1003,8 @@ test("Apply menu rejects a selection from a replaced chat but accepts a newly op
       .getByRole("button", { name: "apply", exact: true });
     await trigger.click();
     await page.evaluate(() => __session({ id: "replacement-chat" }));
+    await page.evaluate(() => __theme("light"));
+    await panel.locator('html[data-oc-theme="light"]').waitFor();
     await panel.getByRole("menuitem", { name: "Prepare in current chat", exact: true }).click();
     await assert.rejects(
       page.waitForFunction(
@@ -1342,6 +1344,7 @@ test("archive all uses secondary controls and requires cancellable confirmation"
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     await archive.waitFor();
     await page.waitForFunction(() => __completed.filter((p) => p === "/summaries").length >= 2);
+    await panel.getByRole("button", { name: "refresh", exact: true, disabled: false }).waitFor();
     assert.equal(await archive.isEnabled(), true);
     assert.equal(await archive.getAttribute("data-variant"), "secondary");
     assert.equal(await archive.locator('svg[aria-hidden="true"]').count(), 1);
@@ -1530,6 +1533,10 @@ test("archive all holds one launch and discards late feedback without refresh or
       if (replacement === "dispose")
         await panel.locator("body").evaluate(() => window.dispatchEvent(new Event("pagehide")));
       await page.evaluate(() => __releaseStart());
+      if (replacement === "session")
+        await panel
+          .getByRole("button", { name: "archive all", exact: true, disabled: false })
+          .waitFor();
       await page.waitForTimeout(50);
       assert.equal(
         await page.evaluate(() => __requests.filter((r) => r.path === "start-session").length),
@@ -1638,6 +1645,7 @@ test("Markdown panel links use SDK feedback and unchanged DOM survives sibling r
       __goal("first-change", "# Literal goal");
     });
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "refresh", exact: true, disabled: false }).waitFor();
     await panel.getByRole("button", { name: "first-change", exact: true }).click();
     await panel.locator(".document-content pre code").waitFor();
     await panel.locator(".document-content").evaluate((node) => {
@@ -2611,6 +2619,7 @@ test("creation and detail use named dialogue, one main landmark and unique docum
     const page = await browser.newPage();
     await page.goto(url);
     const panel = page.frameLocator("iframe");
+    await panel.getByRole("main").waitFor();
     assert.equal(await panel.getByRole("main").count(), 1);
     await panel.getByRole("button", { name: "new change" }).click();
     const dialog = panel.getByRole("dialog", { name: "New change" });
@@ -3018,6 +3027,7 @@ test("explore is a secondary, unsent goal-aware action only in Planning", async 
       __goal("first-change", null);
     });
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
+    await panel.getByRole("button", { name: "refresh", exact: true, disabled: false }).waitFor();
     await card.getByRole("button", { name: "explore" }).click();
     await page.waitForFunction(() => __draft().includes('"first-change".\n\n'));
     const draft = await page.evaluate(() => __draft());
@@ -3833,6 +3843,7 @@ test("readiness-only summary changes update focused tab names without losing foc
         __requests.some((item) => item.path === "/tasks") &&
         __requests.some((item) => item.path === "/document"),
     );
+    await page.waitForFunction(() => __requests.filter((r) => r.path === "/document").length >= 4);
     const before = await page.evaluate(
       () => __requests.filter((item) => ["/tasks", "/document"].includes(item.path)).length,
     );
@@ -3995,6 +4006,7 @@ test("focused Retry keeps keyboard focus when a held batch retains a per-change 
     await page.waitForFunction(
       () => __completed.filter((path) => path === "/summaries").length === 2,
     );
+    await panel.getByRole("button", { name: "refresh", exact: true, disabled: false }).waitFor();
     await retry.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     assert.equal(await retry.evaluate((node) => node === document.activeElement), true);
     await page.evaluate(() => __theme("light"));
@@ -4174,6 +4186,7 @@ test("custom artefacts with delimiter characters keep their document identities 
     await page.evaluate(() => __collidingLabels());
     await panel.getByRole("button", { name: "refresh", exact: true }).click();
     await page.waitForFunction(() => __completed.filter((p) => p === "/summaries").length >= 2);
+    await panel.getByRole("button", { name: "refresh", exact: true, disabled: false }).waitFor();
     await panel.getByRole("button", { name: "first-change" }).click();
     await panel.getByRole("tab", { name: /specs:a · Written/ }).waitFor({ timeout: 5000 });
     await panel.getByRole("tab", { name: /specs:a · Written/ }).click();
@@ -4864,6 +4877,7 @@ test("search keeps its caret across refresh and same-stage cards stay ordered", 
     await page.goto(url);
     const panel = page.frameLocator("iframe");
     const search = panel.getByLabel("Search changes");
+    await panel.getByRole("button", { name: "refresh", exact: true, disabled: false }).waitFor();
     await search.fill("change");
     await search.evaluate((input) => input.setSelectionRange(2, 2));
     await page.evaluate(() => __addSameStage());
