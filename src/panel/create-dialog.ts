@@ -3,7 +3,7 @@ import { isChangeName } from "../model.js";
 import { ServiceRequestError, type Client, type Scope } from "./client.js";
 import { addButtonIcon } from "./button-icon.js";
 
-type Attempt = { scope: Scope; name: string; goal: string };
+type Attempt = { scope: Scope; name: string };
 type Mode =
   | "editing"
   | "submitting"
@@ -27,9 +27,7 @@ export function mountCreateDialog(
   dialog.setAttribute("aria-labelledby", heading.id);
   heading.textContent = "New change";
   const nameRoot = document.createElement("div");
-  const goalRoot = document.createElement("div");
   let name = "";
-  let goal = "";
   let mode: Mode = "editing";
   let attempt: Attempt | null = null;
   let draftScope: Scope | null = null;
@@ -44,17 +42,6 @@ export function mountCreateDialog(
     onChange: (value) => {
       name = value;
       nameField.update({ value, error: undefined });
-    },
-  });
-  const goalField = mountTextField(goalRoot, {
-    label: "Goal",
-    value: "",
-    placeholder: "What should this change make possible?",
-    multiline: true,
-    rows: 4,
-    onChange: (value) => {
-      goal = value;
-      goalField.update({ value, error: undefined });
     },
   });
   const message = document.createElement("p");
@@ -121,7 +108,7 @@ export function mountCreateDialog(
     },
   });
   actions.append(cancelRoot, forgetRoot, retryRoot, inspectRoot, submitRoot);
-  form.append(heading, nameRoot, goalRoot, message, actions);
+  form.append(heading, nameRoot, message, actions);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     void submitChange();
@@ -140,10 +127,8 @@ export function mountCreateDialog(
   function discardDraft() {
     draftScope = null;
     name = "";
-    goal = "";
     messageText = "";
     nameField.update({ value: "", error: undefined });
-    goalField.update({ value: "", error: undefined });
   }
   dialog.addEventListener("close", () => {
     if (!attempt && draftScope && !sameContext(draftScope)) discardDraft();
@@ -155,7 +140,6 @@ export function mountCreateDialog(
     const usable = origin ? sameContext(origin) : current !== null;
     const busy = mode === "submitting" || mode === "reconciling";
     nameField.update({ disabled: busy || mode === "read-failed" || mode === "observed-existing" });
-    goalField.update({ disabled: busy || mode === "read-failed" || mode === "observed-existing" });
     submit.update({ disabled: mode !== "editing" || !usable, loading: mode === "submitting" });
     retryRoot.hidden = mode !== "read-failed";
     retry.update({ disabled: mode !== "read-failed", loading: mode === "reconciling" });
@@ -212,23 +196,18 @@ export function mountCreateDialog(
       return;
     }
     const submittedName = name.trim();
-    const submittedGoal = goal.trim();
     if (!isChangeName(submittedName)) {
       nameField.update({ error: "Use lowercase letters or digits separated by single hyphens." });
       return;
     }
-    if (!submittedGoal) {
-      goalField.update({ error: "Goal is required." });
-      return;
-    }
-    attempt = { scope: current, name: submittedName, goal: submittedGoal };
+    attempt = { scope: current, name: submittedName };
     const original = attempt;
     const currentGeneration = ++generation;
     mode = "submitting";
     messageText = "";
     paint();
     try {
-      await client.create(original.scope, original.name, original.goal);
+      await client.create(original.scope, original.name);
       if (disposed || currentGeneration !== generation) return;
       mode = "confirmed-success";
       messageText = "Change created.";
@@ -238,9 +217,7 @@ export function mountCreateDialog(
       attempt = null;
       draftScope = null;
       name = "";
-      goal = "";
       nameField.update({ value: "" });
-      goalField.update({ value: "" });
       mode = "editing";
       messageText = "";
       paint();
@@ -279,7 +256,6 @@ export function mountCreateDialog(
       inspect.dispose();
       forget.dispose();
       nameField.dispose();
-      goalField.dispose();
       if (dialog.open) dialog.close();
       dialog.remove();
     },

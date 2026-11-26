@@ -7,10 +7,23 @@ export function decodePlanning(value: unknown): string {
   return value;
 }
 export type ListingEntry = { id: string; completedTasks: number; totalTasks: number };
+export type ArchivedChange = { name: string; completedTasks: number; totalTasks: number };
+export type ArchiveResult =
+  | { outcome: "archived"; archivedAs: string; warnings: string[] }
+  | { outcome: "failed"; command: string; output: string };
+export const archiveCommand = (change: string, skipSpecs: boolean) =>
+  `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
+export type PendingArchive = ArchivedChange & { id: string };
+export type FocusTarget = { directory: string } & ({ change: string } | { archive: string });
+export type SpecEntry = { id: string; requirementCount: number };
 export type Task = {
   id: string;
   description: string;
   done: boolean;
+};
+export type ValidationResult = {
+  valid: boolean;
+  issues: { level: string; path: string; message: string }[];
 };
 export type DocumentDescriptor = { artifactId: string; selector: string; label: string };
 export const documentKey = (artifactId: string, selector: string): string =>
@@ -26,14 +39,59 @@ export type ChangeMetadata = {
 };
 export type ServiceIssue = { code: string; message: string; status: number; outcome?: "unknown" };
 
+const ALL_WORKFLOWS = [
+  "propose",
+  "explore",
+  "new",
+  "continue",
+  "apply",
+  "update",
+  "ff",
+  "sync",
+  "archive",
+  "bulk-archive",
+  "verify",
+  "onboard",
+] as const;
+export type Workflow = (typeof ALL_WORKFLOWS)[number];
+export const CORE_WORKFLOWS = ["propose", "explore", "apply", "update", "sync", "archive"] as const;
+
+export function isWorkflow(value: unknown): value is Workflow {
+  return ALL_WORKFLOWS.some((name) => name === value);
+}
+
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid data.");
   return value as Record<string, unknown>;
 }
 
+export function decodeWorkflows(value: unknown): Workflow[] {
+  const { workflows } = record(value);
+  if (!Array.isArray(workflows) || !workflows.every(isWorkflow))
+    throw new Error("Invalid workflows.");
+  return workflows;
+}
+
 function string(value: unknown): string {
   if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
   return value;
+}
+
+export function decodeArchiveResult(value: unknown): ArchiveResult {
+  const result = record(value);
+  if (result.outcome === "archived" && Array.isArray(result.warnings))
+    return {
+      outcome: result.outcome,
+      archivedAs: string(result.archivedAs),
+      warnings: result.warnings.map(string),
+    };
+  if (result.outcome === "failed")
+    return {
+      outcome: result.outcome,
+      command: string(result.command),
+      output: string(result.output),
+    };
+  throw new Error("Invalid archive result.");
 }
 
 function count(value: unknown): number {
@@ -47,6 +105,19 @@ function names(value: unknown): string[] {
   return value.map(string);
 }
 
+export function decodeValidation(value: unknown): ValidationResult {
+  const { valid, issues } = record(value);
+  if (typeof valid !== "boolean" || !Array.isArray(issues))
+    throw new Error("Invalid validation result.");
+  return {
+    valid,
+    issues: issues.map((value) => {
+      const { level, path, message } = record(value);
+      return { level: string(level), path: string(path), message: string(message) };
+    }),
+  };
+}
+
 export function decodeListingEntry(value: unknown, key: "name" | "id" = "id"): ListingEntry {
   const item = record(value);
   const id = string(item[key]);
@@ -55,6 +126,72 @@ export function decodeListingEntry(value: unknown, key: "name" | "id" = "id"): L
   const totalTasks = count(item.totalTasks);
   if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
   return { id, completedTasks, totalTasks };
+}
+
+export function decodeArchived(value: unknown): ArchivedChange[] {
+  const { changes } = record(value);
+  if (!Array.isArray(changes)) throw new Error("Invalid archived listing.");
+  const archived = changes.map((value) => {
+    const item = record(value);
+    const name = string(item.name);
+    const completedTasks = count(item.completedTasks);
+    const totalTasks = count(item.totalTasks);
+    if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
+    return { name, completedTasks, totalTasks };
+  });
+  if (new Set(archived.map(({ name }) => name)).size !== archived.length)
+    throw new Error("Duplicate archived change.");
+  return archived;
+}
+
+export const archivedChangeId = (name: string): string => name.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+
+export function decodeFocusTarget(value: unknown): FocusTarget {
+  const { directory, change, archive } = record(value);
+  if (typeof directory === "string") {
+    if (archive === undefined && typeof change === "string" && isChangeName(change))
+      return { directory, change };
+    if (
+      change === undefined &&
+      typeof archive === "string" &&
+      isChangeName(archivedChangeId(archive))
+    )
+      return { directory, archive };
+  }
+  throw new Error("Invalid board focus target.");
+}
+
+export function decodePendingArchives(value: unknown): PendingArchive[] {
+  const { changes } = record(value);
+  if (!Array.isArray(changes)) throw new Error("Invalid pending archives.");
+  const pending = changes.map((value) => {
+    const listing = decodeListingEntry(value);
+    const name = string(record(value).name);
+    if (archivedChangeId(name) !== listing.id) throw new Error("Invalid archived name.");
+    return { ...listing, name };
+  });
+  if (new Set(pending.map(({ id }) => id)).size !== pending.length)
+    throw new Error("Duplicate pending archive.");
+  return pending;
+}
+
+export function isSpecId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/.exec(value)?.[0] === value
+  );
+}
+
+export function decodeSpecs(value: unknown): SpecEntry[] {
+  const { specs } = record(value);
+  if (!Array.isArray(specs)) throw new Error("Invalid spec listing.");
+  const entries = specs.map((value) => {
+    const { id, requirementCount } = record(value);
+    return { id: string(id), requirementCount: count(requirementCount) };
+  });
+  if (new Set(entries.map(({ id }) => id)).size !== entries.length)
+    throw new Error("Duplicate spec.");
+  return entries;
 }
 
 export function decodeListing(value: unknown): {
@@ -71,6 +208,17 @@ export function decodeListing(value: unknown): {
   if (new Set(changes.map((item) => item.id)).size !== changes.length)
     throw new Error("Duplicate change.");
   return { directory, root, planning: decodePlanning(input.planning), changes };
+}
+
+export function decodeModifiedChanges(value: unknown): string[] {
+  const { changes } = record(value);
+  if (
+    !Array.isArray(changes) ||
+    !changes.every((id) => typeof id === "string" && isChangeName(id)) ||
+    new Set(changes).size !== changes.length
+  )
+    throw new Error("Invalid modified change IDs.");
+  return changes;
 }
 
 export function decodeArtifacts(value: unknown, requires: unknown): Artifact[] {
@@ -125,7 +273,7 @@ export function decodeSummary(value: unknown): ChangeMetadata {
   return {
     id,
     root: string(item.root),
-    goal: item.goal as string | null,
+    goal: item.goal?.trim() ? item.goal : null,
     affectedAreas: names(item.affectedAreas),
     artifacts,
     applyRequires: names(item.applyRequires),

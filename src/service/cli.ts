@@ -4,6 +4,7 @@ const COMMAND_TIMEOUT_MS = 15_000;
 const STDOUT_BYTES = 1024 * 1024;
 const STDERR_BYTES = 64 * 1024;
 const TERMINATION_GRACE_MS = 500;
+export const CLI_SHUTDOWN_MS = 2 * TERMINATION_GRACE_MS;
 export const MAX_RESPONSE_BYTES = 240_000;
 
 export type Json = Record<string, unknown>;
@@ -126,8 +127,12 @@ export async function runOpenSpec(
       } catch {
         // The CLI can fail before emitting a diagnostic envelope.
       }
-      if (code === 0 && value && typeof value === "object" && !Array.isArray(value)) {
-        finish({ ok: true, value: value as Json });
+      if (code === 0) {
+        finish(
+          value && typeof value === "object" && !Array.isArray(value)
+            ? { ok: true, value: value as Json }
+            : { ok: false, error: serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec output.", 502) },
+        );
       } else {
         finish({
           ok: false,

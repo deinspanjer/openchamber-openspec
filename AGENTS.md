@@ -26,28 +26,51 @@
 
 ## Runtime boundaries
 
-- `src/panel.ts` applies the SDK theme before showing the panel. `src/panel/client.ts` uses the SDK
-  service bridge, never direct CLI execution or browser HTTP. `src/panel/controller.ts` owns
-  context, selection, read scheduling, and workflow actions; `src/panel/resources.ts` retains reads
-  scoped by directory/root/planning target/change.
-- Current-chat workflow actions prepare unsent drafts. **Run in new worktree** and confirmed
-  **archive all** create sessions and submit their prompts through the SDK.
+- `src/panel.ts` and `src/status.ts` apply the SDK theme before showing their content.
+  `src/panel/client.ts` uses the SDK service bridge, never direct CLI execution or browser HTTP.
+  `src/panel/controller.ts` owns the board's context, selection, read scheduling, and workflow
+  actions. `src/panel/resources.ts` retains reads by directory, root, planning target, and change.
+- Current-chat workflow actions prepare unsent drafts except **archive**, which writes through the
+  service. **Run in new worktree** sends its prompt through the SDK. Confirmed **archive all**
+  writes through the service and starts a recovery session only for failures.
 - Views own mounted DOM and SDK UI handles. Dispose their handles; theme changes and ordinary
   refreshes must not replace the search or detail shells and lose focus, caret, or scroll position.
 - `src/contracts.ts` validates the private protocol; `src/model.ts` derives stages. `src/service.ts`
   starts the host-managed service. `src/service/http.ts` owns authentication and request bounds;
   `src/service/openspec.ts` owns scoped CLI translation and safe paths; `src/service/cli.ts` runs
   processes.
+- `/validate` runs only for the Work Status **validate** chip. It uses the selected change's root
+  and planning identity. The focus handoff stores one target for 30 seconds. The `focus` service
+  event signals that a target is pending; only a matching directory can claim it with `GET /focus`.
+- `/workflows` reads the global profile via `openspec config list --json`, without planning scope.
+  The section falls back to core workflows if the read fails.
+- `/pending-archives` compares local archives with the checkout's base ref. Unavailable Git,
+  unsupported archived listings and shared planning fall back to active changes only.
 - The extension manifest is `package.json`'s `openchamber` field. `service/package.json` only keeps
   the generated service CommonJS inside this ESM repository.
-- `panel/main.js` and `service/main.js` are tracked, generated installable bundles. Rebuild both
-  after private-protocol changes; installation does not build them. `npm run clean` removes these
-  bundles, not the ignored `build/` test outputs.
+- `panel/main.js`, `panel/status.js`, and `service/main.js` are generated installable bundles.
+  Rebuild all three after private-protocol changes; installation does not build them.
+  `npm run clean` removes these bundles, not the ignored `build/` test outputs.
 
 ## Behaviour constraints
 
-- Load the board only on initial/context loads, explicit Refresh, and after the panel's own create
-  or delete. Do not add polling, visibility revalidation, TTL, or board-wide document prefetch.
+- Load the board only on initial/context loads, explicit Refresh, after the panel's own create,
+  delete or archive, and once when a claimed focus names an unlisted change. Do not add polling,
+  visibility revalidation, TTL, or board-wide document prefetch.
+- Read configured workflows on the board's initial/context loads and explicit Refresh. Reuse the
+  result for other board reloads.
+- Read Archived, the Specs list, and each spec on first open in a context. Refresh invalidates all
+  browse reads and reloads only the visible browse content. A hidden view reads on its next open.
+  A claimed archive focus can re-read Archived once if the focused row is missing.
+- Load the Work Status section on mount, session or project changes, explicit Refresh, and after the
+  shown session or any of its direct or nested subagents finishes an observed turn. Re-read after
+  tracking changes or the section's own archive. Read one listing and the summary and tasks for
+  each tracked active change only, in the shown session's planning context. Check pending archives
+  only when a tracked name is missing from the active listing or the picker has no archive result.
+  Keep unchanged card controls mounted across reads. Do not poll, refresh on visibility changes,
+  or read board-wide summaries.
+- Read configured workflows on mount, project change, and footer Refresh. Reuse the result for
+  session switches in the same directory and finished turns.
 - Retained reads do not authorise writes or recovery. Reconcile uncertain writes with a fresh
   listing in the original context; do not retry the mutation automatically.
 - Deletion checks the active parent and target after its final CLI context check. These checks and

@@ -59,6 +59,8 @@ for (const shared of [false, true])
       });
       let host;
       let browser;
+      const previousConfigHome = process.env.XDG_CONFIG_HOME;
+      process.env.XDG_CONFIG_HOME = join(directory, "cli-config");
       try {
         const serviceUrl = await listen(service);
         const [index, panel] = await Promise.all([
@@ -94,29 +96,31 @@ for (const shared of [false, true])
         const reply = (payload) => event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id, ok: true, payload }, "*");
         if (message.type === "hello") { event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "ready", payload: ready }, "*"); return; }
         if (message.type === "service-request") {
-          window.__requests.push({ path: message.payload.path, body: JSON.parse(message.payload.body) });
+          const { path, body, method, query } = message.payload;
+          window.__requests.push({ path, body: body ? JSON.parse(body) : null });
           try {
-            const response = await fetch("/service" + message.payload.path, { method: "POST", headers: { "content-type": "application/json" }, body: message.payload.body });
+            const search = query ? "?" + new URLSearchParams(query) : "";
+            const response = await fetch("/service" + path + search, { method, headers: { "content-type": "application/json" }, body });
             reply({ status: response.status, body: await response.text() });
           } catch (error) { event.source.postMessage({ channel: "openchamber.sdk", v: 1, type: "result", id: message.id, ok: false, error: { code: "NETWORK", message: String(error) } }, "*"); }
           return;
         }
-       if (message.type === "compose") { (window.__compositions ||= []).push(message.payload); window.__compose = message.payload; reply(); return; }
+       if (message.type === "compose") { window.__compose = message.payload; reply(); return; }
         if (message.type === "toast") reply(undefined);
       });
     </script><style>iframe{width:100%;height:100vh;border:0}</style><iframe src="/panel/index.html" title="OpenSpec integration panel"></iframe>`;
         host = createServer(async (request, response) => {
-          const path = new URL(request.url, "http://127.0.0.1").pathname;
+          const { pathname: path, search } = new URL(request.url, "http://127.0.0.1");
           if (path.startsWith("/service/")) {
             const chunks = [];
             for await (const chunk of request) chunks.push(chunk);
-            const forwarded = await fetch(serviceUrl + path.slice("/service".length), {
-              method: "POST",
+            const forwarded = await fetch(serviceUrl + path.slice("/service".length) + search, {
+              method: request.method,
               headers: {
                 authorization: "Bearer integration-token",
                 "content-type": "application/json",
               },
-              body: Buffer.concat(chunks),
+              ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
             });
             response.writeHead(forwarded.status, { "content-type": "application/json" });
             response.end(Buffer.from(await forwarded.arrayBuffer()));
@@ -136,7 +140,7 @@ for (const shared of [false, true])
         await page.goto(hostUrl, { waitUntil: "networkidle" });
         const panelFrame = page.frameLocator('iframe[title="OpenSpec integration panel"]');
         await panelFrame.getByRole("button", { name: change }).waitFor({ timeout: 30000 });
-        assert.deepEqual(cliCalls, ["list", "status"], "board load uses two CLI processes");
+        assert.deepEqual(cliCalls.toSorted(), ["config", "list", "status"]);
         assert.deepEqual(
           await panelFrame.locator(".change-card .affected-areas .oc-sdk-badge").allTextContents(),
           ["auth", "api", "auth"],
@@ -161,10 +165,10 @@ for (const shared of [false, true])
         await panelFrame.getByRole("tab", { name: /Design · Written/ }).click();
         await panelFrame.getByRole("heading", { name: "Integration design" }).waitFor();
         const initial = await page.evaluate(() => window.__requests.map((item) => item.path));
-        assert.deepEqual(initial.slice(0, 2), ["/changes", "/summaries"]);
+        assert.deepEqual(initial.slice(0, 3), ["/changes", "/workflows", "/summaries"]);
         assert.equal(initial.filter((path) => path === "/document").length, 4);
         assert.equal(initial.filter((path) => path === "/tasks").length, 1);
-        assert.equal(cliCalls.length, 7, "board uses 2 processes; detail uses 1 + 4 documents");
+        assert.equal(cliCalls.length, 8, "board uses 3 processes; detail uses 1 + 4 documents");
         assert.equal(cliCalls.filter((command) => command === "instructions").length, 1);
         assert.equal(cliCalls.filter((command) => command === "context").length, 0);
         assert.equal(
@@ -283,29 +287,9 @@ for (const shared of [false, true])
         await panelFrame.getByRole("heading", { name: "Complete 1" }).waitFor({ timeout: 30000 });
         const completedCard = panelFrame.locator(".change-card").filter({ hasText: change });
         assert.equal(await completedCard.locator(".affected-areas").isVisible(), false);
-        await completedCard.getByRole("button", { name: "archive" }).click();
-        await page.waitForFunction(() =>
-          window.__compose?.text?.startsWith(
-            "Use your skill tool to load and invoke the openspec-archive-change skill for ",
-          ),
-        );
-        await completedCard.getByRole("button", { name: "verify" }).click();
-        await page.waitForFunction(() =>
-          window.__compose?.text?.startsWith(
-            "Use your skill tool to load and invoke the openspec-verify-change skill for ",
-          ),
-        );
-        assert.deepEqual(await page.evaluate(() => window.__compositions.map(({ mode }) => mode)), [
-          "replace",
-          "replace",
-        ]);
-        assert.equal(
-          await page.evaluate(() => window.__requests.some((item) => item.path === "/archive")),
-          false,
-        );
+        assert.equal(await completedCard.getByRole("button", { name: "verify" }).count(), 0);
         await panelFrame.getByRole("button", { name: "new change" }).click();
         await panelFrame.getByLabel("Change name", { exact: true }).fill("created-in-fixture");
-        await panelFrame.getByLabel("Goal").fill("Fixture creation goal");
         await panelFrame.getByRole("button", { name: "create", exact: true }).click();
         await panelFrame
           .getByRole("button", { name: "created-in-fixture" })
@@ -319,7 +303,7 @@ for (const shared of [false, true])
         assert.equal(await page.evaluate(() => window.__compose.mode), "replace");
         assert.match(
           await page.evaluate(() => window.__compose.text),
-          /^Use your skill tool to load and invoke the openspec-propose skill for OpenSpec change "created-in-fixture" \(existing change\)\.\nGoal: Fixture creation goal\n\nInspect/,
+          /^Use your skill tool to load and invoke the openspec-propose skill for OpenSpec change "created-in-fixture" \(existing change\)\.\n\nInspect/,
         );
         await panelFrame.getByRole("button", { name: "created-in-fixture" }).click();
         await panelFrame
@@ -377,6 +361,8 @@ for (const shared of [false, true])
           `Disposable integration requests: ${JSON.stringify(counts)}; CLI calls: ${cliCalls.length} ${JSON.stringify(commands)}.`,
         );
       } finally {
+        if (previousConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = previousConfigHome;
         const cleanup = await Promise.allSettled([
           ...(browser ? [browser.close()] : []),
           ...(host?.listening
