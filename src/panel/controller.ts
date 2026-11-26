@@ -30,8 +30,6 @@ import { CORE_WORKFLOWS, loadWorkflows } from "./workflows.js";
 
 declare const __OPENSPEC_PANEL_ID__: string;
 
-declare const __OPENSPEC_PANEL_ID__: string;
-
 export function mountController(host: HostClient, appRoot: HTMLElement): () => void {
   const client = createClient(host);
   const resources = createResources(client);
