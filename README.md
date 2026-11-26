@@ -33,8 +33,8 @@ On a phone, open the board from the workspace drawer or the sessions list's **Mo
 Existing installations need one-time approval for the new `git` permission. In **Settings >
 Extensions**, open OpenSpec and choose **Review permissions**, then **Allow and enable**.
 
-The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
-`openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
+The board's help button opens the OpenSpec quickstart. The extension disables telemetry for its
+OpenSpec CLI calls so they don't wait for a telemetry request. Your CLI settings are unchanged.
 
 ## Browse changes and specs
 
