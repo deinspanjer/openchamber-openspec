@@ -11,6 +11,8 @@ import { mountArchiveDialog } from "./archive-dialog.js";
 import { archiveAllPrompt } from "./archive-prompt.js";
 import { inspectWorktreeDestination } from "./worktree.js";
 
+declare const __OPENSPEC_PANEL_ID__: string;
+
 export function mountController(host: HostClient, appRoot: HTMLElement): () => void {
   const client = createClient(host);
   const resources = createResources(client);
@@ -357,7 +359,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         throw new Error("This change is no longer applicable. Refresh before starting Apply.");
       dispatched = true;
       const result = await host.startSession({
-        providerId: "openspec-board",
+        providerId: __OPENSPEC_PANEL_ID__,
         id: change.id,
         title: `Apply ${change.id}`,
         url: "https://openspec.dev/docs/quickstart",
@@ -632,7 +634,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     render();
     try {
       const result = await host.startSession({
-        providerId: "openspec-board",
+        providerId: __OPENSPEC_PANEL_ID__,
         id: "archive-all",
         title: "Archive completed OpenSpec changes",
         url: "https://openspec.dev/docs/quickstart",

@@ -41,8 +41,9 @@ or repair it.
 ## Develop
 
 Requires Node 22.13+, npm and the OpenSpec CLI. Run `npm ci`, `npx playwright install chromium`,
-then `npm run check`. OpenChamber does not build extensions on install, so rebuild, then disable and
-re-enable the extension to restart its service. More detail is in `AGENTS.md`.
+then `npm run check`. OpenChamber does not build extensions on install. Use `npm run build` to
+rebuild the release package. Before shipping, run `npm run check:version` to check that changes to
+shipped files or the extension manifest have a new version.
 
 GitHub Actions runs the suite natively on Windows and macOS with Node 24 and OpenSpec 2.1.0. Linux
 verification remains local. Docker is not required for the suite. Each job runs the full suite
@@ -55,3 +56,27 @@ push filter in `.github/workflows/verify.yml`, push, and inspect results with `g
 `gh run watch` and `gh run view --log-failed`. Repeat until both platforms pass the candidate
 revision. Restore only the `dev`/`main` push and pull-request targets before merging into `dev`,
 then check its resulting run. The temporary branch rule is not part of the permanent workflow.
+
+### Test a worktree on the live host
+
+Use **OpenSpec (dev)** to test without changing the Git-installed extension. If the dev extension is
+already installed, disable it before deploying. From the worktree you want to test, with its
+dependencies installed, run:
+
+```bash
+npm run dev:deploy
+```
+
+The command builds the current worktree, including uncommitted edits, into
+`~/.local/share/openchamber-openspec-dev` and prints the absolute path.
+
+1. For the first test, open **Settings > Extensions > Add extension**. Add the printed folder path
+   on the OpenChamber server. Review the permissions for **OpenSpec (dev)** and approve the
+   extension if you trust the build.
+2. Disable the Git-installed **OpenSpec** and enable **OpenSpec (dev)**. Open the project or
+   worktree you want to test in OpenChamber. Deployment selects the extension code, not the project
+   it displays.
+3. When you finish, disable **OpenSpec (dev)** and re-enable the Git install.
+
+To test another worktree, deploy from that worktree while dev is disabled. The same Settings entry
+works for each build. Enabling dev starts a fresh service. Reloading its iframe does not.
