@@ -27,6 +27,236 @@ async function mockProject(prefix) {
   return root;
 }
 
+test("modified-changes maps Git status only within the scoped local planning tree", async (t) => {
+  const repo = await mkdtemp(join(tempDirectory, "openspec-git-"));
+  const directory = join(repo, "project[1]", "src");
+  const root = join(repo, "project[1]");
+  const prefix = "project[1]/openspec/changes";
+  const git = (...args) => runFixtureCommand("git", args, { cwd: repo });
+  const write = async (path, text = "Changed\n") => {
+    await mkdir(join(repo, path, ".."), { recursive: true });
+    await writeFile(join(repo, path), text);
+  };
+  try {
+    await mkdir(directory, { recursive: true });
+    await git("init", "--quiet");
+    await write(`${prefix}/unstaged/proposal.md`, "Before\n");
+    await write(".gitignore", "*.ignored\n");
+    await git("add", "--", ".");
+    await git(
+      "-c",
+      "user.name=OpenSpec Test",
+      "-c",
+      "user.email=openspec@example.invalid",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--quiet",
+      "-m",
+      "Baseline",
+    );
+    await write(`${prefix}/staged/proposal.md`);
+    await write(`${prefix}/staged/tasks.md`);
+    await git("--literal-pathspecs", "add", "--", `${prefix}/staged`);
+    for (const path of [
+      `${prefix}/unstaged/proposal.md`,
+      `${prefix}/new-change/${process.platform === "win32" ? "draft notes.md" : "draft\nnotes.md"}`,
+      `${prefix}/ignored/cache.ignored`,
+      `${prefix}/archive/old-change/proposal.md`,
+      `${prefix}/parent-file`,
+      `${prefix}/Invalid-Name/proposal.md`,
+      `${prefix}-other/wrong-prefix/proposal.md`,
+      "project1/openspec/changes/other-project/proposal.md",
+      "openspec/changes/repo-root-change/proposal.md",
+    ])
+      await write(path);
+    await withService(
+      async (url) => {
+        const post = async (path, body = {}) => {
+          const response = await fetch(`${url}${path}`, {
+            method: "POST",
+            headers: { authorization: "Bearer test-token" },
+            body: JSON.stringify({ directory, ...body }),
+          });
+          return { status: response.status, value: await response.json() };
+        };
+        const { value: listing } = await post("/changes");
+        const scope = { expectedRoot: listing.root, expectedPlanning: listing.planning };
+        await t.test("returns deduplicated change IDs from all three kinds of edits", async () => {
+          const { status, value } = await post("/modified-changes", scope);
+          assert.equal(status, 200, JSON.stringify(value));
+          assert.deepEqual(
+            { ...value, changes: value.changes.sort() },
+            {
+              changes: ["new-change", "staged", "unstaged"],
+            },
+          );
+        });
+        const planning = join(root, "openspec");
+        await rename(planning, join(root, "original-planning"));
+        await symlink(join(repo, "openspec"), planning, "dir");
+        await t.test("rejects the stale planning identity after a retarget", async () => {
+          const { status, value } = await post("/modified-changes", scope);
+          assert.deepEqual([status, value.error?.code], [409, "PLANNING_CHANGED"]);
+        });
+        await t.test("returns no hints when planning is shared", async () => {
+          const { value: shared } = await post("/changes");
+          assert.deepEqual(
+            await post("/modified-changes", { ...scope, expectedPlanning: shared.planning }),
+            { status: 200, value: { changes: [] } },
+          );
+        });
+      },
+      async (_directory, [command]) => ({
+        ok: true,
+        value: {
+          root: { path: root, source: "nearest" },
+          ...(command === "list" ? { changes: [] } : {}),
+        },
+      }),
+    );
+  } finally {
+    await rm(repo, { recursive: true, force: true });
+  }
+});
+
+test("pending-archives compares this checkout with the first available base tree", async () => {
+  await withProjects(async (repo, outside) => {
+    const git = (...args) => runFixtureCommand("git", args, { cwd: repo });
+    const commit = async (message) => {
+      await git("add", "--", ".");
+      await git(
+        "-c",
+        "user.name=OpenSpec Test",
+        "-c",
+        "user.email=openspec@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--quiet",
+        "-m",
+        message,
+      );
+    };
+    const archive = async (directory, name, tasks) => {
+      const path = join(directory, "openspec", "changes", "archive", name);
+      await mkdir(path, { recursive: true });
+      await writeFile(join(path, "tasks.md"), tasks);
+    };
+    await git("init", "--quiet", "-b", "main");
+    await writeFile(join(repo, "baseline"), "");
+    await commit("Baseline");
+    const { stdout: base } = await git("rev-parse", "HEAD");
+    await git("switch", "--quiet", "-c", "feature");
+    await archive(repo, "add-login", "- [ ] Undated task\n");
+    await archive(repo, "2026-11-21-add-login", "- [ ] Earlier task\n");
+    await archive(repo, "2026-11-22-add-login", "- [x] Latest task\n- [ ] Another task\n");
+    await archive(repo, "fix-cache", "- [x] Fix it\n");
+    await archive(outside, "no-checkout", "- [x] Done\n");
+
+    await withService(async (url) => {
+      const post = async (path, directory, scope = {}) => {
+        const response = await fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory, ...scope }),
+        });
+        const value = await response.json();
+        assert.ok(response.ok || value.error, JSON.stringify(value));
+        return { status: response.status, value };
+      };
+      const scopeFor = async (directory) => {
+        const { status, value } = await post("/changes", directory);
+        assert.equal(status, 200, JSON.stringify(value));
+        return { expectedRoot: value.root, expectedPlanning: value.planning };
+      };
+      const scope = await scopeFor(repo);
+      const check = (directory = repo, expected = scope) =>
+        post("/pending-archives", directory, expected);
+      const pending = async () => {
+        const { status, value } = await check();
+        assert.equal(status, 200, JSON.stringify(value));
+        return value.changes.sort((a, b) => a.id.localeCompare(b.id));
+      };
+      const changes = [
+        { id: "add-login", name: "2026-11-22-add-login", completedTasks: 1, totalTasks: 2 },
+        { id: "fix-cache", name: "fix-cache", completedTasks: 1, totalTasks: 1 },
+      ];
+      assert.deepEqual(await pending(), changes);
+      await commit("Archive changes");
+      assert.deepEqual(await pending(), changes);
+      await git("branch", "-f", "main", "HEAD");
+      assert.deepEqual(await pending(), []);
+      await git("update-ref", "refs/remotes/origin/trunk", base.trim());
+      await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+      assert.deepEqual(await pending(), changes);
+      await git("update-ref", "refs/remotes/origin/trunk", "HEAD");
+      assert.deepEqual(await pending(), []);
+      await git("symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+      await git("branch", "-D", "main");
+      assert.deepEqual(await pending(), []);
+      await archive(repo, "2026-11-23-another-change", "- [x] Done\n");
+      assert.deepEqual(await pending(), [
+        {
+          id: "another-change",
+          name: "2026-11-23-another-change",
+          completedTasks: 1,
+          totalTasks: 1,
+        },
+      ]);
+
+      assert.deepEqual(await check(outside, await scopeFor(outside)), {
+        status: 200,
+        value: { changes: [] },
+      });
+      const planning = join(repo, "openspec");
+      await rename(planning, join(repo, "original-planning"));
+      await symlink(join(outside, "openspec"), planning, "dir");
+      const stale = await check();
+      assert.deepEqual([stale.status, stale.value.error?.code], [409, "PLANNING_CHANGED"]);
+      assert.deepEqual(await check(repo, await scopeFor(repo)), {
+        status: 200,
+        value: { changes: [] },
+      });
+    });
+  });
+});
+
+test("pending-archives distinguishes an unavailable CLI command from malformed output", async () => {
+  const directory = await mockProject("openspec-pending-errors-");
+  const root = { path: directory, source: "nearest" };
+  let listed = {
+    ok: false,
+    error: { code: "OPENSPEC_ERROR", message: "Unknown option --archived", status: 422 },
+  };
+  try {
+    await withService(
+      async (url) => {
+        const post = (path, scope = {}) =>
+          fetch(`${url}${path}`, {
+            method: "POST",
+            headers: { authorization: "Bearer test-token" },
+            body: JSON.stringify({ directory, ...scope }),
+          });
+        const listing = await (await post("/changes")).json();
+        const scope = { expectedRoot: listing.root, expectedPlanning: listing.planning };
+        const unavailable = await post("/pending-archives", scope);
+        assert.equal(unavailable.status, 200);
+        assert.deepEqual(await unavailable.json(), { changes: [] });
+
+        listed = { ok: true, value: { root, changes: [{ name: "missing-counts" }] } };
+        const malformed = await post("/pending-archives", scope);
+        assert.equal(malformed.status, 502);
+        assert.equal((await malformed.json()).error.code, "BAD_CLI_OUTPUT");
+      },
+      async (_directory, args) =>
+        args.includes("--archived") ? listed : { ok: true, value: { root, changes: [] } },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("shared planning scope rejects link retargets without changing the CLI root", async () => {
   await withProjects(async (main, replacement) => {
     const checkout = await mkdtemp(join(tempDirectory, "openspec-linked-"));
@@ -866,6 +1096,201 @@ test("both spec routes reject malformed or wrong-root CLI listings", async (t) =
   } finally {
     await Promise.all([root, other].map((path) => rm(path, { recursive: true, force: true })));
   }
+});
+
+test("summary returns one scoped change from the real CLI", async (t) => {
+  await withProjects(async (root, other) => {
+    await fixtureChange(root, "first-change", "First goal");
+    await fixtureChange(root, "second-change", "Second goal");
+    await withService(async (url) => {
+      const post = async (path, body = {}) => {
+        const response = await fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory: root, ...body }),
+        });
+        return { status: response.status, value: await response.json() };
+      };
+      const { value: listing } = await post("/changes");
+      const scope = {
+        expectedRoot: listing.root,
+        expectedPlanning: listing.planning,
+        change: "second-change",
+      };
+      await t.test(
+        "returns the requested change in the same shape as a batch summary",
+        async () => {
+          const batch = await post("/summaries", scope);
+          const single = await post("/summary", scope);
+          assert.equal(single.status, 200);
+          assert.equal(single.value.id, "second-change");
+          assert.equal(single.value.goal, "Second goal");
+          assert.deepEqual(
+            single.value,
+            batch.value.changes.find((item) => item.id === "second-change").summary,
+          );
+        },
+      );
+      await t.test("rejects the wrong root", async () => {
+        const result = await post("/summary", {
+          ...scope,
+          expectedRoot: other,
+          expectedPlanning: undefined,
+        });
+        assert.deepEqual([result.status, result.value.error?.code], [409, "ROOT_CHANGED"]);
+      });
+      await t.test("rejects stale planning identity", async () => {
+        const result = await post("/summary", { ...scope, expectedPlanning: "stale" });
+        assert.deepEqual([result.status, result.value.error?.code], [409, "PLANNING_CHANGED"]);
+      });
+      await t.test("rejects an unknown change", async () => {
+        const result = await post("/summary", { ...scope, change: "missing" });
+        assert.deepEqual([result.status, result.value.error?.code], [404, "CHANGE_UNAVAILABLE"]);
+      });
+    });
+  });
+});
+
+test("validate reports valid and invalid changes from the real CLI", async (t) => {
+  await withProjects(async (root, other) => {
+    const change = "check-example";
+    await fixtureChange(root, change, "Validate the example");
+    const directory = join(root, "openspec", "changes", change, "specs", "example");
+    await mkdir(directory, { recursive: true });
+    const spec = join(directory, "spec.md");
+    await writeFile(
+      spec,
+      "## ADDED Requirements\n\n### Requirement: Example\nThe system SHALL work.\n\n#### Scenario: Example\n- **WHEN** it starts\n- **THEN** it works\n",
+    );
+
+    await withService(async (url) => {
+      const post = async (path, body) => {
+        const response = await fetch(`${url}${path}`, {
+          method: "POST",
+          headers: { authorization: "Bearer test-token" },
+          body: JSON.stringify({ directory: root, ...body }),
+        });
+        return { status: response.status, value: await response.json() };
+      };
+      const { value: listing } = await post("/changes");
+      const { value: otherListing } = await post("/changes", { directory: other });
+      const scope = { change, expectedRoot: root, planning: listing.planning };
+      await t.test("valid delta", async () => {
+        assert.deepEqual(await post("/validate", scope), {
+          status: 200,
+          value: { valid: true, issues: [] },
+        });
+      });
+      await t.test("nonzero exit with validation issues", async () => {
+        await writeFile(spec, "# Malformed delta\n");
+        const { status, value } = await post("/validate", scope);
+        assert.equal(status, 200);
+        assert.equal(value.valid, false);
+        assert.ok(value.issues.length > 1);
+        const issue = value.issues.find(({ path }) => path === "example/spec.md");
+        assert.equal(issue?.level, "ERROR");
+        assert.match(issue.message, /No delta sections found/);
+      });
+      await t.test("wrong root, stale planning identity, and missing change", async () => {
+        for (const [overrides, status, code] of [
+          [{ expectedRoot: other, planning: otherListing.planning }, 409, "ROOT_CHANGED"],
+          [{ planning: "stale" }, 409, "PLANNING_CHANGED"],
+          [{ change: "missing" }, 404, "CHANGE_UNAVAILABLE"],
+        ]) {
+          const result = await post("/validate", { ...scope, ...overrides });
+          assert.deepEqual([result.status, result.value.error?.code], [status, code]);
+        }
+      });
+    });
+  });
+});
+
+test("validate does not report partial results from malformed CLI output", async () => {
+  const root = await mockProject("openspec-validate-");
+  await mkdir(join(root, "openspec", "changes", "check-example"));
+  try {
+    await withService(
+      async (url) => {
+        const headers = { authorization: "Bearer test-token" };
+        const listing = await fetch(`${url}/changes`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ directory: root }),
+        }).then((response) => response.json());
+        const response = await fetch(`${url}/validate`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            directory: root,
+            change: "check-example",
+            expectedRoot: root,
+            planning: listing.planning,
+          }),
+        });
+        const value = await response.json();
+        assert.deepEqual([response.status, value.error?.code], [502, "BAD_CLI_OUTPUT"]);
+      },
+      async (_directory, [command]) => ({
+        ok: true,
+        value: {
+          root: { path: root, source: "nearest" },
+          ...(command === "list"
+            ? { changes: [] }
+            : command === "validate"
+              ? { items: [{ valid: false, issues: [{ level: "ERROR", path: "file" }] }] }
+              : {}),
+        },
+      }),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("focus signals without sharing its target and only a matching directory claims it", async (t) => {
+  const emitted = [];
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  await withService(
+    async (url) => {
+      const first = { directory: "/project", change: "first-change" };
+      const second = { directory: "/other-project", change: "second-change" };
+      const headers = { authorization: "Bearer test-token" };
+      const readFocus = (directory) =>
+        fetch(`${url}/focus?${new URLSearchParams({ directory })}`, { headers }).then((response) =>
+          response.json(),
+        );
+      const setFocus = async (body, status = 200) => {
+        const response = await fetch(`${url}/focus`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+        assert.equal(response.status, status);
+        await response.json();
+      };
+      assert.equal(await readFocus(first.directory), null);
+      await setFocus(first);
+      await setFocus(second);
+      assert.deepEqual(emitted, [["focus"], ["focus"]]);
+      now += 29_999;
+      assert.equal(await readFocus(first.directory), null);
+      assert.deepEqual(await readFocus(second.directory), second);
+      assert.equal(await readFocus(second.directory), null);
+      await setFocus(first);
+      now += 30_000;
+      assert.equal(await readFocus(first.directory), null);
+      const archive = { directory: first.directory, archive: "2026-11-23-first-change" };
+      await setFocus({ ...archive, archive: "../first-change" }, 400);
+      await setFocus({ ...archive, change: "first-change" }, 400);
+      await setFocus(archive);
+      assert.equal(await readFocus(second.directory), null);
+      assert.deepEqual(await readFocus(first.directory), archive);
+      assert.equal(await readFocus(first.directory), null);
+    },
+    undefined,
+    { emit: async (...event) => emitted.push(event) },
+  );
 });
 
 test("slimmer read routes use only their working command and reconcile missing tasks", async () => {

@@ -1,6 +1,7 @@
 import { HostRequestError, type HostClient } from "@openchamber/sdk";
 import { deriveChange, type DerivedChange } from "../model.js";
 import {
+  archivedChangeId,
   documentKey,
   type ArchivedChange,
   type SpecEntry,
@@ -18,8 +19,12 @@ import { mountArchiveDialog } from "./archive-dialog.js";
 import { archiveAllPrompt } from "./archive-prompt.js";
 import { actionPrompt, planningPrompt } from "./prompts.js";
 import type { PrimaryIntent } from "./primary-action.js";
+import { appendTrackedChange, resolveSessionChanges } from "./tracked-change.js";
+import { findProject } from "./project.js";
 import { inspectWorktreeDestination } from "./worktree.js";
 import { CORE_WORKFLOWS, loadWorkflows } from "./workflows.js";
+
+declare const __OPENSPEC_PANEL_ID__: string;
 
 export function mountController(host: HostClient, appRoot: HTMLElement): () => void {
   const client = createClient(host);
@@ -39,6 +44,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   } | null = null;
   let changes: DerivedChange[] = [];
   let workflows: ReadonlySet<Workflow> = new Set(CORE_WORKFLOWS);
+  let listedIds: ReadonlySet<string> = new Set();
+  let checkFocus = true;
+  let focusTarget: { kind: "change" | "archive"; name: string; reloaded: boolean } | null = null;
   let staleIds = new Set<string>();
   let unavailableIds = new Set<string>();
   let failures: { id: string; error: string }[] = [];
@@ -52,6 +60,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
   let search = "";
   let boardTab: BoardView = "changes";
   let archivedState: ReadState<ArchivedChange[]> | null = null;
+  let currentArchive: string | null = null;
   let specsState: ReadState<SpecEntry[]> | null = null;
   let specState: ReadState<string> | null = null;
   let selectedSpec: string | null = null;
@@ -83,6 +92,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     clearBrowse(true);
     changes = [];
     workflows = new Set(CORE_WORKFLOWS);
+    listedIds = new Set();
+    focusTarget = null;
+    checkFocus = true;
     staleIds = new Set();
     unavailableIds = new Set();
     failures = [];
@@ -167,6 +179,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         if (current !== previousScope) clearBrowse(true);
         readBrowse();
         const listed = new Set(listing.changes.map((entry) => entry.id));
+        listedIds = listed;
         if (selectedChange && !listed.has(selectedChange.id)) {
           unavailableIds.add(selectedChange.id);
           detailOpening++;
@@ -195,6 +208,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         settled = true;
         render();
         const summaryRequest = client.summaries(current, listing.changes);
+        if (checkFocus) claimFocus();
         const summaries = await summaryRequest;
         if (epoch !== startingEpoch || scope !== current || operation !== boardOperation) return;
         for (const entry of summaries) {
@@ -299,6 +313,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
             reconcileQueued = false;
             loadBoard({ refresh: true });
           }
+          applyFocus();
         }
       }
     })();
@@ -308,6 +323,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     archivedState = specsState = specState = null;
     returningToSpec = null;
     if (resetSelection) {
+      currentArchive = null;
       selectedSpec = null;
       specListScroll = 0;
     }
@@ -323,14 +339,15 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     }
   }
 
-  function readArchived(captured: Scope) {
-    const read = resources.archived(captured);
+  function readArchived(captured: Scope, reload = false) {
+    const read = resources.archived(captured, reload);
     archivedState = read.state;
     if (read.completion)
       void read.completion.then((state) => {
         if (disposed || scope !== captured || archivedState !== read.state) return;
         archivedState = state;
-        render();
+        if (!boardActive && focusTarget?.kind === "archive") applyFocus();
+        else render();
       });
     return read.state;
   }
@@ -394,6 +411,17 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           : actionPrompt(change, intent === "verify" || intent === "explore" ? intent : "primary");
       await host.compose({ text, mode: "replace" });
       if (!currentContext()) return;
+      if (expectedSession !== null)
+        void appendTrackedChange(host, expectedSession, change.id, currentContext, async () => {
+          const project = await findProject(host, captured.directory);
+          if (!project || !currentContext()) return [];
+          return resolveSessionChanges(
+            expectedSession,
+            await host.listSessions(project.id),
+            null,
+            listedIds,
+          );
+        });
       await host.toast({
         kind: "success",
         message: "Workflow prompt prepared in the open composer.",
@@ -435,8 +463,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
         throw new Error("This change is no longer applicable. Refresh before starting Apply.");
       dispatched = true;
       const result = await host.startSession({
-        providerId: "openspec-board",
+        providerId: __OPENSPEC_PANEL_ID__,
         id: change.id,
+        data: { kind: "change", change: change.id },
         title: `Apply ${change.id}`,
         url: "https://openspec.dev/docs/quickstart",
         projectId: project.id,
@@ -647,6 +676,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     )
       return;
     selectedSpec = null;
+    currentArchive = null;
     boardTab = "changes";
     selectedChange = change;
     boardScroll = boardView.scrollForChanges();
@@ -660,6 +690,81 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     selectArtifact(first?.id ?? change.artifacts[0]?.id ?? "");
     startContent(change);
     queueMicrotask(() => appRoot.querySelector<HTMLElement>(".detail-back button")?.focus());
+  }
+
+  function applyFocus() {
+    if (boardActive || !scope || !focusTarget) return;
+    const target = focusTarget;
+    const captured = scope;
+    if (target.kind === "archive") {
+      if (selectedChange) closeDetail(false);
+      selectedSpec = null;
+      returningToSpec = null;
+      boardTab = "archived";
+      const state = archivedState ?? readArchived(captured);
+      if (state.value?.some(({ name }) => name === target.name)) {
+        currentArchive = target.name;
+        focusTarget = null;
+        if (!archivedChangeId(target.name).includes(search.trim().toLocaleLowerCase())) search = "";
+        requestAnimationFrame(() => {
+          if (scope === captured && currentArchive === target.name)
+            boardView.scrollToCurrentArchive();
+        });
+      } else if (state.value && !target.reloaded) {
+        target.reloaded = true;
+        readArchived(captured, true);
+      } else if (!state.pending) {
+        focusTarget = null;
+        if (!state.error) focusNotice(`${target.name} isn't in this board's archived list.`);
+      }
+      render();
+      return;
+    }
+    focusTarget = null;
+    if (listedIds.has(target.name)) {
+      const change = changes.find(({ id }) => id === target.name);
+      if (change) openDetail(change, scope, epoch);
+    } else if (!target.reloaded) {
+      if (selectedChange) closeDetail();
+      focusTarget = { ...target, reloaded: true };
+      loadBoard({ refresh: true });
+    } else {
+      if (selectedChange) closeDetail();
+      focusNotice(`${target.name} isn't in this board's list.`);
+    }
+  }
+
+  function focusNotice(message: string) {
+    void host
+      .toast({ kind: "info", message })
+      .catch((caught: unknown) =>
+        console.warn("Could not show the OpenSpec focus notice.", caught),
+      );
+  }
+
+  function claimFocus() {
+    const captured = scope;
+    const startingEpoch = epoch;
+    if (!captured) {
+      checkFocus = true;
+      return;
+    }
+    checkFocus = false;
+    void client
+      .claimFocus(captured.directory)
+      .then((target) => {
+        if (!target || disposed || scope !== captured || epoch !== startingEpoch) return;
+        currentArchive = null;
+        focusTarget =
+          "archive" in target
+            ? { kind: "archive", name: target.archive, reloaded: false }
+            : { kind: "change", name: target.change, reloaded: false };
+        render();
+        applyFocus();
+      })
+      .catch((caught: unknown) =>
+        console.warn("Could not claim the OpenSpec board focus.", caught),
+      );
   }
 
   const createView = mountCreateDialog(client, {
@@ -712,8 +817,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     render();
     try {
       const result = await host.startSession({
-        providerId: "openspec-board",
+        providerId: __OPENSPEC_PANEL_ID__,
         id: "archive-all",
+        data: { kind: "archive-all" },
         title: "Archive completed OpenSpec changes",
         url: "https://openspec.dev/docs/quickstart",
         navigation: "preserve",
@@ -778,6 +884,10 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     },
     select: (view) => {
       boardTab = view;
+      if (view !== "archived") {
+        currentArchive = null;
+        if (focusTarget?.kind === "archive") focusTarget = null;
+      }
       returningToSpec = null;
       readBrowse();
       render();
@@ -902,11 +1012,12 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     window.scrollTo(0, specListScroll);
   }
 
-  function closeDetail() {
+  function closeDetail(restorePosition = true) {
     const name = selectedChange?.id;
     selection++;
     detailOpening++;
     selectedChange = null;
+    if (!restorePosition) return;
     render();
     requestAnimationFrame(() => window.scrollTo(0, boardScroll));
     queueMicrotask(() => focusBoard(name));
@@ -950,6 +1061,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
       workflows,
       view: boardTab,
       archived: archivedState,
+      currentArchive,
       specs: specsState,
       cards: changes.map((change) => ({
         change,
@@ -1005,6 +1117,9 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     );
   }
 
+  const offServiceEvent = host.onServiceEvent(({ topic }) => {
+    if (topic === "focus" && document.visibilityState === "visible") claimFocus();
+  });
   const offReady = host.onReady((ready) => {
     const changed = directory !== ready.directory;
     directory = ready.directory;
@@ -1032,6 +1147,7 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
     offReady();
     offDirectory();
     offSession();
+    offServiceEvent();
     resources.dispose();
     boardView.dispose();
     specView?.dispose();

@@ -1,11 +1,18 @@
-import type { HostClient } from "@openchamber/sdk";
+import type { GuestRequest, HostClient } from "@openchamber/sdk";
 import {
   decodeArchived,
+  decodeFocusTarget,
   decodeTaskResponse,
   decodeListing,
+  decodeModifiedChanges,
+  decodePendingArchives,
+  decodeSummary,
   decodeSummaries,
   decodeSpecs,
+  decodeValidation,
   decodeWorkflows,
+  type ChangeMetadata,
+  type FocusTarget,
   type Task,
   type ListingEntry,
 } from "../contracts.js";
@@ -33,7 +40,11 @@ function invalid(): ServiceRequestError {
 
 export function createClient(host: HostClient) {
   async function request(path: string, body: Record<string, unknown>): Promise<unknown> {
-    const result = await host.serviceRequest({ method: "POST", path, body: JSON.stringify(body) });
+    return send({ method: "POST", path, body: JSON.stringify(body) });
+  }
+
+  async function send(payload: GuestRequest): Promise<unknown> {
+    const result = await host.serviceRequest(payload);
     let value: unknown;
     try {
       value = JSON.parse(result.body);
@@ -79,6 +90,15 @@ export function createClient(host: HostClient) {
         await request("/archived", { directory, expectedRoot: root, expectedPlanning: planning }),
         decodeArchived,
       ),
+    pendingArchives: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/pending-archives", {
+          directory,
+          expectedRoot: root,
+          expectedPlanning: planning,
+        }),
+        decodePendingArchives,
+      ),
     specs: async ({ directory, root, planning }: Scope) =>
       decode(
         await request("/specs", { directory, expectedRoot: root, expectedPlanning: planning }),
@@ -93,6 +113,15 @@ export function createClient(host: HostClient) {
     },
     workflows: async (directory: string) =>
       decode(await request("/workflows", { directory }), decodeWorkflows),
+    modifiedChanges: async ({ directory, root, planning }: Scope) =>
+      decode(
+        await request("/modified-changes", {
+          directory,
+          expectedRoot: root,
+          expectedPlanning: planning,
+        }),
+        decodeModifiedChanges,
+      ),
     list: async (
       directory: string,
       expectedRoot?: string,
@@ -109,6 +138,41 @@ export function createClient(host: HostClient) {
       if (expectedPlanning && listing.planning !== expectedPlanning)
         throw new ServiceRequestError("PLANNING_CHANGED", "OpenSpec planning target changed.");
       return listing;
+    },
+    summary: async (scope: Scope, change: string): Promise<ChangeMetadata> => {
+      const value = decode(
+        await request("/summary", {
+          directory: scope.directory,
+          expectedRoot: scope.root,
+          expectedPlanning: scope.planning,
+          change,
+        }),
+        decodeSummary,
+      );
+      if (value.root !== scope.root)
+        throw new ServiceRequestError("ROOT_CHANGED", "OpenSpec root changed.");
+      if (value.id !== change) throw invalid();
+      return value;
+    },
+    validate: async (scope: Scope, change: string) =>
+      decode(
+        await request("/validate", {
+          directory: scope.directory,
+          expectedRoot: scope.root,
+          planning: scope.planning,
+          change,
+        }),
+        decodeValidation,
+      ),
+    setFocus: async (target: FocusTarget) => {
+      if (record(await request("/focus", target)).ok !== true) throw invalid();
+    },
+    claimFocus: async (directory: string) => {
+      const value = await send({ method: "GET", path: "/focus", query: { directory } });
+      if (value === null) return null;
+      const target = decode(value, decodeFocusTarget);
+      if (target.directory !== directory) throw invalid();
+      return target;
     },
     summaries: async (
       scope: Scope,

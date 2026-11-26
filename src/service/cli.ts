@@ -126,8 +126,12 @@ export async function runOpenSpec(
       } catch {
         // The CLI can fail before emitting a diagnostic envelope.
       }
-      if (code === 0 && value && typeof value === "object" && !Array.isArray(value)) {
-        finish({ ok: true, value: value as Json });
+      if (code === 0) {
+        finish(
+          value && typeof value === "object" && !Array.isArray(value)
+            ? { ok: true, value: value as Json }
+            : { ok: false, error: serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec output.", 502) },
+        );
       } else {
         finish({
           ok: false,

@@ -24,11 +24,14 @@ The extension requires OpenChamber 2.7.1 or later.
 3. In your project, run `openspec init --tools opencode`.
 4. In OpenChamber, open **Settings > Extensions** and add
    `https://github.com/jaythomasonprojects/openchamber-openspec.git`. Its service runs `openspec`
-   with your user access, and the `sessions` permission lets it start sessions for worktree Apply
-   and bulk archiving. If you trust that, choose **Allow and enable**.
+   and `git` with your user access. The `sessions` permission lets it start sessions for worktree
+   Apply and bulk archiving. If you trust that, choose **Allow and enable**.
 5. Open the **OpenSpec** rail panel, or find it under **Extension pages**.
 
 On a phone, open the board from the workspace drawer or the sessions list's **More** menu.
+
+Existing installations need one-time approval for the new `git` permission. In **Settings >
+Extensions**, open OpenSpec and choose **Review permissions**, then **Allow and enable**.
 
 The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
 `openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
@@ -45,6 +48,30 @@ Run `openspec update` after changing the profile to install the selected skills.
 
 To create a change, enter its name. Record its purpose in the proposal. Goals already recorded on
 older changes remain visible.
+
+## Track changes from Work Status
+
+Open **Work Status > OpenSpec** to see task progress for the current session. Select **＋ Track a
+change** to add another active change. To remove one, select its name and then **Untrack**. Your
+choices follow the session on devices connected to the same server.
+
+Use **Search changes** when the picker has more than one choice. If Git finds uncommitted edits in
+the current checkout's OpenSpec changes, those choices appear first with a **Modified in this
+checkout** icon. Nothing is tracked until you select a change.
+
+Expand **Tasks:** to see up to five tasks around the current task. Select a task title to read its
+description. The workflow chips follow the change's stage and the profile set by
+`openspec config profile`. Optional workflows such as **ff** and **verify** appear when configured.
+Run `openspec update` after changing the profile to install the configured skills. If the CLI cannot
+report the profile, the section uses the core workflows. Workflow chips prepare drafts without
+sending them. **validate** runs OpenSpec validation and previews the result. For the full report,
+run `openspec validate <change> --type change --json`.
+
+The footer contains **＋ Track a change**, **new** (when configured), **board**, and **Refresh**.
+**board** opens the board without changing its current view. To open a specific change, select its
+name and then **Open in board**. A tracked archive stays visible until it reaches the checkout's
+base. The section also refreshes when the shown session or one of its subagents finishes a turn. On
+touch screens, chips are 28px tall with 8px gaps, while the board keeps 44px touch targets.
 
 ## Planning across worktrees
 
