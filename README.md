@@ -28,6 +28,8 @@ The extension requires OpenChamber 2.7.1 or later.
    and bulk archiving. If you trust that, choose **Allow and enable**.
 5. Open the **OpenSpec** rail panel, or find it under **Extension pages**.
 
+On a phone, open the board from the workspace drawer or the sessions list's **More** menu.
+
 The board's help button opens the OpenSpec quickstart. For ~ x2 faster loads, run
 `openspec config set telemetry.enabled false`, since telemetry can slow down every CLI call.
 

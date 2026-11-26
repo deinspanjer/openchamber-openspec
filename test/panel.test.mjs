@@ -43,11 +43,12 @@ const artifacts = [
   { id: "specs", status: "done", outputPath: "specs/**/*.md", requires: ["proposal"] },
   { id: "tasks", status: "done", outputPath: "tasks.md", requires: ["specs"] },
 ];
-function hostHtml() {
+function hostHtml(pointer) {
   const data = JSON.stringify({ directory, root, artifacts, theme: theme("dark") });
   const themes = JSON.stringify({ dark: theme("dark"), light: theme("light") });
   return `<!doctype html><script>
     const { directory, root, artifacts, theme } = ${data};
+    const pointer = ${JSON.stringify(pointer)};
     let currentRoot = root;
     let currentPlanning = "fixture-planning";
     let projects = [{ id: "origin-project", name: "Origin", directory }];
@@ -198,6 +199,12 @@ function hostHtml() {
     window.__planning = next => { currentPlanning = next; };
     const ready = { directory, theme, locale: "en-AU", session: { id: "fixture-session" },
       surface: "panel", connection: { connected: true, account: "" }, settings: {}, item: null };
+    if (pointer) ready.device = { formFactor: pointer === "coarse" ? "phone" : "desktop", pointer,
+      insets: { top: 0, right: 0, bottom: 0, left: 0 }, keyboard: 0 };
+    window.__device = (bottom, keyboard) => {
+      ready.device = { ...ready.device, insets: { ...ready.device.insets, bottom }, keyboard };
+      __theme("light");
+    };
     addEventListener("message", (event) => {
       const message = event.data;
       if (!message || message.channel !== "openchamber.sdk" || message.v !== 1) return;
@@ -427,10 +434,10 @@ async function withPanel(run) {
     readFile(new URL("../panel/main.js", import.meta.url)),
   ]);
   const server = createServer((request, response) => {
-    const path = new URL(request.url, "http://127.0.0.1").pathname;
+    const { pathname: path, searchParams } = new URL(request.url, "http://127.0.0.1");
     if (path === "/") {
       response.setHeader("content-type", "text/html");
-      response.end(hostHtml());
+      response.end(hostHtml(searchParams.get("pointer")));
     } else if (path === "/panel/index.html") {
       response.setHeader("content-type", "text/html");
       response.end(html);
@@ -468,6 +475,138 @@ async function withPanel(run) {
     const failures = cleanup.filter((result) => result.status === "rejected");
     if (failures.length) throw new AggregateError(failures.map((result) => result.reason));
   }
+}
+
+for (const pointer of ["coarse", "fine"]) {
+  test(`phone controls respect the host's ${pointer} pointer at 320px`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+      await page.goto(`${url}?pointer=${pointer}`);
+      const frame = page.frameLocator("iframe");
+      const card = frame.getByRole("button", { name: "first-change", exact: true });
+      const create = frame.getByRole("button", { name: "new change", exact: true });
+      await card.waitFor();
+      const search = frame.getByRole("searchbox", { name: "Search changes" });
+      const boardHeight = [
+        (await create.boundingBox()).height,
+        (await search.boundingBox()).height,
+      ];
+      await create.click();
+      const dialog = frame.getByRole("dialog", { name: "New change" });
+      const fields = dialog.getByRole("textbox");
+      const dialogHeight = (await fields.first().boundingBox()).height;
+      const cancel = dialog.getByRole("button", { name: "cancel", exact: true });
+      const cancelHeight = (await cancel.boundingBox()).height;
+      await cancel.click();
+      await card.click();
+      const back = frame.getByRole("button", { name: "Back to changes", exact: true });
+      const tab = frame.getByRole("tab").first();
+      const detailHeight = [(await back.boundingBox()).height, (await tab.boundingBox()).height];
+
+      const heights = [...boardHeight, dialogHeight, cancelHeight, ...detailHeight];
+      if (pointer === "coarse") {
+        for (const height of heights)
+          assert.ok(height >= 44, `Expected at least 44px, got ${height}px`);
+      } else {
+        assert.deepEqual(boardHeight, [28, 36]);
+        assert.deepEqual(detailHeight, [28, 28]);
+        assert.equal(cancelHeight, 28);
+        assert.ok(dialogHeight < 44);
+      }
+      await page.close();
+    });
+  });
+}
+
+test("phone detail footer keeps its controls above a reported bottom inset", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+    await page.goto(`${url}?pointer=coarse`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("button", { name: "first-change", exact: true }).click();
+    const footer = frame.locator(".detail-footer");
+    const before = await footer.evaluate((node) =>
+      parseFloat(getComputedStyle(node).paddingBottom),
+    );
+    await page.evaluate(() => __device(26, 0));
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    assert.equal(
+      await footer.evaluate((node) => parseFloat(getComputedStyle(node).paddingBottom)),
+      before + 26,
+    );
+    await page.close();
+  });
+});
+
+test("phone create dialogue keeps its field and buttons above a reported keyboard", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 320, height: 640 } });
+    await page.goto(`${url}?pointer=coarse`);
+    const frame = page.frameLocator("iframe");
+    await frame.getByRole("button", { name: "new change", exact: true }).click();
+    const dialog = frame.getByRole("dialog", { name: "New change" });
+    await dialog.getByRole("textbox").first().fill("phone-change");
+    await page.evaluate(() => __device(0, 300));
+    await frame.locator('html[data-oc-theme="light"]').waitFor();
+    const layout = await dialog.evaluate((node) => ({
+      bottom: node.getBoundingClientRect().bottom,
+      maxBottom: innerHeight - 300,
+      controls: [...node.querySelectorAll("input, button")]
+        .filter((item) => item.getClientRects().length)
+        .map((item) => {
+          const rect = item.getBoundingClientRect();
+          return { top: rect.top, bottom: rect.bottom };
+        }),
+    }));
+    assert.ok(layout.bottom <= layout.maxBottom, "Dialogue extends behind the keyboard");
+    for (const { top, bottom } of layout.controls)
+      assert.ok(top >= 0 && bottom <= layout.maxBottom);
+    await page.close();
+  });
+});
+
+for (const pointer of ["coarse", "fine"]) {
+  test(`phone detail close and delete restore ${pointer}-pointer focus`, async () => {
+    await withPanel(async (browser, url) => {
+      const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
+      await page.goto(`${url}?pointer=${pointer}`);
+      const frame = page.frameLocator("iframe");
+      const card = frame.getByRole("button", { name: "first-change", exact: true });
+      const back = frame.getByRole("button", { name: "Back to changes", exact: true });
+      await card.click();
+      await back.click();
+      assert.equal(await card.evaluate((node) => node === document.activeElement), true);
+
+      await card.click();
+      await page.evaluate(() => __remove("first-change"));
+      await frame.locator(".detail").getByRole("button", { name: "refresh", exact: true }).click();
+      await frame.getByText("This change is no longer available", { exact: false }).waitFor();
+      await back.click();
+      const fallback =
+        pointer === "coarse"
+          ? frame.getByRole("button", { name: "new change", exact: true })
+          : frame.getByRole("searchbox", { name: "Search changes" });
+      assert.equal(
+        await fallback.evaluate((node) => node === document.activeElement),
+        true,
+        "Close without a card should restore focus to the pointer-specific fallback",
+      );
+
+      await frame.getByRole("button", { name: "second-change", exact: true }).click();
+      await frame.getByRole("button", { name: "Delete change", exact: true }).click();
+      const dialog = frame.getByRole("dialog", { name: /Delete second-change/ });
+      await dialog.getByRole("button", { name: "delete", exact: true }).click();
+      await page.waitForFunction(() => __completed.includes("/delete"));
+      await dialog.waitFor({ state: "hidden" });
+      await fallback.waitFor();
+      assert.equal(
+        await fallback.evaluate((node) => node === document.activeElement),
+        true,
+        "Delete should restore focus to the pointer-specific fallback",
+      );
+      await page.close();
+    });
+  });
 }
 
 test("presentation modal backdrops dim every dialog without changing keyboard cancellation", async () => {
@@ -789,6 +928,26 @@ test("board tabs retain the Changes cards, scroll and focus without reading agai
       ),
       before,
     );
+  });
+});
+
+test("coarse-pointer board tabs are touch-sized and reachable with arrow keys", async () => {
+  await withPanel(async (browser, url) => {
+    const page = await browser.newPage({ viewport: { width: 320, height: 700 }, hasTouch: true });
+    await page.goto(`${url}?pointer=coarse`);
+    const tabs = page.frameLocator("iframe").getByRole("tablist", { name: "OpenSpec views" });
+    const changes = tabs.getByRole("tab", { name: "Changes", exact: true });
+    const archived = tabs.getByRole("tab", { name: "Archived", exact: true });
+    const specs = tabs.getByRole("tab", { name: "Specs", exact: true });
+    await changes.waitFor({ timeout: 3000 });
+    for (const tab of [changes, archived, specs]) assert.ok((await tab.boundingBox()).height >= 44);
+    await changes.press("ArrowRight");
+    assert.equal(await archived.getAttribute("aria-selected"), "true");
+    assert.equal(await archived.evaluate((node) => document.activeElement === node), true);
+    await archived.press("ArrowRight");
+    assert.equal(await specs.getAttribute("aria-selected"), "true");
+    await specs.press("ArrowLeft");
+    assert.equal(await archived.getAttribute("aria-selected"), "true");
   });
 });
 

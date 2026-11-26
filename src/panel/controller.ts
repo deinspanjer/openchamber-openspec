@@ -918,7 +918,11 @@ export function mountController(host: HostClient, appRoot: HTMLElement): () => v
           (button) => button.textContent === name,
         )
       : undefined;
-    (opener ?? appRoot.querySelector<HTMLElement>('input[aria-label="Search changes"]'))?.focus();
+    const fallback =
+      document.documentElement.dataset.pointer === "coarse"
+        ? ".new-change-control button"
+        : 'input[aria-label="Search changes"]';
+    (opener ?? appRoot.querySelector<HTMLElement>(fallback))?.focus();
   }
 
   function render() {

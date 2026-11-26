@@ -30,7 +30,8 @@
         "id": "openspec-board",
         "name": "OpenSpec",
         "icon": "assets/openspec-logo.svg",
-        "entry": "panel/index.html"
+        "entry": "panel/index.html",
+        "mobile": true
       },
       "page": true,
       "capabilities": [
