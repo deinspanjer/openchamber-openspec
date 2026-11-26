@@ -3982,10 +3982,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep2, value } = collItem;
+        const { start, key, sep: sep3, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep2?.[0],
+          next: key ?? sep3?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -3999,7 +3999,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep2) {
+          if (!keyProps.anchor && !keyProps.tag && !sep3) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map.comment)
@@ -4023,7 +4023,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep2 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep3 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -4039,7 +4039,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep2, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep3, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -4130,7 +4130,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep2 = "";
+        let sep3 = "";
         for (const token2 of end) {
           const { source, type } = token2;
           switch (type) {
@@ -4144,13 +4144,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep2 + cb;
-              sep2 = "";
+                comment += sep3 + cb;
+              sep3 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep2 += source;
+                sep3 += source;
               hasSpace = true;
               break;
             default:
@@ -4193,18 +4193,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep2, value } = collItem;
+        const { start, key, sep: sep3, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep2?.[0],
+          next: key ?? sep3?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep2 && !value) {
+          if (!props.anchor && !props.tag && !sep3 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -4258,8 +4258,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep2 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep2, null, props, onError);
+        if (!isMap && !sep3 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep3, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -4271,7 +4271,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep2 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep3 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -4282,8 +4282,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep2)
-                for (const st of sep2) {
+              if (sep3)
+                for (const st of sep3) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -4300,7 +4300,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep2, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep3, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -4480,7 +4480,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep2 = "";
+      let sep3 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines[i][0].slice(trimIndent) + "\n";
@@ -4497,24 +4497,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep2 + indent.slice(trimIndent) + content;
-          sep2 = "\n";
+          value += sep3 + indent.slice(trimIndent) + content;
+          sep3 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep2 === " ")
-            sep2 = "\n";
-          else if (!prevMoreIndented && sep2 === "\n")
-            sep2 = "\n\n";
-          value += sep2 + indent.slice(trimIndent) + content;
-          sep2 = "\n";
+          if (sep3 === " ")
+            sep3 = "\n";
+          else if (!prevMoreIndented && sep3 === "\n")
+            sep3 = "\n\n";
+          value += sep3 + indent.slice(trimIndent) + content;
+          sep3 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep2 === "\n")
+          if (sep3 === "\n")
             value += "\n";
           else
-            sep2 = "\n";
+            sep3 = "\n";
         } else {
-          value += sep2 + content;
-          sep2 = " ";
+          value += sep3 + content;
+          sep3 = " ";
           prevMoreIndented = false;
         }
       }
@@ -4696,25 +4696,25 @@ var require_resolve_flow_scalar = __commonJS({
       if (!match)
         return source;
       let res = match[1];
-      let sep2 = " ";
+      let sep3 = " ";
       let pos = first.lastIndex;
       line.lastIndex = pos;
       while (match = line.exec(source)) {
         if (match[1] === "") {
-          if (sep2 === "\n")
-            res += sep2;
+          if (sep3 === "\n")
+            res += sep3;
           else
-            sep2 = "\n";
+            sep3 = "\n";
         } else {
-          res += sep2 + match[1];
-          sep2 = " ";
+          res += sep3 + match[1];
+          sep3 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep2 + (match?.[1] ?? "");
+      return res + sep3 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -5516,14 +5516,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep2, value }) {
+    function stringifyItem({ start, key, sep: sep3, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep2)
-        for (const st of sep2)
+      if (sep3)
+        for (const st of sep3)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -6673,18 +6673,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep2;
+          let sep3;
           if (scalar.end) {
-            sep2 = scalar.end;
-            sep2.push(this.sourceToken);
+            sep3 = scalar.end;
+            sep3.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep2 = [this.sourceToken];
+            sep3 = [this.sourceToken];
           const map = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep: sep2 }]
+            items: [{ start, key: scalar, sep: sep3 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map;
@@ -6837,15 +6837,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep2 = it.sep;
-                  sep2.push(this.sourceToken);
+                  const sep3 = it.sep;
+                  sep3.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep2 }]
+                    items: [{ start: start2, key, sep: sep3 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -7039,13 +7039,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep2 = fc.end.splice(1, fc.end.length);
-            sep2.push(this.sourceToken);
+            const sep3 = fc.end.splice(1, fc.end.length);
+            sep3.push(this.sourceToken);
             const map = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep2 }]
+              items: [{ start, key: fc, sep: sep3 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map;
@@ -7800,7 +7800,7 @@ var require_cross_spawn = __commonJS({
     var cp = require("child_process");
     var parse = require_parse();
     var enoent = require_enoent();
-    function spawn2(command, args, options) {
+    function spawn3(command, args, options) {
       const parsed = parse(command, args, options);
       const spawned = cp.spawn(parsed.command, parsed.args, parsed.options);
       enoent.hookChildProcess(spawned, parsed);
@@ -7812,8 +7812,8 @@ var require_cross_spawn = __commonJS({
       result.error = result.error || enoent.verifyENOENTSync(result.status, parsed);
       return result;
     }
-    module2.exports = spawn2;
-    module2.exports.spawn = spawn2;
+    module2.exports = spawn3;
+    module2.exports.spawn = spawn3;
     module2.exports.sync = spawnSync;
     module2.exports._parse = parse;
     module2.exports._enoent = enoent;
@@ -7830,11 +7830,200 @@ module.exports = __toCommonJS(service_exports);
 
 // src/service/http.ts
 var import_node_http = require("node:http");
+var import_node_path3 = require("node:path");
 
-// src/service/openspec.ts
-var import_promises = require("node:fs/promises");
-var import_node_path = require("node:path");
-var import_yaml = __toESM(require_dist(), 1);
+// node_modules/@openchamber/sdk/dist/scrollbar-style.js
+var GUEST_SCROLLING_ATTRIBUTE = "data-oc-scrolling";
+var GUEST_SCROLLBAR_CSS = `
+:root {
+  /* Quiet at rest like the app's own thumbs; hover gives a clear grab target. */
+  --oc-scrollbar-thumb: color-mix(in srgb, var(--oc-muted, currentColor) 18%, transparent);
+  --oc-scrollbar-thumb-hover: color-mix(in srgb, var(--oc-muted, currentColor) 36%, transparent);
+  scrollbar-gutter: stable;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+:hover, [${GUEST_SCROLLING_ATTRIBUTE}] {
+  scrollbar-color: var(--oc-scrollbar-thumb) transparent;
+}
+/* Chromium's standard scrollbar properties otherwise override its pseudo-elements. */
+@supports selector(::-webkit-scrollbar) {
+  *, :hover, [${GUEST_SCROLLING_ATTRIBUTE}] { scrollbar-width: auto; scrollbar-color: auto; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; background: transparent; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    min-width: 24px;
+    min-height: 24px;
+  }
+  :hover::-webkit-scrollbar-thumb, [${GUEST_SCROLLING_ATTRIBUTE}]::-webkit-scrollbar-thumb { background: var(--oc-scrollbar-thumb); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--oc-scrollbar-thumb-hover); }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+}
+@media (forced-colors: active) {
+  *, :hover, [${GUEST_SCROLLING_ATTRIBUTE}] { scrollbar-color: auto; }
+  ::-webkit-scrollbar-thumb, ::-webkit-scrollbar-thumb:hover { background: CanvasText; }
+}
+`;
+function installGuestScrollbarActivity(doc) {
+  const root = doc.documentElement;
+  if (root.hasAttribute("data-oc-scrollbar-activity"))
+    return;
+  root.setAttribute("data-oc-scrollbar-activity", "");
+  const timers = /* @__PURE__ */ new WeakMap();
+  doc.addEventListener("scroll", (event) => {
+    const target = event.target === doc ? root : event.target;
+    if (!(target instanceof Element))
+      return;
+    if (!target.hasAttribute("data-oc-scrolling"))
+      target.setAttribute("data-oc-scrolling", "");
+    const pending = timers.get(target);
+    if (pending !== void 0)
+      clearTimeout(pending);
+    timers.set(target, setTimeout(() => {
+      timers.delete(target);
+      target.removeAttribute("data-oc-scrolling");
+    }, 1e3));
+  }, { capture: true, passive: true });
+}
+var GUEST_SCROLLBAR_SCRIPT = `(${installGuestScrollbarActivity.toString()})(document);`;
+
+// node_modules/@openchamber/sdk/dist/manifest.js
+var GUEST_PROVIDER_LOGO_BYTES_MAX = 1024 * 1024;
+var TRACKER_URL_TOKENS = ["{id}", "{segment}", "{segments+}"];
+var TRACKER_URL_TOKEN_SET = new Set(TRACKER_URL_TOKENS);
+
+// node_modules/@openchamber/sdk/dist/session-events.js
+var GUEST_SESSION_EVENT_TYPES = [
+  "turn-finished",
+  "turn-failed",
+  "permission-asked",
+  "question-asked",
+  "turn-started",
+  "session-created",
+  "session-archived",
+  "session-deleted"
+];
+var SESSION_EVENTS_IDLE_MS = 10 * 6e4;
+var EVENT_TYPES = new Set(GUEST_SESSION_EVENT_TYPES);
+
+// node_modules/@openchamber/sdk/dist/service-host.js
+var SERVICE_HOST_PATH = "/service/call";
+var OPENCHAMBER_HOST_CALLBACK_URL_ENV = "OPENCHAMBER_HOST_CALLBACK_URL";
+var SERVICE_HOST_TIMEOUT_MS = 3e4;
+var SERVICE_SCHEDULE_IDLE_MS = 10 * 6e4;
+var MENTIONS_IDLE_MS = 10 * 6e4;
+var ServiceHostError = class extends Error {
+  code;
+  status;
+  constructor(message, code, status) {
+    super(message);
+    this.name = "ServiceHostError";
+    this.code = code;
+    this.status = status;
+  }
+};
+var createServiceHost = ({ env }) => {
+  const call = async (method, input) => {
+    const base = env[OPENCHAMBER_HOST_CALLBACK_URL_ENV];
+    const token2 = env.OPENCHAMBER_SERVICE_TOKEN;
+    if (!base || !token2)
+      throw new ServiceHostError("This service was not started by OpenChamber.", "HOST_UNAVAILABLE", 0);
+    let response;
+    try {
+      response = await fetch(`${base.replace(/\/+$/, "")}${SERVICE_HOST_PATH}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token2}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ method, input }),
+        signal: AbortSignal.timeout(SERVICE_HOST_TIMEOUT_MS)
+      });
+    } catch {
+      throw new ServiceHostError("OpenChamber did not answer.", "HOST_UNAVAILABLE", 0);
+    }
+    const body = await response.json().catch(() => null);
+    if (response.ok && body?.result !== void 0)
+      return body.result;
+    throw new ServiceHostError(body?.error?.message ?? `OpenChamber answered HTTP ${response.status}.`, body?.error?.code ?? "HOST_UNAVAILABLE", response.status);
+  };
+  return {
+    sessions: {
+      start: (input) => call("sessions.start", input),
+      send: (sessionId, prompt) => call("sessions.send", { sessionId, prompt }),
+      retry: (sessionId) => call("sessions.retry", { sessionId }),
+      status: (sessionId) => call("sessions.status", { sessionId }),
+      lastReply: (sessionId) => call("sessions.lastReply", { sessionId }),
+      stop: (sessionId) => call("sessions.stop", { sessionId }),
+      answerPermission: (sessionId, requestId, answer) => call("sessions.answerPermission", { sessionId, requestId, ...answer }),
+      answerForm: (sessionId, formId, values, message) => call("sessions.answerForm", { sessionId, formId, values, ...message === void 0 ? {} : { message } })
+    },
+    setInstructions: (directory, text) => call("instructions.set", { directory, text }),
+    emit: (topic, data) => call("panels.emit", { topic, data }),
+    readSettings: () => call("settings.read", {}).then(({ settings }) => settings),
+    needsConfiguration: (message) => call("status.set", { needsConfiguration: message }),
+    setMark: (target, mark) => call("marks.set", { target, mark })
+  };
+};
+
+// node_modules/@openchamber/sdk/dist/contract.js
+var GUEST_FILE_STAT_KINDS = ["file", "directory", "other", "missing"];
+var GUEST_GENERATE_LATE_KEEP_MS = 60 * 6e4;
+var HOST_REQUEST_ERROR_CODES = [
+  "HOST_UNAVAILABLE",
+  "HOST_TIMEOUT",
+  "HOST_REJECTED",
+  "DISCONNECTED",
+  "DISABLED",
+  "BAD_PATH",
+  "NO_INTEGRATION",
+  "NO_SERVICE",
+  "SERVICE_FAILED",
+  "REQUEST_FAILED",
+  "RESPONSE_TOO_LARGE",
+  "NO_SESSION",
+  "SESSION_BUSY",
+  "NOT_GRANTED",
+  "NO_DIRECTORY",
+  "NOT_FOUND",
+  "FILE_TOO_LARGE",
+  "DENIED",
+  "NO_MODEL",
+  "MODEL_FAILED",
+  "UNSUPPORTED"
+];
+var SERVICE_STATUS_VALUES = ["stopped", "starting", "ready", "failed"];
+var hostRequestErrorCodeSet = new Set(HOST_REQUEST_ERROR_CODES);
+var serviceStatusSet = new Set(SERVICE_STATUS_VALUES);
+var fileStatKindSet = new Set(GUEST_FILE_STAT_KINDS);
+
+// node_modules/@openchamber/sdk/dist/service-providers.js
+var BROWSER_CONTROL_ACTIONS = [
+  "browser.open",
+  "browser.snapshot",
+  "browser.click",
+  "browser.type",
+  "browser.select",
+  "browser.scroll",
+  "browser.back",
+  "browser.forward",
+  "browser.inspect",
+  "browser.capture",
+  "browser.resize",
+  "browser.close"
+];
+var BROWSER_PROVIDER_IDLE_MS = 10 * 6e4;
+var CONTROL_ACTIONS = new Set(BROWSER_CONTROL_ACTIONS);
+var SOURCE_CONTROL_PROVIDER_IDLE_MS = 10 * 6e4;
+var NOTIFICATIONS_PROVIDER_IDLE_MS = 10 * 6e4;
+var TRACKER_PROVIDER_IDLE_MS = 10 * 6e4;
+var QUOTA_PROVIDER_IDLE_MS = 10 * 6e4;
+
+// node_modules/@openchamber/sdk/dist/service-surface.js
+var SURFACE_CONTROLLERS = ["none", "agent", "user"];
+var CONTROLLERS = new Set(SURFACE_CONTROLLERS);
 
 // src/model.ts
 function isChangeName(value) {
@@ -7842,6 +8031,25 @@ function isChangeName(value) {
 }
 
 // src/contracts.ts
+var archiveCommand = (change, skipSpecs) => `openspec archive "${change}" --yes${skipSpecs ? " --skip-specs" : ""} --json`;
+var ALL_WORKFLOWS = [
+  "propose",
+  "explore",
+  "new",
+  "continue",
+  "apply",
+  "update",
+  "ff",
+  "sync",
+  "archive",
+  "bulk-archive",
+  "verify",
+  "onboard"
+];
+var CORE_WORKFLOWS = ["propose", "explore", "apply", "update", "sync", "archive"];
+function isWorkflow(value) {
+  return ALL_WORKFLOWS.some((name) => name === value);
+}
 function record(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid data.");
   return value;
@@ -7849,6 +8057,22 @@ function record(value) {
 function string(value) {
   if (typeof value !== "string" || !value.length) throw new Error("Invalid string.");
   return value;
+}
+function decodeArchiveResult(value) {
+  const result = record(value);
+  if (result.outcome === "archived" && Array.isArray(result.warnings))
+    return {
+      outcome: result.outcome,
+      archivedAs: string(result.archivedAs),
+      warnings: result.warnings.map(string)
+    };
+  if (result.outcome === "failed")
+    return {
+      outcome: result.outcome,
+      command: string(result.command),
+      output: string(result.output)
+    };
+  throw new Error("Invalid archive result.");
 }
 function count(value) {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -7859,6 +8083,18 @@ function names(value) {
   if (!Array.isArray(value)) throw new Error("Invalid dependency list.");
   return value.map(string);
 }
+function decodeValidation(value) {
+  const { valid, issues } = record(value);
+  if (typeof valid !== "boolean" || !Array.isArray(issues))
+    throw new Error("Invalid validation result.");
+  return {
+    valid,
+    issues: issues.map((value2) => {
+      const { level, path, message } = record(value2);
+      return { level: string(level), path: string(path), message: string(message) };
+    })
+  };
+}
 function decodeListingEntry(value, key = "id") {
   const item = record(value);
   const id = string(item[key]);
@@ -7867,6 +8103,46 @@ function decodeListingEntry(value, key = "id") {
   const totalTasks = count(item.totalTasks);
   if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
   return { id, completedTasks, totalTasks };
+}
+function decodeArchived(value) {
+  const { changes } = record(value);
+  if (!Array.isArray(changes)) throw new Error("Invalid archived listing.");
+  const archived = changes.map((value2) => {
+    const item = record(value2);
+    const name = string(item.name);
+    const completedTasks = count(item.completedTasks);
+    const totalTasks = count(item.totalTasks);
+    if (completedTasks > totalTasks) throw new Error("Invalid task count bounds.");
+    return { name, completedTasks, totalTasks };
+  });
+  if (new Set(archived.map(({ name }) => name)).size !== archived.length)
+    throw new Error("Duplicate archived change.");
+  return archived;
+}
+var archivedChangeId = (name) => name.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+function decodeFocusTarget(value) {
+  const { directory, change, archive } = record(value);
+  if (typeof directory === "string") {
+    if (archive === void 0 && typeof change === "string" && isChangeName(change))
+      return { directory, change };
+    if (change === void 0 && typeof archive === "string" && isChangeName(archivedChangeId(archive)))
+      return { directory, archive };
+  }
+  throw new Error("Invalid board focus target.");
+}
+function isSpecId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/.exec(value)?.[0] === value;
+}
+function decodeSpecs(value) {
+  const { specs } = record(value);
+  if (!Array.isArray(specs)) throw new Error("Invalid spec listing.");
+  const entries = specs.map((value2) => {
+    const { id, requirementCount } = record(value2);
+    return { id: string(id), requirementCount: count(requirementCount) };
+  });
+  if (new Set(entries.map(({ id }) => id)).size !== entries.length)
+    throw new Error("Duplicate spec.");
+  return entries;
 }
 function decodeArtifacts(value, requires) {
   if (!Array.isArray(value)) throw new Error("Invalid artefacts.");
@@ -7913,12 +8189,23 @@ function decodeTasks(value) {
   return tasks;
 }
 
+// src/service/openspec.ts
+var import_promises2 = require("node:fs/promises");
+var import_node_path2 = require("node:path");
+var import_yaml = __toESM(require_dist(), 1);
+
+// src/service/git.ts
+var import_cross_spawn2 = __toESM(require_cross_spawn(), 1);
+var import_promises = require("node:fs/promises");
+var import_node_path = require("node:path");
+
 // src/service/cli.ts
 var import_cross_spawn = __toESM(require_cross_spawn(), 1);
 var COMMAND_TIMEOUT_MS = 15e3;
 var STDOUT_BYTES = 1024 * 1024;
 var STDERR_BYTES = 64 * 1024;
 var TERMINATION_GRACE_MS = 500;
+var CLI_SHUTDOWN_MS = 2 * TERMINATION_GRACE_MS;
 var MAX_RESPONSE_BYTES = 24e4;
 var ServiceFault = class extends Error {
   constructor(code, message, status, outcome) {
@@ -8011,8 +8298,10 @@ async function runOpenSpec(directory, args, remainingMs = COMMAND_TIMEOUT_MS, op
         value = JSON.parse(Buffer.concat(stdout).toString("utf8"));
       } catch {
       }
-      if (code === 0 && value && typeof value === "object" && !Array.isArray(value)) {
-        finish({ ok: true, value });
+      if (code === 0) {
+        finish(
+          value && typeof value === "object" && !Array.isArray(value) ? { ok: true, value } : { ok: false, error: serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec output.", 502) }
+        );
       } else {
         finish({
           ok: false,
@@ -8028,14 +8317,202 @@ async function runOpenSpec(directory, args, remainingMs = COMMAND_TIMEOUT_MS, op
   });
 }
 
+// src/service/git.ts
+var MAX_OUTPUT_BYTES = 1024 * 1024;
+var badOutput = () => serviceError("BAD_GIT_OUTPUT", "Invalid Git status data.", 502);
+var timedOut = () => serviceError("GIT_TIMEOUT", "Git status request timed out.", 504);
+var unavailable = () => serviceError("GIT_UNAVAILABLE", "Git status is unavailable.", 503);
+async function git(cwd, args, deadline, missing) {
+  const timeout = deadline - Date.now();
+  if (timeout <= 0) throw timedOut();
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith("GIT_"))
+  );
+  return await new Promise((resolve2, reject) => {
+    const child = (0, import_cross_spawn2.default)("git", args, {
+      cwd,
+      env: { ...env, LC_ALL: "C", GIT_NO_LAZY_FETCH: "1", GIT_ALLOW_PROTOCOL: "" },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true
+    });
+    const stdout = [];
+    const stderr = [];
+    let stopped = false;
+    const stop = (fault) => {
+      if (stopped) return;
+      stopped = true;
+      clearTimeout(timer);
+      child.kill("SIGKILL");
+      child.stdout.destroy();
+      child.stderr.destroy();
+      reject(fault);
+    };
+    const timer = setTimeout(() => stop(timedOut()), timeout);
+    for (const [stream, output] of [
+      [child.stdout, stdout],
+      [child.stderr, stderr]
+    ]) {
+      let size = 0;
+      stream.on("data", (value) => {
+        if (stopped) return;
+        size += value.length;
+        if (size > MAX_OUTPUT_BYTES)
+          stop(serviceError("GIT_OUTPUT_TOO_LARGE", "Git status output is too large.", 413));
+        else output.push(value);
+      });
+    }
+    child.on("error", () => {
+      clearTimeout(timer);
+      reject(Date.now() >= deadline ? timedOut() : unavailable());
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (stopped) return;
+      if (Date.now() >= deadline) return reject(timedOut());
+      if (code === 0) return resolve2(Buffer.concat(stdout).toString("utf8"));
+      const diagnostic = Buffer.concat(stderr).toString("utf8");
+      if (missing === "worktree" && /^fatal: (?:not a git repository\b|this operation must be run in a work tree\b)/.test(
+        diagnostic
+      ) || missing === "head" && /^fatal: Not a valid object name HEAD\r?\n?$/.test(diagnostic))
+        return resolve2(null);
+      reject(unavailable());
+    });
+  });
+}
+function inside(path, parent) {
+  const suffix = (0, import_node_path.relative)(parent, path);
+  return suffix !== ".." && !suffix.startsWith(`..${import_node_path.sep}`) && !(0, import_node_path.isAbsolute)(suffix);
+}
+async function isRealDirectory(path) {
+  try {
+    return (await (0, import_promises.lstat)(path)).isDirectory() && await (0, import_promises.realpath)(path) === path;
+  } catch (caught) {
+    if (caught.code === "ENOENT") return false;
+    throw caught;
+  }
+}
+function changeIds(output, prefix) {
+  if (output === "") return [];
+  if (!output.endsWith("\0")) throw badOutput();
+  const changes = /* @__PURE__ */ new Set();
+  for (const record2 of output.slice(0, -1).split("\0")) {
+    if (record2.length < 4 || !/^(?! {2})(?:[ MADTU]{2}|\?\?) /.test(record2)) throw badOutput();
+    const path = record2.slice(3);
+    if (!path.startsWith(prefix)) continue;
+    const child = path.slice(prefix.length);
+    const slash = child.indexOf("/");
+    if (slash < 1 || slash === child.length - 1) continue;
+    const id = child.slice(0, slash);
+    if (id !== "archive" && isChangeName(id)) changes.add(id);
+  }
+  return [...changes];
+}
+async function localChanges(directory, root, planningRoot, deadline) {
+  if (planningRoot !== (0, import_node_path.join)(root, "openspec")) return null;
+  const selected = await (0, import_promises.realpath)(directory);
+  const reported = await git(selected, ["rev-parse", "--show-toplevel"], deadline, "worktree");
+  if (reported === null) return null;
+  if (!reported.endsWith("\n") || !(0, import_node_path.isAbsolute)(reported.slice(0, -1))) throw badOutput();
+  const top = await (0, import_promises.realpath)(reported.slice(0, -1));
+  const changes = (0, import_node_path.join)(planningRoot, "changes");
+  if (!inside(selected, top) || !inside(planningRoot, top) || !await isRealDirectory(planningRoot) || !await isRealDirectory(changes))
+    return null;
+  const prefix = (0, import_node_path.relative)(top, changes).split(import_node_path.sep).join("/");
+  return { top, changes, prefix };
+}
+var readOnly = ["--no-optional-locks", "--literal-pathspecs", "-c", "core.fsmonitor=false"];
+async function modifiedChangeIds(directory, root, planningRoot, deadline) {
+  const local = await localChanges(directory, root, planningRoot, deadline);
+  if (!local) return [];
+  const { top, prefix } = local;
+  const output = await git(
+    top,
+    [
+      ...readOnly,
+      "status",
+      "--porcelain=v1",
+      "-z",
+      "--untracked-files=all",
+      "--no-renames",
+      "--ignore-submodules=all",
+      "--",
+      prefix
+    ],
+    deadline
+  );
+  return changeIds(output, `${prefix}/`);
+}
+var baseRefs = [
+  "refs/remotes/origin/HEAD",
+  "refs/remotes/origin/main",
+  "refs/remotes/origin/master",
+  "refs/heads/main",
+  "refs/heads/master"
+];
+async function pendingArchives(directory, root, planningRoot, names2, deadline) {
+  if (!names2.length) return [];
+  const local = await localChanges(directory, root, planningRoot, deadline);
+  if (!local || !await isRealDirectory((0, import_node_path.join)(local.changes, "archive"))) return [];
+  const { top, prefix } = local;
+  const refs = await git(
+    top,
+    [...readOnly, "for-each-ref", "--format=%(refname)", ...baseRefs],
+    deadline
+  );
+  if (refs && !refs.endsWith("\n")) throw badOutput();
+  const available = new Set(refs ? refs.slice(0, -1).split("\n") : []);
+  for (const ref of available)
+    if (!baseRefs.some((base2) => ref === base2 || ref.startsWith(`${base2}/`))) throw badOutput();
+  const base = baseRefs.find((ref) => available.has(ref));
+  const archivePrefix = `${prefix}/archive/`;
+  const args = (ref) => [
+    ...readOnly,
+    "ls-tree",
+    "-d",
+    "--name-only",
+    "-z",
+    ref,
+    "--",
+    archivePrefix
+  ];
+  const output = base ? await git(top, args(base), deadline) : await git(top, args("HEAD"), deadline, "head");
+  if (!output) return names2;
+  if (!output.endsWith("\0")) throw badOutput();
+  const landed = /* @__PURE__ */ new Set();
+  for (const path of output.slice(0, -1).split("\0")) {
+    if (!path.startsWith(archivePrefix)) throw badOutput();
+    const name = path.slice(archivePrefix.length);
+    if (!name || name.includes("/")) throw badOutput();
+    landed.add(name);
+  }
+  return names2.filter((name) => !landed.has(name));
+}
+
 // src/service/openspec.ts
 var failure = (error) => ({ ok: false, error });
-var inside = (path, parent) => path === parent || path.startsWith(`${parent}${import_node_path.sep}`);
-function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
+var inside2 = (path, parent) => path === parent || path.startsWith(`${parent}${import_node_path2.sep}`);
+async function readDocumentText(path) {
+  const file = await (0, import_promises2.open)(path, "r");
+  try {
+    const buffer = Buffer.alloc(MAX_RESPONSE_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    if (length > MAX_RESPONSE_BYTES)
+      throw serviceError("DOCUMENT_TOO_LARGE", "Document is too large to display.", 413);
+    return buffer.toString("utf8", 0, length);
+  } finally {
+    await file.close();
+  }
+}
+function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises2.rm) {
   async function planningScope(root, expectedPlanning) {
     try {
-      const planningRoot = await (0, import_promises.realpath)((0, import_node_path.join)(root, "openspec"));
-      const stat = await (0, import_promises.lstat)(planningRoot);
+      const planningRoot = await (0, import_promises2.realpath)((0, import_node_path2.join)(root, "openspec"));
+      const stat = await (0, import_promises2.lstat)(planningRoot);
       if (!stat.isDirectory()) throw new Error("Planning is not a directory.");
       const planning = JSON.stringify([planningRoot, stat.dev, stat.ino]);
       if (planning.length > 4096) throw new Error("Planning identity exceeds bounds.");
@@ -8052,7 +8529,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     }
   }
   async function context(directory, expectedRoot, expectedPlanning) {
-    if (!(0, import_node_path.isAbsolute)(directory)) return serviceError("BAD_DIRECTORY", "Directory must be absolute.");
+    if (!(0, import_node_path2.isAbsolute)(directory)) return serviceError("BAD_DIRECTORY", "Directory must be absolute.");
     const result = await run(directory, ["context"]);
     if (!result.ok) return result.error;
     const root = result.value.root?.path;
@@ -8062,13 +8539,13 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
         "This directory does not resolve to an OpenSpec project.",
         404
       );
-    const canonical = await (0, import_promises.realpath)(root);
+    const canonical = await (0, import_promises2.realpath)(root);
     if (expectedRoot !== void 0 && canonical !== expectedRoot)
       return serviceError("ROOT_CHANGED", "The selected OpenSpec root has changed.", 409);
     return planningScope(canonical, expectedPlanning);
   }
   async function checked(directory, args, current, strict = false, reconcileRootless = false) {
-    if (!(0, import_node_path.isAbsolute)(directory))
+    if (!(0, import_node_path2.isAbsolute)(directory))
       return failure(serviceError("BAD_DIRECTORY", "Directory must be absolute."));
     const result = await run(directory, args);
     const rootlessFailure = reconcileRootless && !result.ok && result.error.code === "OPENSPEC_ERROR" && result.value && !("root" in result.value);
@@ -8082,14 +8559,14 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
             404
           )
         );
-      if (current && await (0, import_promises.realpath)(root.path) !== current.root)
+      if (current && await (0, import_promises2.realpath)(root.path) !== current.root)
         return failure(
           serviceError("ROOT_CHANGED", "The selected OpenSpec root has changed.", 409)
         );
     }
     if (!result.ok) return result;
     const reported = result.value.root?.path;
-    if (current && reported !== void 0 && (typeof reported !== "string" || await (0, import_promises.realpath)(reported) !== current.root))
+    if (current && reported !== void 0 && (typeof reported !== "string" || await (0, import_promises2.realpath)(reported) !== current.root))
       return failure(
         serviceError(
           "ROOT_CHANGED",
@@ -8111,26 +8588,26 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     return { ...current, changeRoot, status: result.value };
   }
   async function validatedChange(current, change, status) {
-    const parent = (0, import_node_path.join)(current.planningRoot, "changes");
-    const target = (0, import_node_path.join)(parent, change);
+    const parent = (0, import_node_path2.join)(current.planningRoot, "changes");
+    const target = (0, import_node_path2.join)(parent, change);
     for (const path of [parent, target]) {
       try {
-        if ((await (0, import_promises.lstat)(path)).isSymbolicLink())
+        if ((await (0, import_promises2.lstat)(path)).isSymbolicLink())
           throw serviceError("BAD_CHANGE_ROOT", "Change path is not a real named directory.", 409);
       } catch (caught) {
         if (caught.code !== "ENOENT") throw caught;
       }
     }
-    if (status && (typeof status.changeRoot !== "string" || await (0, import_promises.realpath)(status.changeRoot) !== target))
+    if (status && (typeof status.changeRoot !== "string" || await (0, import_promises2.realpath)(status.changeRoot) !== target))
       throw serviceError("BAD_CHANGE_ROOT", "OpenSpec returned an unsafe change path.", 502);
     for (const path of [parent, target]) {
-      const stat = await (0, import_promises.lstat)(path);
-      if (stat.isSymbolicLink() || !stat.isDirectory() || await (0, import_promises.realpath)(path) !== path)
+      const stat = await (0, import_promises2.lstat)(path);
+      if (stat.isSymbolicLink() || !stat.isDirectory() || await (0, import_promises2.realpath)(path) !== path)
         throw serviceError("BAD_CHANGE_ROOT", "Change path is not a real named directory.", 409);
     }
     if (status) {
       const home = status.planningHome;
-      if (typeof status.changeRoot !== "string" || await (0, import_promises.realpath)(status.changeRoot) !== target || home?.changesDir !== void 0 && (typeof home.changesDir !== "string" || await (0, import_promises.realpath)(home.changesDir) !== parent))
+      if (typeof status.changeRoot !== "string" || await (0, import_promises2.realpath)(status.changeRoot) !== target || home?.changesDir !== void 0 && (typeof home.changesDir !== "string" || await (0, import_promises2.realpath)(home.changesDir) !== parent))
         throw serviceError("BAD_CHANGE_ROOT", "OpenSpec returned an unsafe change path.", 502);
     }
     return target;
@@ -8140,7 +8617,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     try {
       target = await validatedChange(current, change);
     } catch (caught) {
-      if (caught.code === "ENOENT") return;
+      if (caught.code === "ENOENT") return false;
       throw caught;
     }
     const pending = [target];
@@ -8150,26 +8627,27 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       const directory = pending.pop();
       if (visited.has(directory)) continue;
       visited.add(directory);
-      for (const entry of await (0, import_promises.readdir)(directory, { withFileTypes: true })) {
+      for (const entry of await (0, import_promises2.readdir)(directory, { withFileTypes: true })) {
         if (++entries > 1e4)
           throw serviceError(
             "INPUTS_TOO_LARGE",
             "Change input tree exceeds validation bounds.",
             413
           );
-        const path = (0, import_node_path.join)(directory, entry.name);
+        const path = (0, import_node_path2.join)(directory, entry.name);
         if (entry.isSymbolicLink()) {
-          const canonical = await (0, import_promises.realpath)(path);
-          if (!inside(canonical, target))
+          const canonical = await (0, import_promises2.realpath)(path);
+          if (!inside2(canonical, target))
             throw serviceError(
               "BAD_DOCUMENT_PATH",
               "Task input link is outside the selected change.",
               502
             );
-          if ((await (0, import_promises.lstat)(canonical)).isDirectory()) pending.push(canonical);
+          if ((await (0, import_promises2.lstat)(canonical)).isDirectory()) pending.push(canonical);
         } else if (entry.isDirectory()) pending.push(path);
       }
     }
+    return true;
   }
   async function reconcileChange(directory, change, current, error) {
     if (error.code === "OPENSPEC_ERROR") {
@@ -8182,10 +8660,10 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     return error;
   }
   async function validateMetadata(current, change) {
-    const target = (0, import_node_path.join)(current.planningRoot, "changes", change);
+    const target = (0, import_node_path2.join)(current.planningRoot, "changes", change);
     try {
       await validatedChange(current, change);
-      if (!inside(await (0, import_promises.realpath)((0, import_node_path.join)(target, ".openspec.yaml")), target))
+      if (!inside2(await (0, import_promises2.realpath)((0, import_node_path2.join)(target, ".openspec.yaml")), target))
         throw serviceError(
           "BAD_METADATA_PATH",
           "Goal metadata is outside the selected change.",
@@ -8205,7 +8683,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
         throw new Error("Duplicate change.");
       const reported = result.value.root?.path;
       return {
-        root: typeof reported === "string" ? await (0, import_promises.realpath)(reported) : current.root,
+        root: typeof reported === "string" ? await (0, import_promises2.realpath)(reported) : current.root,
         changes: changes2
       };
     } catch {
@@ -8213,18 +8691,18 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     }
   }
   async function metadataFor(state) {
-    const metadataPath = (0, import_node_path.resolve)(state.changeRoot, ".openspec.yaml");
+    const metadataPath = (0, import_node_path2.resolve)(state.changeRoot, ".openspec.yaml");
     let canonical;
     try {
-      canonical = await (0, import_promises.realpath)(metadataPath);
+      canonical = await (0, import_promises2.realpath)(metadataPath);
     } catch (caught) {
       if (caught.code === "ENOENT")
         return { goal: null, affectedAreas: [] };
       throw caught;
     }
-    if (!inside(canonical, state.changeRoot))
+    if (!inside2(canonical, state.changeRoot))
       throw serviceError("BAD_DOCUMENT_PATH", "Change metadata is outside the change.", 502);
-    const file = await (0, import_promises.open)(canonical, "r");
+    const file = await (0, import_promises2.open)(canonical, "r");
     let metadata;
     try {
       const buffer = Buffer.alloc(240001);
@@ -8275,12 +8753,158 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     const current = await planningScope(listing.root, expectedPlanning);
     return { ok: true, value: { directory, ...listing, planning: current.planning } };
   }
+  async function modifiedChanges(directory, expectedRoot, expectedPlanning, deadline) {
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const changes2 = await modifiedChangeIds(
+      directory,
+      current.root,
+      current.planningRoot,
+      deadline
+    );
+    await planningScope(current.root, current.planning);
+    return { ok: true, value: { changes: changes2 } };
+  }
+  async function workflows(directory) {
+    if (!(0, import_node_path2.isAbsolute)(directory))
+      return failure(serviceError("BAD_DIRECTORY", "Directory must be absolute."));
+    const result = await run(directory, ["config", "list"]);
+    if (!result.ok) return result;
+    const { profile, workflows: workflows2 } = result.value;
+    if (typeof profile !== "string" || workflows2 !== void 0 && (!Array.isArray(workflows2) || workflows2.some((name) => typeof name !== "string")))
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec workflow config.", 502));
+    if (profile !== "custom") return { ok: true, value: { workflows: CORE_WORKFLOWS } };
+    const configured = Array.isArray(workflows2) ? workflows2.filter(isWorkflow) : [];
+    const archive = configured.findIndex((name) => name === "archive" || name === "bulk-archive");
+    if (archive !== -1 && !configured.includes("sync")) configured.splice(archive, 0, "sync");
+    return { ok: true, value: { workflows: configured } };
+  }
+  async function pendingArchives2(directory, expectedRoot, expectedPlanning, deadline) {
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const unavailable2 = { ok: true, value: { changes: [] } };
+    if (current.planningRoot !== (0, import_node_path2.join)(current.root, "openspec")) return unavailable2;
+    const result = await checked(directory, ["list", "--archived"], current, true, true);
+    await planningScope(current.root, current.planning);
+    if (!result.ok) return result.error.code === "OPENSPEC_ERROR" ? unavailable2 : result;
+    let entries;
+    try {
+      entries = decodeArchived(result.value);
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec archived listing.", 502));
+    }
+    const candidates = entries.map((entry) => ({ ...entry, id: archivedChangeId(entry.name) })).filter(({ id }) => isChangeName(id));
+    const names2 = new Set(
+      await pendingArchives(
+        directory,
+        current.root,
+        current.planningRoot,
+        candidates.map(({ name }) => name),
+        deadline
+      ).catch((caught) => {
+        if (caught instanceof ServiceFault && caught.code === "GIT_UNAVAILABLE") return [];
+        throw caught;
+      })
+    );
+    await planningScope(current.root, current.planning);
+    const newest = /* @__PURE__ */ new Map();
+    for (const entry of candidates) {
+      if (!names2.has(entry.name)) continue;
+      const previous = newest.get(entry.id);
+      if (!previous || entry.name !== entry.id && (previous.name === previous.id || previous.name < entry.name))
+        newest.set(entry.id, entry);
+    }
+    return { ok: true, value: { changes: [...newest.values()] } };
+  }
+  async function archived(directory, expectedRoot, expectedPlanning) {
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const result = await checked(directory, ["list", "--archived"], current, true, true);
+    if (!result.ok) return result;
+    await planningScope(expectedRoot, current.planning);
+    try {
+      return { ok: true, value: { changes: decodeArchived(result.value) } };
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec archived listing.", 502));
+    }
+  }
+  async function listSpecs(directory, current) {
+    const result = await checked(directory, ["list", "--specs"], current, true, true);
+    if (!result.ok) return result.error;
+    await planningScope(current.root, current.planning);
+    try {
+      return decodeSpecs(result.value);
+    } catch {
+      return serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec spec listing.", 502);
+    }
+  }
+  async function specs(directory, expectedRoot, expectedPlanning) {
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const entries = await listSpecs(directory, current);
+    return Array.isArray(entries) ? { ok: true, value: { specs: entries } } : failure(entries);
+  }
+  async function spec(directory, id, expectedRoot, expectedPlanning) {
+    if (!isSpecId(id)) return failure(serviceError("BAD_SPEC", "Spec id is invalid."));
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    const entries = await listSpecs(directory, current);
+    if (!Array.isArray(entries)) return failure(entries);
+    if (!entries.some((entry) => entry.id === id))
+      return failure(serviceError("SPEC_UNAVAILABLE", "Spec is no longer listed.", 404));
+    const specsRoot = (0, import_node_path2.join)(current.planningRoot, "specs");
+    try {
+      const path = await (0, import_promises2.realpath)((0, import_node_path2.join)(specsRoot, id, "spec.md"));
+      if (!inside2(path, specsRoot) || path === specsRoot)
+        return failure(serviceError("BAD_SPEC_PATH", "Spec path is outside the specs tree.", 502));
+      const content = await readDocumentText(path);
+      await planningScope(expectedRoot, current.planning);
+      return { ok: true, value: { id, content } };
+    } catch (caught) {
+      if (caught.code === "ENOENT")
+        return failure(serviceError("SPEC_UNAVAILABLE", "Spec is no longer available.", 404));
+      throw caught;
+    }
+  }
+  async function summary(directory, change, expectedRoot, expectedPlanning) {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await planningScope(expectedRoot, expectedPlanning);
+    await validateMetadata(current, change);
+    const state = await changeState(directory, change, current);
+    if ("code" in state) return failure(state);
+    const result = await summaryFor(state, change);
+    await planningScope(expectedRoot, current.planning);
+    return result;
+  }
+  async function validate(directory, change, expectedRoot, planning) {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await context(directory, expectedRoot, planning);
+    if ("code" in current) return failure(current);
+    if (!await validateInputs(current, change))
+      return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
+    const result = await checked(
+      directory,
+      ["validate", change, "--type", "change"],
+      current,
+      true
+    );
+    if (!result.ok && result.error.code !== "OPENSPEC_ERROR") return result;
+    await planningScope(expectedRoot, current.planning);
+    try {
+      const items = result.value?.items;
+      if (!Array.isArray(items) || items.length !== 1) throw new Error("Invalid validation items.");
+      const validation = decodeValidation(items[0]);
+      if (!result.ok && validation.valid) throw new Error("Invalid validation exit.");
+      return { ok: true, value: validation };
+    } catch {
+      return failure(serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec validation results.", 502));
+    }
+  }
   async function summaries(directory, expectedRoot, expectedPlanning) {
     const current = await planningScope(expectedRoot, expectedPlanning);
-    const parent = (0, import_node_path.join)(current.planningRoot, "changes");
-    if ((await (0, import_promises.lstat)(parent)).isSymbolicLink())
+    const parent = (0, import_node_path2.join)(current.planningRoot, "changes");
+    if ((await (0, import_promises2.lstat)(parent)).isSymbolicLink())
       throw serviceError("BAD_CHANGE_ROOT", "Changes parent is not a real directory.", 409);
-    const entries = await (0, import_promises.readdir)(parent, { withFileTypes: true });
+    const entries = await (0, import_promises2.readdir)(parent, { withFileTypes: true });
     if (entries.length > 1e4)
       throw serviceError("INPUTS_TOO_LARGE", "Planning tree exceeds validation bounds.", 413);
     for (const entry of entries)
@@ -8315,9 +8939,9 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
         }
         if (typeof status.changeRoot !== "string") throw new Error("Missing change root.");
         const changeRoot = await validatedChange(current, id, status);
-        const summary = await summaryFor({ ...current, changeRoot, status }, id);
-        if (!summary.ok) throw summary.error;
-        changes2.push({ id, summary: summary.value });
+        const summary2 = await summaryFor({ ...current, changeRoot, status }, id);
+        if (!summary2.ok) throw summary2.error;
+        changes2.push({ id, summary: summary2.value });
       } catch (caught) {
         const error = caught instanceof ServiceFault ? caught : serviceError("BAD_CLI_OUTPUT", "Invalid OpenSpec change data.", 502);
         changes2.push({ id, error: { code: error.code, message: error.message } });
@@ -8339,9 +8963,9 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       const outputs = entry.existingOutputPaths;
       if (!Array.isArray(outputs)) throw new Error("Invalid artefact outputs.");
       for (const path of outputs) {
-        if (typeof path !== "string" || !(0, import_node_path.isAbsolute)(path)) throw new Error("Invalid output path.");
-        const selector = (0, import_node_path.relative)(state.changeRoot, await (0, import_promises.realpath)(path));
-        if (!selector || selector === ".." || selector.startsWith(`..${import_node_path.sep}`) || (0, import_node_path.isAbsolute)(selector))
+        if (typeof path !== "string" || !(0, import_node_path2.isAbsolute)(path)) throw new Error("Invalid output path.");
+        const selector = (0, import_node_path2.relative)(state.changeRoot, await (0, import_promises2.realpath)(path));
+        if (!selector || selector === ".." || selector.startsWith(`..${import_node_path2.sep}`) || (0, import_node_path2.isAbsolute)(selector))
           throw serviceError(
             "BAD_DOCUMENT_PATH",
             "Document path is outside the selected change.",
@@ -8355,35 +8979,19 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     );
   }
   async function readDocument(state, selected) {
-    const path = await (0, import_promises.realpath)((0, import_node_path.resolve)(state.changeRoot, selected.selector));
-    if (!inside(path, state.changeRoot))
+    const path = await (0, import_promises2.realpath)((0, import_node_path2.resolve)(state.changeRoot, selected.selector));
+    if (!inside2(path, state.changeRoot))
       return failure(
         serviceError("BAD_DOCUMENT_PATH", "Document path is outside the selected change.", 502)
       );
-    const file = await (0, import_promises.open)(path, "r");
-    try {
-      const buffer = Buffer.alloc(240001);
-      let length = 0;
-      while (length < buffer.length) {
-        const { bytesRead } = await file.read(buffer, length, buffer.length - length, length);
-        if (bytesRead === 0) break;
-        length += bytesRead;
+    return {
+      ok: true,
+      value: {
+        artifactId: selected.artifactId,
+        selector: selected.selector,
+        content: await readDocumentText(path)
       }
-      if (length > 24e4)
-        return failure(
-          serviceError("DOCUMENT_TOO_LARGE", "Document is too large to display.", 413)
-        );
-      return {
-        ok: true,
-        value: {
-          artifactId: selected.artifactId,
-          selector: selected.selector,
-          content: buffer.toString("utf8", 0, length)
-        }
-      };
-    } finally {
-      await file.close();
-    }
+    };
   }
   async function tasks(directory, change, expectedRoot, expectedPlanning) {
     if (!isChangeName(change))
@@ -8431,32 +9039,27 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
     await planningScope(expectedRoot, current.planning);
     return result;
   }
-  async function createChange(directory, name, goal, expectedRoot, expectedPlanning) {
+  async function createChange(directory, name, expectedRoot, expectedPlanning) {
     if (!isChangeName(name))
       return failure(
         serviceError("BAD_CHANGE", "Use lowercase letters or digits separated by single hyphens.")
       );
-    if (!goal.trim()) return failure(serviceError("BAD_GOAL", "Goal is required."));
     const current = await context(directory, expectedRoot, expectedPlanning);
     if ("code" in current) return failure(current);
-    const pinned = await context((0, import_node_path.dirname)(current.planningRoot));
+    const pinned = await context((0, import_node_path2.dirname)(current.planningRoot));
     if ("code" in pinned) return failure(pinned);
     if (pinned.planning !== current.planning)
       return failure(serviceError("ROOT_CHANGED", "Canonical planning context changed.", 409));
     const confirmed = await context(directory, current.root, current.planning);
     if ("code" in confirmed) return failure(confirmed);
-    const parent = (0, import_node_path.join)(current.planningRoot, "changes");
-    const parentStat = await (0, import_promises.lstat)(parent);
+    const parent = (0, import_node_path2.join)(current.planningRoot, "changes");
+    const parentStat = await (0, import_promises2.lstat)(parent);
     if (parentStat.isSymbolicLink() || !parentStat.isDirectory())
       return failure(
         serviceError("BAD_CHANGE_ROOT", "Changes parent is not a real directory.", 409)
       );
     try {
-      const result = await checked(
-        pinned.root,
-        ["new", "change", name, "--goal", goal.trim()],
-        pinned
-      );
+      const result = await checked(pinned.root, ["new", "change", name], pinned);
       if (!result.ok)
         return failure(
           serviceError(result.error.code, result.error.message, result.error.status, "unknown")
@@ -8486,6 +9089,56 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       );
     }
   }
+  async function archiveChange(directory, change, expectedRoot, expectedPlanning, skipSpecs) {
+    if (!isChangeName(change))
+      return failure(serviceError("BAD_CHANGE", "Change name is invalid."));
+    const current = await context(directory, expectedRoot, expectedPlanning);
+    if ("code" in current) return failure(current);
+    const listing = await list(directory, current);
+    if ("code" in listing) return failure(listing);
+    const entry = listing.changes.find(({ id }) => id === change);
+    if (!entry)
+      return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
+    if (entry.totalTasks === 0 || entry.completedTasks !== entry.totalTasks)
+      return failure(
+        serviceError(
+          "CHANGE_INCOMPLETE",
+          "Tasks are incomplete. Refresh to see the current state.",
+          409
+        )
+      );
+    const pinned = await context((0, import_node_path2.dirname)(current.planningRoot));
+    if ("code" in pinned) return failure(pinned);
+    if (pinned.planning !== current.planning)
+      return failure(serviceError("ROOT_CHANGED", "Canonical planning context changed.", 409));
+    await validatedChange(current, change);
+    const args = ["archive", change, "--yes", ...skipSpecs ? ["--skip-specs"] : []];
+    const result = await checked(pinned.root, args, pinned, true, true);
+    if (result.ok) {
+      const archive = result.value.archive;
+      if (archive?.change === change && typeof archive.archivedAs === "string" && isChangeName(archive.archivedAs) && (archive.archivedAs === change || archivedChangeId(archive.archivedAs) === change)) {
+        try {
+          return {
+            ok: true,
+            value: decodeArchiveResult({
+              outcome: "archived",
+              archivedAs: archive.archivedAs,
+              warnings: archive.warnings === void 0 ? [] : archive.warnings
+            })
+          };
+        } catch {
+        }
+      }
+    }
+    return {
+      ok: true,
+      value: {
+        outcome: "failed",
+        command: archiveCommand(change, skipSpecs),
+        output: (result.ok || result.value ? JSON.stringify(result.value, null, 2) : result.error.message).slice(0, 2e4)
+      }
+    };
+  }
   async function deleteChange(directory, change, expectedRoot, beforeRemove = () => {
   }, expectedPlanning) {
     if (!isChangeName(change))
@@ -8498,25 +9151,25 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       return failure(serviceError("CHANGE_UNAVAILABLE", "Change is no longer listed.", 404));
     const status = await checked(directory, ["status", "--change", change], current);
     if (!status.ok) return status;
-    const parent = (0, import_node_path.join)(current.planningRoot, "changes");
-    const target = (0, import_node_path.join)(parent, change);
+    const parent = (0, import_node_path2.join)(current.planningRoot, "changes");
+    const target = (0, import_node_path2.join)(parent, change);
     try {
       await validatedChange(current, change, status.value);
       const identities = await Promise.all(
         [current.planningRoot, parent, target].map(async (path) => {
-          const stat = await (0, import_promises.lstat)(path);
+          const stat = await (0, import_promises2.lstat)(path);
           return { path, dev: stat.dev, ino: stat.ino };
         })
       );
       const confirmed = await context(directory, expectedRoot, current.planning);
       if ("code" in confirmed) return failure(confirmed);
       for (const { path, dev, ino } of identities) {
-        const stat = await (0, import_promises.lstat)(path);
+        const stat = await (0, import_promises2.lstat)(path);
         if (stat.isSymbolicLink() || !stat.isDirectory())
           return failure(
             serviceError("BAD_CHANGE_ROOT", "Change path is not a real directory.", 409)
           );
-        if (stat.dev !== dev || stat.ino !== ino || await (0, import_promises.realpath)(path) !== path)
+        if (stat.dev !== dev || stat.ino !== ino || await (0, import_promises2.realpath)(path) !== path)
           return failure(
             serviceError(
               "ROOT_CHANGED",
@@ -8525,7 +9178,7 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
             )
           );
       }
-      if (await (0, import_promises.realpath)(current.root) !== current.root || await (0, import_promises.realpath)(parent) !== parent || await (0, import_promises.realpath)(target) !== target || !(await (0, import_promises.lstat)(target)).isDirectory())
+      if (await (0, import_promises2.realpath)(current.root) !== current.root || await (0, import_promises2.realpath)(parent) !== parent || await (0, import_promises2.realpath)(target) !== target || !(await (0, import_promises2.lstat)(target)).isDirectory())
         return failure(serviceError("ROOT_CHANGED", "OpenSpec root changed during deletion.", 409));
       beforeRemove();
       await remove(target, { recursive: true });
@@ -8536,12 +9189,29 @@ function createOpenSpecAdapter(run = runOpenSpec, remove = import_promises.rm) {
       throw caught;
     }
   }
-  return { changes, summaries, tasks, documentFor, createChange, deleteChange };
+  return {
+    archived,
+    pendingArchives: pendingArchives2,
+    specs,
+    spec,
+    changes,
+    modifiedChanges,
+    workflows,
+    summary,
+    summaries,
+    validate,
+    tasks,
+    documentFor,
+    createChange,
+    archiveChange,
+    deleteChange
+  };
 }
 
 // src/service/http.ts
 var MAX_BODY_BYTES = 64e3;
 var REQUEST_TIMEOUT_MS = 15e3;
+var FOCUS_TTL_MS = 3e4;
 function send(response, status, value) {
   const encoded = JSON.stringify(value);
   if (Buffer.byteLength(encoded, "utf8") > MAX_RESPONSE_BYTES) {
@@ -8577,6 +9247,8 @@ function requiredString(body, key) {
   return value;
 }
 function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
+  const emit = options.emit ?? createServiceHost({ env: process.env }).emit;
+  let pendingFocus = null;
   return (0, import_node_http.createServer)(async (request, response) => {
     if (request.headers.authorization !== `Bearer ${token2}`) {
       send(response, 401, {
@@ -8586,15 +9258,28 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
     }
     if (request.method === "GET" && request.url === "/health")
       return send(response, 200, { ok: true });
+    if (request.method === "GET" && (request.url === "/focus" || request.url?.startsWith("/focus?"))) {
+      const directory = new URL(request.url, "http://localhost").searchParams.get("directory");
+      if (!directory || !(0, import_node_path3.isAbsolute)(directory))
+        return send(response, 400, {
+          error: serviceError("BAD_DIRECTORY", "Directory must be absolute.")
+        });
+      const pending = pendingFocus;
+      if (pending && Date.now() >= pending.expiresAt) pendingFocus = null;
+      const target = pendingFocus?.target.directory === directory ? pendingFocus.target : null;
+      if (target) pendingFocus = null;
+      return send(response, 200, target);
+    }
     if (request.method !== "POST" || !request.url)
       return send(response, 404, { error: serviceError("NOT_FOUND", "Route not found.", 404) });
     let mutationDispatched = false;
     try {
       const deadline = Date.now() + (options.timeoutMs ?? REQUEST_TIMEOUT_MS);
       const checkedRunner = async (directory2, args) => {
-        const remaining = deadline - Date.now();
+        const archive = args[0] === "archive";
+        const remaining = deadline - Date.now() - (archive ? CLI_SHUTDOWN_MS + 50 : 0);
         if (remaining <= 0) throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
-        if (args[0] === "new" && args[1] === "change") mutationDispatched = true;
+        if (archive || args[0] === "new" && args[1] === "change") mutationDispatched = true;
         const result2 = await runner(directory2, args, remaining);
         if (Date.now() >= deadline)
           throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
@@ -8615,12 +9300,46 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         })
       ]).finally(() => clearTimeout(bodyTimer));
       const directory = requiredString(body, "directory");
+      const path = new URL(request.url, "http://localhost").pathname;
+      if (path === "/focus") {
+        if (!(0, import_node_path3.isAbsolute)(directory))
+          throw serviceError("BAD_DIRECTORY", "Directory must be absolute.");
+        let target;
+        try {
+          target = decodeFocusTarget(body);
+        } catch {
+          throw serviceError("BAD_CHANGE", "Board focus target is invalid.");
+        }
+        pendingFocus = { target, expiresAt: Date.now() + FOCUS_TTL_MS };
+        await emit("focus");
+        return send(response, 200, { ok: true });
+      }
       const expectedRoot = body.expectedRoot === void 0 ? void 0 : requiredString(body, "expectedRoot");
       const expectedPlanning = body.expectedPlanning === void 0 ? void 0 : requiredString(body, "expectedPlanning");
       if (expectedPlanning && (expectedPlanning.length > 4096 || expectedPlanning.includes("\0")))
         throw serviceError("BAD_REQUEST", "Invalid planning identity.");
-      const path = new URL(request.url, "http://localhost").pathname;
-      const work = path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(directory, requiredString(body, "expectedRoot"), expectedPlanning) : path === "/tasks" ? adapter.tasks(
+      const validatePlanning = path === "/validate" ? requiredString(body, "planning") : void 0;
+      if (validatePlanning && (validatePlanning.length > 4096 || validatePlanning.includes("\0")))
+        throw serviceError("BAD_REQUEST", "Invalid planning identity.");
+      const skipSpecs = body.skipSpecs;
+      if (path === "/archive" && skipSpecs !== void 0 && typeof skipSpecs !== "boolean")
+        throw serviceError("BAD_REQUEST", "skipSpecs must be a boolean.");
+      const work = path === "/archive" ? adapter.archiveChange(
+        directory,
+        requiredString(body, "change"),
+        requiredString(body, "expectedRoot"),
+        requiredString(body, "expectedPlanning"),
+        skipSpecs === true
+      ) : validatePlanning ? adapter.validate(
+        directory,
+        requiredString(body, "change"),
+        requiredString(body, "expectedRoot"),
+        validatePlanning
+      ) : path === "/changes" ? adapter.changes(directory, expectedRoot, expectedPlanning) : path === "/summaries" ? adapter.summaries(
+        directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/tasks" ? adapter.tasks(
         directory,
         requiredString(body, "change"),
         requiredString(body, "expectedRoot"),
@@ -8635,7 +9354,6 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
       ) : path === "/create" ? adapter.createChange(
         directory,
         requiredString(body, "name"),
-        requiredString(body, "goal"),
         requiredString(body, "expectedRoot"),
         expectedPlanning
       ) : path === "/delete" ? adapter.deleteChange(
@@ -8644,10 +9362,42 @@ function createOpenSpecService(token2, runner = runOpenSpec, options = {}) {
         requiredString(body, "expectedRoot"),
         () => {
           if (Date.now() >= deadline)
-            throw serviceError("CLI_TIMEOUT", "OpenSpec request timed out.", 504);
+            throw serviceError(
+              "CLI_TIMEOUT",
+              "OpenSpec request timed out.",
+              504
+            );
           mutationDispatched = true;
         },
         expectedPlanning
+      ) : path === "/summary" ? adapter.summary(
+        directory,
+        requiredString(body, "change"),
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/workflows" ? adapter.workflows(directory) : path === "/archived" ? adapter.archived(
+        directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/specs" ? adapter.specs(
+        directory,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/spec" ? adapter.spec(
+        directory,
+        body.spec,
+        requiredString(body, "expectedRoot"),
+        expectedPlanning
+      ) : path === "/modified-changes" ? adapter.modifiedChanges(
+        directory,
+        requiredString(body, "expectedRoot"),
+        requiredString(body, "expectedPlanning"),
+        deadline
+      ) : path === "/pending-archives" ? adapter.pendingArchives(
+        directory,
+        requiredString(body, "expectedRoot"),
+        requiredString(body, "expectedPlanning"),
+        deadline
       ) : Promise.resolve({
         ok: false,
         error: serviceError("NOT_FOUND", "Route not found.", 404)
